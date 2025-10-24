@@ -1,0 +1,3 @@
+// This is a placeholder for the logo file
+// In a real implementation, you would copy the actual logo file from Server/public/assets/logo/icon.png
+// For now, we'll use a text-based logo in the component
