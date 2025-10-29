@@ -29,7 +29,13 @@ export async function setTokenAuth(token: string): Promise<void> {
 
 export async function clearTokenAuth(): Promise<void> {
   try {
-    console.log('🧹 [TOKEN] Clearing auth token from SecureStore');
+    // Get stack trace to see WHO is calling this
+    const stack = new Error().stack;
+    console.log('🧹 [TOKEN] ⚠️  CLEARING AUTH TOKEN FROM SECURESTORE ⚠️');
+    console.log('🧹 [TOKEN] Called from stack trace:');
+    console.log(stack);
+    console.log('🧹 [TOKEN] ════════════════════════════════════════');
+
     await SecureStore.deleteItemAsync(KEY);
     console.log('🧹 [TOKEN] Auth token cleared from SecureStore');
   } catch (err) {

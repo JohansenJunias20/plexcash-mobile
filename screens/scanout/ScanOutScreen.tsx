@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert, ActivityIndi
 import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Haptics from 'expo-haptics';
 import ApiService from '../../services/api';
 
 interface ScannedOrder {
@@ -18,13 +19,72 @@ export default function ScanOutScreen(): JSX.Element {
   const [scanning, setScanning] = useState(true);
   const [currentScan, setCurrentScan] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
+  const [pendingScans, setPendingScans] = useState<Set<string>>(new Set()); // Track pending backend requests
 
-  const handleBarcodeScanned = async ({ type, data }: BarcodeScanningResult) => {
+  const isOrderNumber = (data: string): boolean => {
+    // Check if it's a no pesanan (order number) format:
+    // - Length is 14 digits
+    // - First 6 digits are YYYYMM (year + month)
+    if (data.length === 14 && /^\d{14}$/.test(data)) {
+      const yearMonth = data.substring(0, 6);
+      const year = parseInt(yearMonth.substring(0, 4));
+      const month = parseInt(yearMonth.substring(4, 6));
+
+      // Validate year (2020-2099) and month (01-12)
+      if (year >= 2020 && year <= 2099 && month >= 1 && month <= 12) {
+        return true; // This is a no pesanan (order number)
+      }
+    }
+    return false; // This is likely a resi (tracking number)
+  };
+
+  const handleBarcodeScanned = async ({ data }: BarcodeScanningResult) => {
     if (!scanning || processing) return;
+
+    // Check if this resi is already being processed (prevent duplicate scans)
+    if (pendingScans.has(data)) {
+      console.log(`Ignoring duplicate scan for resi: ${data} (already pending)`);
+      return; // Silently ignore - no alert, no haptic
+    }
 
     setScanning(false);
     setProcessing(true);
     setCurrentScan(data);
+
+    // Filter out order numbers (no pesanan), only accept resi (tracking numbers)
+    if (isOrderNumber(data)) {
+      // Trigger HEAVY error vibration (stronger and more noticeable)
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+
+      // Add to list as error for visual feedback
+      const errorOrder: ScannedOrder = {
+        orderNumber: data,
+        timestamp: new Date(),
+        status: 'error',
+        message: 'Nomor Pesanan - Bukan Resi',
+      };
+      setScannedOrders(prev => [errorOrder, ...prev]);
+
+      Alert.alert(
+        '⚠️ Nomor Pesanan Terdeteksi',
+        'Ini adalah nomor pesanan. Silakan scan barcode RESI (nomor resi) sebagai gantinya.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              setCurrentScan(null);
+              setProcessing(false);
+              // Re-enable scanning after 1 second cooldown
+              setTimeout(() => setScanning(true), 1000);
+            }
+          }
+        ]
+      );
+      return;
+    }
+
+    // Add to pending scans to prevent duplicates while waiting for backend
+    setPendingScans(prev => new Set(prev).add(data));
 
     try {
       // Send to backend for validation and storage
@@ -33,7 +93,17 @@ export default function ScanOutScreen(): JSX.Element {
         body: JSON.stringify({ resi: data }),
       });
 
+      // Remove from pending scans after backend responds
+      setPendingScans(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(data);
+        return newSet;
+      });
+
       if (response?.status) {
+        // Trigger SHORT success vibration (light and quick)
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
         // Success - resi scanned and saved
         const newOrder: ScannedOrder = {
           orderNumber: data,
@@ -44,23 +114,15 @@ export default function ScanOutScreen(): JSX.Element {
 
         setScannedOrders(prev => [newOrder, ...prev]);
 
-        // Show success feedback
-        Alert.alert(
-          '✓ Scan Berhasil',
-          `Resi: ${data}\n\nBerhasil disimpan ke database`,
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                setCurrentScan(null);
-                setProcessing(false);
-                // Re-enable scanning after a short delay
-                setTimeout(() => setScanning(true), 500);
-              }
-            }
-          ]
-        );
+        // NO ALERT for success - only visual feedback (green card) and haptic
+        setCurrentScan(null);
+        setProcessing(false);
+        // Re-enable scanning after 1 second cooldown
+        setTimeout(() => setScanning(true), 1000);
       } else {
+        // Trigger HEAVY error vibration (stronger and more noticeable)
+        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+
         // Error - resi already exists or validation failed
         const errorOrder: ScannedOrder = {
           orderNumber: data,
@@ -80,8 +142,8 @@ export default function ScanOutScreen(): JSX.Element {
               onPress: () => {
                 setCurrentScan(null);
                 setProcessing(false);
-                // Re-enable scanning after a short delay
-                setTimeout(() => setScanning(true), 500);
+                // Re-enable scanning after 1 second cooldown
+                setTimeout(() => setScanning(true), 1000);
               }
             }
           ]
@@ -89,6 +151,16 @@ export default function ScanOutScreen(): JSX.Element {
       }
     } catch (error) {
       console.error('Error scanning barcode:', error);
+
+      // Remove from pending scans on error
+      setPendingScans(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(data);
+        return newSet;
+      });
+
+      // Trigger HEAVY error vibration (stronger and more noticeable)
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
       const errorOrder: ScannedOrder = {
         orderNumber: data,
@@ -108,7 +180,8 @@ export default function ScanOutScreen(): JSX.Element {
             onPress: () => {
               setCurrentScan(null);
               setProcessing(false);
-              setTimeout(() => setScanning(true), 500);
+              // Re-enable scanning after 1 second cooldown
+              setTimeout(() => setScanning(true), 1000);
             }
           }
         ]
@@ -164,18 +237,26 @@ export default function ScanOutScreen(): JSX.Element {
   const renderScannedOrder = ({ item, index }: { item: ScannedOrder; index: number }) => (
     <View style={[
       styles.orderCard,
-      { borderLeftColor: item.status === 'success' ? '#10B981' : '#EF4444' }
+      item.status === 'error' ? styles.errorCard : styles.successCard
     ]}>
       <View style={{ flex: 1 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
           <Ionicons
-            name={item.status === 'success' ? 'checkmark-circle' : 'alert-circle'}
-            size={20}
-            color={item.status === 'success' ? '#10B981' : '#EF4444'}
+            name={item.status === 'success' ? 'checkmark-circle' : 'close-circle'}
+            size={24}
+            color={item.status === 'success' ? '#10B981' : '#FFFFFF'}
           />
-          <Text style={styles.orderNumber}>{item.orderNumber}</Text>
+          <Text style={[
+            styles.orderNumber,
+            item.status === 'error' && styles.errorOrderNumber
+          ]}>
+            {item.orderNumber}
+          </Text>
         </View>
-        <Text style={styles.orderTime}>
+        <Text style={[
+          styles.orderTime,
+          item.status === 'error' && styles.errorOrderTime
+        ]}>
           {item.timestamp.toLocaleTimeString('id-ID', {
             hour: '2-digit',
             minute: '2-digit',
@@ -183,14 +264,21 @@ export default function ScanOutScreen(): JSX.Element {
           })}
         </Text>
         {item.message && item.status === 'error' && (
-          <Text style={styles.errorMessage}>{item.message}</Text>
+          <View style={styles.errorMessageContainer}>
+            <Ionicons name="warning" size={16} color="#FFFFFF" />
+            <Text style={styles.errorMessage}>{item.message}</Text>
+          </View>
         )}
       </View>
       <TouchableOpacity
         style={styles.removeButton}
         onPress={() => removeOrder(index)}
       >
-        <Ionicons name="trash-outline" size={20} color="#EF4444" />
+        <Ionicons
+          name="trash-outline"
+          size={20}
+          color={item.status === 'error' ? '#FFFFFF' : '#EF4444'}
+        />
       </TouchableOpacity>
     </View>
   );
@@ -427,12 +515,20 @@ const styles = StyleSheet.create({
   orderCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f9fafb',
     padding: 12,
     borderRadius: 8,
     marginBottom: 8,
-    borderLeftWidth: 3,
+    borderLeftWidth: 4,
+  },
+  successCard: {
+    backgroundColor: '#f9fafb',
     borderLeftColor: '#10B981',
+  },
+  errorCard: {
+    backgroundColor: '#DC2626',
+    borderLeftColor: '#991B1B',
+    borderWidth: 2,
+    borderColor: '#991B1B',
   },
   orderNumber: {
     fontSize: 16,
@@ -440,17 +536,34 @@ const styles = StyleSheet.create({
     color: '#111827',
     marginLeft: 8,
   },
+  errorOrderNumber: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
   orderTime: {
     fontSize: 12,
     color: '#6B7280',
-    marginLeft: 28,
+    marginLeft: 32,
+  },
+  errorOrderTime: {
+    color: '#FEE2E2',
+  },
+  errorMessageContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 32,
+    marginTop: 6,
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    alignSelf: 'flex-start',
   },
   errorMessage: {
     fontSize: 12,
-    color: '#EF4444',
-    marginLeft: 28,
-    marginTop: 4,
-    fontStyle: 'italic',
+    color: '#FFFFFF',
+    marginLeft: 6,
+    fontWeight: '600',
   },
   removeButton: {
     padding: 8,

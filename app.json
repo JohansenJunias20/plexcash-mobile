@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "plexcash-mobile",
+    "name": "PlexSeller",
     "slug": "plexcash-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -20,15 +20,19 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/logo.png",
+        "backgroundColor": "#f59e0b"
       },
       "edgeToEdgeEnabled": true,
-      "googleServicesFile": "./google-services.json",
       "package": "com.plexcash.mobile"
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "e83382ab-9765-42af-b2fa-3a2d9dbc3da2"
+      }
     }
   }
 }

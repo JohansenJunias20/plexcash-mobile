@@ -88,38 +88,67 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const checkFirebaseAuth = () => {
       const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+        console.log('🔥 [AUTH-STATE-CHANGED] Firebase auth state changed, user:', firebaseUser?.email || 'null');
         setIsLoading(true);
 
         if (firebaseUser) {
           try {
+            console.log('🔥 [AUTH-STATE-CHANGED] Getting Firebase ID token...');
             const token = await firebaseUser.getIdToken();
+            console.log('🔥 [AUTH-STATE-CHANGED] Token obtained, exchanging with backend...');
             const backendResponse = await ApiService.exchangeFirebaseToken(token);
+            console.log('🔥 [AUTH-STATE-CHANGED] Backend response:', backendResponse);
 
             if (backendResponse.status) {
+              console.log('🔐 [AUTH] Storing Firebase token in SecureStore and AsyncStorage...');
+
+              // Store token in both SecureStore and AsyncStorage (for consistency with QR code flow)
+              // IMPORTANT: Wait for storage to complete BEFORE setting isAuthenticated = true
+              // Pass authMethod: 'firebase' to prevent validateDeviceAuth from being called
+              await ApiService.storeDeviceTokens({
+                authToken: token,
+                token: token,
+                deviceId: await ApiService.getOrCreateDeviceId(),
+                user: { email: firebaseUser.email ?? '' },
+                authMethod: 'firebase' // ✅ This prevents validateDeviceAuth from being called
+              });
+
+              console.log('🔐 [AUTH] Token storage complete, setting authenticated state');
+
+              // Only set authenticated state AFTER token is stored
               setUser(Object.assign(firebaseUser, { authMethod: 'firebase' as const }));
+
+              console.log('🔐 [AUTH] Setting isAuthenticated to TRUE...');
               setIsAuthenticated(true);
+              console.log('🔐 [AUTH] isAuthenticated is now:', true);
+
               await AsyncStorage.setItem('isAuthenticated', 'true');
               await AsyncStorage.setItem('userEmail', firebaseUser.email ?? '');
+
+              console.log('✅ [AUTH] Authentication state updated - user should navigate to MainScreen');
             } else {
+              console.log('❌ [AUTH-STATE-CHANGED] Backend response status is false');
               setUser(null);
               setIsAuthenticated(false);
               await AsyncStorage.removeItem('isAuthenticated');
               await AsyncStorage.removeItem('userEmail');
             }
           } catch (error) {
-            console.error('Authentication error:', error);
+            console.error('❌ [AUTH-STATE-CHANGED] Authentication error:', error);
             setUser(null);
             setIsAuthenticated(false);
             await AsyncStorage.removeItem('isAuthenticated');
             await AsyncStorage.removeItem('userEmail');
           }
         } else {
+          console.log('🔥 [AUTH-STATE-CHANGED] No Firebase user, clearing auth state');
           setUser(null);
           setIsAuthenticated(false);
           await AsyncStorage.removeItem('isAuthenticated');
           await AsyncStorage.removeItem('userEmail');
         }
 
+        console.log('🔥 [AUTH-STATE-CHANGED] Setting isLoading to false');
         setIsLoading(false);
       });
 

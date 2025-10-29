@@ -49,9 +49,15 @@ const LoadingScreen = () => (
 export default function RootNavigator() {
   const { isAuthenticated, isLoading } = useAuth();
 
-  if (isLoading) return <LoadingScreen />;
+  console.log('🧭 [NAVIGATOR] RootNavigator render - isLoading:', isLoading, 'isAuthenticated:', isAuthenticated);
+
+  if (isLoading) {
+    console.log('🧭 [NAVIGATOR] Showing loading screen');
+    return <LoadingScreen />;
+  }
 
   if (!isAuthenticated) {
+    console.log('🧭 [NAVIGATOR] User NOT authenticated - showing LoginScreen');
     return (
       <AuthStack.Navigator>
         <AuthStack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
@@ -59,6 +65,7 @@ export default function RootNavigator() {
     );
   }
 
+  console.log('🧭 [NAVIGATOR] User IS authenticated - showing MainScreen');
   return (
     <AppStack.Navigator
       screenOptions={{

@@ -224,23 +224,32 @@ class ApiService {
   /**
    * Store device authentication tokens securely
    */
-  static async storeDeviceTokens(authData: { authToken?: string; token?: string; refreshToken?: string; deviceId?: string; user: { email: string } }) {
+  static async storeDeviceTokens(authData: { authToken?: string; token?: string; refreshToken?: string; deviceId?: string; user: { email: string }; authMethod?: 'device' | 'firebase' }) {
     try {
       const token = authData.authToken || authData.token || '';
+      const authMethod = authData.authMethod || 'device'; // Default to 'device' for backward compatibility
 
       // Store in AsyncStorage (for device auth system)
       await AsyncStorage.setItem('authToken', token);
       await AsyncStorage.setItem('refreshToken', authData.refreshToken || '');
       await AsyncStorage.setItem('deviceId', authData.deviceId || await this.getOrCreateDeviceId());
       await AsyncStorage.setItem('userEmail', authData.user.email);
-      await AsyncStorage.setItem('isDeviceAuthorized', 'true');
-      await AsyncStorage.setItem('authMethod', 'device');
+
+      // Only set isDeviceAuthorized for QR code device auth, NOT for Firebase auth
+      if (authMethod === 'device') {
+        await AsyncStorage.setItem('isDeviceAuthorized', 'true');
+        await AsyncStorage.setItem('authMethod', 'device');
+      } else {
+        // For Firebase auth, don't set isDeviceAuthorized to prevent validateDeviceAuth from being called
+        await AsyncStorage.setItem('isDeviceAuthorized', 'false');
+        await AsyncStorage.setItem('authMethod', 'firebase');
+      }
 
       // ALSO store in SecureStore (for screens like Barang that expect it there)
       const { setTokenAuth } = require('./token');
       await setTokenAuth(token);
 
-      console.log('🔐 [STORE] Device tokens stored in both AsyncStorage and SecureStore');
+      console.log(`🔐 [STORE] Tokens stored in both AsyncStorage and SecureStore (authMethod: ${authMethod})`);
     } catch (error) {
       console.error('❌ [STORE] Error storing device tokens:', error);
       throw error;
@@ -449,22 +458,38 @@ class ApiService {
 
   /**
    * Build Authorization header preferring device token; fallback to Firebase ID token
+   * Backend now supports both Firebase ID tokens and custom JWTs in Authorization header
    */
   static async getAuthHeader(): Promise<{ Authorization: string }> {
+    console.log('🔑 [AUTH-HEADER] Building auth header...');
+
     // Prefer device token stored via QR authorization
     const deviceToken = await getTokenAuth();
     if (deviceToken) {
+      console.log('🔑 [AUTH-HEADER] Using device token from SecureStore');
+      console.log('🔑 [AUTH-HEADER] Token (first 50 chars):', deviceToken.substring(0, 50) + '...');
       return { Authorization: `Bearer ${deviceToken}` };
     }
+
+    console.log('🔑 [AUTH-HEADER] No device token, trying Firebase user...');
+
     // Fallback to Firebase user token
     try {
       const { auth } = require('../config/firebase');
       const user = auth.currentUser as any;
       if (user) {
+        console.log('🔑 [AUTH-HEADER] Firebase user found, getting ID token...');
         const idToken = await user.getIdToken();
+        console.log('🔑 [AUTH-HEADER] Using Firebase ID token');
+        console.log('🔑 [AUTH-HEADER] Token (first 50 chars):', idToken.substring(0, 50) + '...');
         return { Authorization: `Bearer ${idToken}` };
       }
-    } catch {}
+      console.log('🔑 [AUTH-HEADER] No Firebase user found');
+    } catch (error) {
+      console.log('🔑 [AUTH-HEADER] Error getting Firebase token:', error);
+    }
+
+    console.log('❌ [AUTH-HEADER] No authentication available!');
     throw new Error('Not authenticated: no device token and no Firebase user');
   }
 
@@ -473,7 +498,11 @@ class ApiService {
    */
   static async authenticatedRequest(endpoint: string, options: any = {}) {
     try {
+      console.log(`🌐 [AUTH-REQ] Making authenticated request to: ${endpoint}`);
+
       const authHeader = await this.getAuthHeader();
+      console.log(`🌐 [AUTH-REQ] Auth header obtained:`, authHeader ? 'YES' : 'NO');
+
       const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         ...options,
         headers: {
@@ -483,11 +512,20 @@ class ApiService {
         },
       });
 
+      console.log(`🌐 [AUTH-REQ] Response status for ${endpoint}: ${response.status}`);
+
       if (response.status === 401 || response.status === 403) {
+        console.log(`❌ [AUTH-REQ] UNAUTHORIZED (${response.status}) - CLEARING TOKEN!`);
+        console.log(`❌ [AUTH-REQ] Endpoint: ${endpoint}`);
+        console.log(`❌ [AUTH-REQ] Stack trace:`);
+        console.log(new Error().stack);
+
         try { await clearTokenAuth(); } catch {}
         if (this.authErrorHandler) this.authErrorHandler();
         throw new Error('Unauthorized');
       }
+
+      console.log(`✅ [AUTH-REQ] Request successful for ${endpoint}`);
 
       const contentType = response.headers.get('content-type') || '';
       if (contentType.includes('application/json')) {
@@ -495,7 +533,7 @@ class ApiService {
       }
       return await response.text();
     } catch (error) {
-      console.error('Authenticated request failed:', error);
+      console.error(`💥 [AUTH-REQ] Request failed for ${endpoint}:`, error);
       throw error;
     }
   }
@@ -511,6 +549,48 @@ class ApiService {
   static async authenticateWithQRCode(qrCodeData: string) {
     console.warn('authenticateWithQRCode is deprecated. Use authorizeDevice instead.');
     return this.authorizeDevice(qrCodeData);
+  }
+
+  /**
+   * Get the current database name for the authenticated user
+   */
+  static async getCurrentDatabase(): Promise<{ status: boolean; data?: string; reason?: string }> {
+    try {
+      const response = await this.authenticatedRequest('/get/database_name');
+      return response;
+    } catch (error) {
+      console.error('Error fetching current database:', error);
+      return { status: false, reason: 'Failed to fetch current database' };
+    }
+  }
+
+  /**
+   * Get list of all databases (admin only)
+   */
+  static async getDatabaseList(): Promise<{ status: boolean; data?: string[]; reason?: string }> {
+    try {
+      const response = await this.authenticatedRequest('/get/database/list');
+      return response;
+    } catch (error) {
+      console.error('Error fetching database list:', error);
+      return { status: false, reason: 'Failed to fetch database list' };
+    }
+  }
+
+  /**
+   * Set the current database (admin only)
+   */
+  static async setDatabase(databaseName: string): Promise<{ status: boolean; data?: string; reason?: string }> {
+    try {
+      const response = await this.authenticatedRequest('/set/database', {
+        method: 'POST',
+        body: JSON.stringify({ database_name: databaseName })
+      });
+      return response;
+    } catch (error) {
+      console.error('Error setting database:', error);
+      return { status: false, reason: 'Failed to set database' };
+    }
   }
 }
 

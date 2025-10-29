@@ -202,16 +202,38 @@ class GoogleAuthService {
       console.log('Opening browser for Google OAuth...');
       console.log('Using WebBrowser.openAuthSessionAsync for better deep link handling...');
 
-      const result = await WebBrowser.openAuthSessionAsync(authUrl, mobileRedirectUri);
+      // Configure browser options to better handle 2FA flows
+      const result = await WebBrowser.openAuthSessionAsync(
+        authUrl, 
+        mobileRedirectUri,
+        {
+          // Show page title in browser (helps user know they're still in auth flow)
+          showTitle: true,
+          // Enable bar collapsing for better UX
+          enableBarCollapsing: false,
+          // Create a new task for the browser (Android)
+          createTask: false,
+        }
+      );
 
       console.log('Browser result:', result);
+      console.log('Browser result type:', result.type);
 
-      if (result.type === 'cancel') {
-        throw new Error('Authentication cancelled by user');
+      // Handle user cancellation or dismissal (e.g., when 2FA opens in another app)
+      if (result.type === 'cancel' || result.type === 'dismiss') {
+        console.log(`User ${result.type}ed the browser - authentication cancelled`);
+        return {
+          success: false as const,
+          cancelled: true as const
+        };
       }
 
       if (result.type !== 'success') {
-        throw new Error(`Authentication failed: ${result.type}`);
+        console.error('Unexpected browser result type:', result.type);
+        return {
+          success: false as const,
+          error: `Authentication failed: ${result.type}`
+        };
       }
 
       const redirectUrl = result.url;
@@ -282,10 +304,17 @@ class GoogleAuthService {
 
       console.log('Google Sign-In completed successfully!');
 
+      // Note: Token storage is handled by AuthContext's onAuthStateChanged listener
+      // which fires automatically after signInWithCustomToken() completes.
+      // This ensures the token is stored BEFORE isAuthenticated is set to true,
+      // preventing race conditions where MainScreen tries to make authenticated
+      // requests before the token is available.
+
       return {
         success: true as const,
         email,
         firebaseToken: idToken,
+        deviceId,
         ...loginResponse
       };
 

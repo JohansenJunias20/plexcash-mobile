@@ -1,18 +1,92 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal, ActivityIndicator, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import Settings from './Settings';
 import { useNavigation } from '@react-navigation/native';
+import ApiService from '../services/api';
 
 const MainScreen = (): JSX.Element => {
   const { user } = useAuth();
   const [showSettings, setShowSettings] = useState(false);
+  const [currentDatabase, setCurrentDatabase] = useState<string>('');
+  const [databases, setDatabases] = useState<string[]>([]);
+  const [loadingDatabase, setLoadingDatabase] = useState(true);
+  const [showDatabasePicker, setShowDatabasePicker] = useState(false);
+  const [switchingDatabase, setSwitchingDatabase] = useState(false);
   const navigation = useNavigation<any>();
+
+  const isAdmin = (user as any)?.email === 'johansen.junias17@gmail.com';
 
   const handleOpenSettings = () => setShowSettings(true);
   const handleCloseSettings = () => setShowSettings(false);
+
+  // Fetch database information on mount
+  useEffect(() => {
+    const fetchDatabaseInfo = async () => {
+      try {
+        setLoadingDatabase(true);
+
+        // Fetch current database name
+        const dbResponse = await ApiService.getCurrentDatabase();
+        if (dbResponse.status && dbResponse.data) {
+          setCurrentDatabase(dbResponse.data);
+        }
+
+        // If admin, also fetch database list
+        if (isAdmin) {
+          const listResponse = await ApiService.getDatabaseList();
+          if (listResponse.status && listResponse.data) {
+            setDatabases(listResponse.data);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching database info:', error);
+      } finally {
+        setLoadingDatabase(false);
+      }
+    };
+
+    fetchDatabaseInfo();
+  }, [isAdmin]);
+
+  const handleDatabaseSwitch = async (newDatabase: string) => {
+    if (newDatabase === currentDatabase) {
+      setShowDatabasePicker(false);
+      return;
+    }
+
+    try {
+      setSwitchingDatabase(true);
+      const response = await ApiService.setDatabase(newDatabase);
+
+      if (response.status) {
+        setCurrentDatabase(newDatabase);
+        setShowDatabasePicker(false);
+        Alert.alert(
+          'Database Switched',
+          `Successfully switched to database: ${newDatabase}`,
+          [{ text: 'OK' }]
+        );
+      } else {
+        Alert.alert(
+          'Error',
+          response.reason || 'Failed to switch database',
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error) {
+      console.error('Error switching database:', error);
+      Alert.alert(
+        'Error',
+        'An error occurred while switching database',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setSwitchingDatabase(false);
+    }
+  };
 
   if (showSettings) {
     return <Settings onClose={handleCloseSettings} />;
@@ -35,28 +109,10 @@ const MainScreen = (): JSX.Element => {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Quick Actions</Text>
             <View style={styles.actionGrid}>
-              <TouchableOpacity style={styles.actionCard} onPress={handleOpenSettings}>
-                <Ionicons name="qr-code-outline" size={32} color="white" />
-                <Text style={styles.actionTitle}>QR Scanner</Text>
-                <Text style={styles.actionSubtitle}>Scan QR codes</Text>
-              </TouchableOpacity>
-
               <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('BarangList')}>
                 <Ionicons name="cube-outline" size={32} color="white" />
                 <Text style={styles.actionTitle}>Barang</Text>
                 <Text style={styles.actionSubtitle}>Kelola Items</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('SupplierList')}>
-                <Ionicons name="people-outline" size={32} color="white" />
-                <Text style={styles.actionTitle}>Supplier</Text>
-                <Text style={styles.actionSubtitle}>Kelola Supplier</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('CustomerList')}>
-                <Ionicons name="person-outline" size={32} color="white" />
-                <Text style={styles.actionTitle}>Customer</Text>
-                <Text style={styles.actionSubtitle}>Kelola Customer</Text>
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('OrdersList')}>
@@ -75,6 +131,27 @@ const MainScreen = (): JSX.Element => {
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Status</Text>
+
+            {/* Database Indicator */}
+            <TouchableOpacity
+              style={styles.statusCard}
+              onPress={() => isAdmin && setShowDatabasePicker(true)}
+              disabled={!isAdmin || loadingDatabase}
+            >
+              <View style={styles.statusLeft}>
+                <Ionicons name="server-outline" size={24} color="#F59E0B" />
+                <View style={styles.statusText}>
+                  <Text style={styles.statusTitle}>Database</Text>
+                  <Text style={styles.statusSubtitle}>
+                    {loadingDatabase ? 'Loading...' : currentDatabase || 'Unknown'}
+                  </Text>
+                </View>
+              </View>
+              {isAdmin && !loadingDatabase && (
+                <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.7)" />
+              )}
+            </TouchableOpacity>
+
             <View style={styles.statusCard}>
               <View style={styles.statusLeft}>
                 <Ionicons name="checkmark-circle" size={24} color="#10B981" />
@@ -115,6 +192,64 @@ const MainScreen = (): JSX.Element => {
 
         </View>
       </ScrollView>
+
+      {/* Database Picker Modal (Admin Only) */}
+      {isAdmin && (
+        <Modal
+          visible={showDatabasePicker}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setShowDatabasePicker(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Switch Database</Text>
+                <TouchableOpacity onPress={() => setShowDatabasePicker(false)}>
+                  <Ionicons name="close" size={24} color="#374151" />
+                </TouchableOpacity>
+              </View>
+
+              {switchingDatabase ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color="#f59e0b" />
+                  <Text style={styles.loadingText}>Switching database...</Text>
+                </View>
+              ) : (
+                <ScrollView style={styles.databaseList}>
+                  {databases.map((db) => (
+                    <TouchableOpacity
+                      key={db}
+                      style={[
+                        styles.databaseItem,
+                        db === currentDatabase && styles.databaseItemActive
+                      ]}
+                      onPress={() => handleDatabaseSwitch(db)}
+                    >
+                      <View style={styles.databaseItemLeft}>
+                        <Ionicons
+                          name="server"
+                          size={20}
+                          color={db === currentDatabase ? '#f59e0b' : '#6B7280'}
+                        />
+                        <Text style={[
+                          styles.databaseItemText,
+                          db === currentDatabase && styles.databaseItemTextActive
+                        ]}>
+                          {db}
+                        </Text>
+                      </View>
+                      {db === currentDatabase && (
+                        <Ionicons name="checkmark-circle" size={20} color="#f59e0b" />
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              )}
+            </View>
+          </View>
+        </Modal>
+      )}
     </LinearGradient>
   );
 };
@@ -144,6 +279,19 @@ const styles = StyleSheet.create({
   infoText: { marginLeft: 15, flex: 1 },
   infoTitle: { color: 'white', fontSize: 16, fontWeight: '600', marginBottom: 5 },
   infoDescription: { color: 'rgba(255,255,255,0.8)', fontSize: 14, lineHeight: 20 },
+  // Modal styles
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: 'white', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '80%' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#111827' },
+  loadingContainer: { padding: 40, alignItems: 'center' },
+  loadingText: { marginTop: 15, fontSize: 16, color: '#6B7280' },
+  databaseList: { maxHeight: 400 },
+  databaseItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  databaseItemActive: { backgroundColor: '#FEF3C7' },
+  databaseItemLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  databaseItemText: { marginLeft: 12, fontSize: 16, color: '#374151' },
+  databaseItemTextActive: { color: '#f59e0b', fontWeight: '600' },
 });
 
 export default MainScreen;
