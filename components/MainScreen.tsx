@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import Settings from './Settings';
 import { useNavigation } from '@react-navigation/native';
 import ApiService from '../services/api';
+import { useDeveloperMode } from '../context/DeveloperModeContext';
 
 const MainScreen = (): JSX.Element => {
   const { user } = useAuth();
@@ -16,6 +17,7 @@ const MainScreen = (): JSX.Element => {
   const [showDatabasePicker, setShowDatabasePicker] = useState(false);
   const [switchingDatabase, setSwitchingDatabase] = useState(false);
   const navigation = useNavigation<any>();
+  const { isDeveloperMode, toggleDeveloperMode } = useDeveloperMode();
 
   const isAdmin = (user as any)?.email === 'johansen.junias17@gmail.com';
 
@@ -109,6 +111,12 @@ const MainScreen = (): JSX.Element => {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Quick Actions</Text>
             <View style={styles.actionGrid}>
+              <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('POSKasir')}>
+                <Ionicons name="cash-outline" size={32} color="white" />
+                <Text style={styles.actionTitle}>POS Kasir</Text>
+                <Text style={styles.actionSubtitle}>Point of Sale</Text>
+              </TouchableOpacity>
+
               <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('BarangList')}>
                 <Ionicons name="cube-outline" size={32} color="white" />
                 <Text style={styles.actionTitle}>Barang</Text>
@@ -125,6 +133,24 @@ const MainScreen = (): JSX.Element => {
                 <Ionicons name="scan-outline" size={32} color="white" />
                 <Text style={styles.actionTitle}>Scan Out</Text>
                 <Text style={styles.actionSubtitle}>Scan Shipping Labels</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('UserList')}>
+                <Ionicons name="people-outline" size={32} color="white" />
+                <Text style={styles.actionTitle}>User</Text>
+                <Text style={styles.actionSubtitle}>Manage Users</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('BundlingList')}>
+                <Ionicons name="albums-outline" size={32} color="white" />
+                <Text style={styles.actionTitle}>Bundling</Text>
+                <Text style={styles.actionSubtitle}>Paket Produk</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('Settingscreen')}>
+                <Ionicons name="cog-outline" size={32} color="white" />
+                <Text style={styles.actionTitle}>Setting</Text>
+                <Text style={styles.actionSubtitle}>App Configuration</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -250,6 +276,42 @@ const MainScreen = (): JSX.Element => {
           </View>
         </Modal>
       )}
+
+      {/* Developer Mode Toggle Button - Long press (1s) or double-tap to toggle */}
+      <TouchableOpacity
+        style={[
+          styles.devModeButton,
+          !isDeveloperMode && styles.devModeButtonHidden
+        ]}
+        onPress={async () => {
+          // Double-tap to disable when in dev mode
+          if (isDeveloperMode) {
+            await toggleDeveloperMode();
+            Alert.alert(
+              'Developer Mode',
+              'Developer mode has been disabled',
+              [{ text: 'OK' }]
+            );
+          }
+        }}
+        onLongPress={async () => {
+          await toggleDeveloperMode();
+          Alert.alert(
+            'Developer Mode',
+            isDeveloperMode ? 'Developer mode has been disabled' : 'Developer mode has been enabled',
+            [{ text: 'OK' }]
+          );
+        }}
+        delayLongPress={1000}
+        activeOpacity={0.8}
+      >
+        <Ionicons
+          name={isDeveloperMode ? 'bug' : 'bug-outline'}
+          size={isDeveloperMode ? 24 : 16}
+          color="white"
+        />
+        {isDeveloperMode && <View style={styles.devModeIndicator} />}
+      </TouchableOpacity>
     </LinearGradient>
   );
 };
@@ -292,6 +354,42 @@ const styles = StyleSheet.create({
   databaseItemLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   databaseItemText: { marginLeft: 12, fontSize: 16, color: '#374151' },
   databaseItemTextActive: { color: '#f59e0b', fontWeight: '600' },
+  devModeButton: {
+    position: 'absolute',
+    bottom: 80,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  devModeButtonHidden: {
+    opacity: 0.1,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  devModeIndicator: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#10B981',
+    borderWidth: 2,
+    borderColor: 'white',
+  },
 });
 
 export default MainScreen;

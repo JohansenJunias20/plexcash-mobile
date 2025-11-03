@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Alert, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, Alert, TouchableOpacity, ActivityIndicator, Linking } from 'react-native';
+import { Camera, useCameraDevice, useCodeScanner } from 'react-native-vision-camera';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
@@ -12,11 +12,42 @@ interface Props {
 
 const SimpleQRScanner = ({ onScanSuccess, onCancel }: Props): JSX.Element => {
   const { authorizeDeviceWithQRCode } = useAuth();
-  const [permission, requestPermission] = useCameraPermissions();
+  const [hasPermission, setHasPermission] = useState(false);
   const [scanned, setScanned] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const device = useCameraDevice('back');
 
-  const handleBarcodeScanned = async ({ type, data }: BarcodeScanningResult) => {
+  const codeScanner = useCodeScanner({
+    codeTypes: ['qr'],
+    onCodeScanned: (codes) => {
+      if (scanned || isLoading || codes.length === 0) return;
+      handleBarcodeScanned(codes[0].value || '');
+    },
+  });
+
+  useEffect(() => {
+    checkPermission();
+  }, []);
+
+  const checkPermission = async () => {
+    const status = await Camera.getCameraPermissionStatus();
+    if (status !== 'granted') {
+      const newStatus = await Camera.requestCameraPermission();
+      setHasPermission(newStatus === 'granted');
+    } else {
+      setHasPermission(true);
+    }
+  };
+
+  const requestPermission = async () => {
+    const status = await Camera.requestCameraPermission();
+    if (status === 'denied') {
+      await Linking.openSettings();
+    }
+    setHasPermission(status === 'granted');
+  };
+
+  const handleBarcodeScanned = async (data: string) => {
     if (scanned || isLoading) return;
     setScanned(true);
     setIsLoading(true);
@@ -42,16 +73,7 @@ const SimpleQRScanner = ({ onScanSuccess, onCancel }: Props): JSX.Element => {
     }
   };
 
-  if (!permission) {
-    return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" color="#FFD700" />
-        <Text style={styles.loadingText}>Loading camera...</Text>
-      </View>
-    );
-  }
-
-  if (!permission.granted) {
+  if (!hasPermission) {
     return (
       <LinearGradient colors={['#fbbf24', '#f59e0b', '#d97706']} style={styles.container}>
         <View style={styles.permissionContainer}>
@@ -69,6 +91,15 @@ const SimpleQRScanner = ({ onScanSuccess, onCancel }: Props): JSX.Element => {
     );
   }
 
+  if (device == null) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color="#FFD700" />
+        <Text style={styles.loadingText}>Loading camera...</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -80,7 +111,7 @@ const SimpleQRScanner = ({ onScanSuccess, onCancel }: Props): JSX.Element => {
       </View>
 
       <View style={styles.cameraContainer}>
-        <CameraView style={styles.camera} facing="back" onBarcodeScanned={scanned ? undefined : handleBarcodeScanned} barcodeScannerSettings={{ barcodeTypes: ['qr'] }} />
+        <Camera style={styles.camera} device={device} isActive={!scanned && !isLoading} codeScanner={codeScanner} />
         <View style={styles.overlay}>
           <View style={styles.scanArea}>
             <View style={[styles.corner, styles.topLeft]} />

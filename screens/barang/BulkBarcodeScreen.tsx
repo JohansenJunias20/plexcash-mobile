@@ -1,6 +1,6 @@
-import React, { useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert } from 'react-native';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import React, { useRef, useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert, Linking } from 'react-native';
+import { Camera, useCameraDevice, useCodeScanner } from 'react-native-vision-camera';
 import { API_BASE_URL } from '../../services/api';
 import { getTokenAuth } from '../../services/token';
 import { useAuth } from '../../context/AuthContext';
@@ -8,12 +8,37 @@ import { useAuth } from '../../context/AuthContext';
 interface ScanRow { code: string; id?: number; sku?: string; nama?: string; }
 
 export default function BulkBarcodeScreen(): JSX.Element {
-  const [permission, requestPermission] = useCameraPermissions();
+  const [hasPermission, setHasPermission] = useState(false);
   const [scans, setScans] = useState<ScanRow[]>([]);
   const [scanning, setScanning] = useState(true);
+  const device = useCameraDevice('back');
 
-  if (!permission) return <View/>;
-  if (!permission.granted) {
+  const codeScanner = useCodeScanner({
+    codeTypes: ['qr', 'ean-13', 'ean-8', 'code-128', 'code-39', 'code-93'],
+    onCodeScanned: (codes) => {
+      if (!scanning || codes.length === 0) return;
+      onBarcodeScanned(codes[0].value || '');
+    },
+  });
+
+  useEffect(() => {
+    checkPermission();
+  }, []);
+
+  const checkPermission = async () => {
+    const status = await Camera.getCameraPermissionStatus();
+    setHasPermission(status === 'granted');
+  };
+
+  const requestPermission = async () => {
+    const status = await Camera.requestCameraPermission();
+    if (status === 'denied') {
+      await Linking.openSettings();
+    }
+    setHasPermission(status === 'granted');
+  };
+
+  if (!hasPermission) {
     return (
       <View style={styles.center}>
         <Text>Camera permission is required</Text>
@@ -22,7 +47,15 @@ export default function BulkBarcodeScreen(): JSX.Element {
     );
   }
 
-  const onBarcodeScanned = ({ data }: { data: string }) => {
+  if (device == null) {
+    return (
+      <View style={styles.center}>
+        <Text>Loading camera...</Text>
+      </View>
+    );
+  }
+
+  const onBarcodeScanned = (data: string) => {
     if (!scanning) return;
     setScanning(false);
     setScans(prev => [...prev, { code: data }]);
@@ -43,9 +76,9 @@ export default function BulkBarcodeScreen(): JSX.Element {
 
   return (
     <View style={{ flex: 1 }}>
-      <CameraView style={{ flex: 1 }} onBarcodeScanned={onBarcodeScanned}>
+      <Camera style={{ flex: 1 }} device={device} isActive={scanning} codeScanner={codeScanner}>
         <View style={styles.overlay}><Text style={{ color: 'white' }}>Scan barcodes</Text></View>
-      </CameraView>
+      </Camera>
       <FlatList
         data={scans}
         keyExtractor={(_, i) => String(i)}

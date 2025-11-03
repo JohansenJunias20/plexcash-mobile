@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
 import LoginScreen from '../components/LoginScreen';
@@ -17,7 +17,14 @@ import OrdersListScreen from '../screens/orders/OrdersListScreen';
 import OrderDetailScreen from '../screens/orders/OrderDetailScreen';
 import LabelPreviewScreen from '../screens/orders/LabelPreviewScreen';
 import ScanOutScreen from '../screens/scanout/ScanOutScreen';
+import POSKasirScreen from '../screens/pos/POSKasirScreen';
+import UserListScreen from '../screens/user/UserListScreen';
+import UserEditScreen from '../screens/user/UserEditScreen';
+import BundlingListScreen from '../screens/bundling/BundlingListScreen';
+import BundlingEditScreen from '../screens/bundling/BundlingEditScreen';
+import Settingscreen from '../screens/Settingscreen';
 import { View, ActivityIndicator } from 'react-native';
+import { logNavigation, logStateChange } from '../utils/logger';
 
 export type AppStackParamList = {
   MainHome: undefined;
@@ -35,6 +42,12 @@ export type AppStackParamList = {
   OrderDetail: { id: string; id_ecommerce: number };
   LabelPreview: { html: string; title?: string };
   ScanOut: undefined;
+  POSKasir: undefined;
+  UserList: undefined;
+  UserEdit: { email: string } | undefined;
+  BundlingList: undefined;
+  BundlingEdit: { id: number } | undefined;
+  Settingscreen: undefined;
 };
 
 const AuthStack = createNativeStackNavigator();
@@ -47,16 +60,34 @@ const LoadingScreen = () => (
 );
 
 export default function RootNavigator() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
 
+  // Log every render to track navigation state changes
+  useEffect(() => {
+    logNavigation('🧭 RootNavigator rendered/updated', {
+      isLoading,
+      isAuthenticated,
+      hasUser: !!user,
+      userEmail: user?.email || 'none'
+    });
+
+    // Force a small delay to ensure state has propagated
+    if (isAuthenticated && !isLoading) {
+      logNavigation('✅ Authentication complete - MainScreen should be visible');
+    }
+  }, [isAuthenticated, isLoading, user]);
+
+  logNavigation('🧭 RootNavigator render cycle', { isLoading, isAuthenticated });
   console.log('🧭 [NAVIGATOR] RootNavigator render - isLoading:', isLoading, 'isAuthenticated:', isAuthenticated);
 
   if (isLoading) {
+    logNavigation('⏳ Showing loading screen');
     console.log('🧭 [NAVIGATOR] Showing loading screen');
     return <LoadingScreen />;
   }
 
   if (!isAuthenticated) {
+    logNavigation('🔒 User NOT authenticated - showing LoginScreen');
     console.log('🧭 [NAVIGATOR] User NOT authenticated - showing LoginScreen');
     return (
       <AuthStack.Navigator>
@@ -65,6 +96,7 @@ export default function RootNavigator() {
     );
   }
 
+  logNavigation('✅ User IS authenticated - showing MainScreen');
   console.log('🧭 [NAVIGATOR] User IS authenticated - showing MainScreen');
   return (
     <AppStack.Navigator
@@ -91,10 +123,16 @@ export default function RootNavigator() {
       <AppStack.Screen name="SupplierEdit" component={SupplierEditScreen} options={{ title: 'Supplier' }} />
       <AppStack.Screen name="CustomerList" component={CustomerListScreen} options={{ title: 'Customer' }} />
       <AppStack.Screen name="CustomerEdit" component={CustomerEditScreen} options={{ title: 'Customer' }} />
+      <AppStack.Screen name="UserList" component={UserListScreen} options={{ title: 'User Management' }} />
+      <AppStack.Screen name="UserEdit" component={UserEditScreen} options={{ title: 'User Permissions' }} />
       <AppStack.Screen name="OrdersList" component={OrdersListScreen} options={{ title: 'Pesanan' }} />
       <AppStack.Screen name="OrderDetail" component={OrderDetailScreen} options={{ title: 'Detail Pesanan' }} />
       <AppStack.Screen name="LabelPreview" component={LabelPreviewScreen} options={{ title: 'Label Preview' }} />
       <AppStack.Screen name="ScanOut" component={ScanOutScreen} options={{ title: 'Scan Out' }} />
+      <AppStack.Screen name="POSKasir" component={POSKasirScreen} options={{ headerShown: false }} />
+      <AppStack.Screen name="BundlingList" component={BundlingListScreen} options={{ title: 'Bundling' }} />
+      <AppStack.Screen name="BundlingEdit" component={BundlingEditScreen} options={{ title: 'Bundling' }} />
+      <AppStack.Screen name="Settingscreen" component={Settingscreen} options={{ headerShown: false }} />
     </AppStack.Navigator>
   );
 }

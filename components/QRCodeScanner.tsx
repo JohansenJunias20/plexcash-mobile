@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Alert, TouchableOpacity, Dimensions, ActivityIndicator } from 'react-native';
-import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
+import { View, Text, StyleSheet, Alert, TouchableOpacity, Dimensions, ActivityIndicator, Linking } from 'react-native';
+import { Camera, useCameraDevice, useCodeScanner } from 'react-native-vision-camera';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
@@ -14,17 +14,42 @@ interface Props {
 
 const QRCodeScanner = ({ onScanSuccess, onCancel }: Props): JSX.Element => {
   const { authorizeDeviceWithQRCode } = useAuth();
-  const [permission, requestPermission] = useCameraPermissions();
+  const [hasPermission, setHasPermission] = useState(false);
   const [scanned, setScanned] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const device = useCameraDevice('back');
+
+  const codeScanner = useCodeScanner({
+    codeTypes: ['qr'],
+    onCodeScanned: (codes) => {
+      if (scanned || codes.length === 0) return;
+      handleBarCodeScanned(codes[0].value || '');
+    },
+  });
 
   useEffect(() => {
-    if (!permission) {
-      requestPermission();
-    }
-  }, [permission, requestPermission]);
+    checkPermission();
+  }, []);
 
-  const handleBarCodeScanned = async ({ type, data }: BarcodeScanningResult) => {
+  const checkPermission = async () => {
+    const status = await Camera.getCameraPermissionStatus();
+    if (status !== 'granted') {
+      const newStatus = await Camera.requestCameraPermission();
+      setHasPermission(newStatus === 'granted');
+    } else {
+      setHasPermission(true);
+    }
+  };
+
+  const requestPermission = async () => {
+    const status = await Camera.requestCameraPermission();
+    if (status === 'denied') {
+      await Linking.openSettings();
+    }
+    setHasPermission(status === 'granted');
+  };
+
+  const handleBarCodeScanned = async (data: string) => {
     if (scanned) return;
 
     setScanned(true);
@@ -52,16 +77,7 @@ const QRCodeScanner = ({ onScanSuccess, onCancel }: Props): JSX.Element => {
     }
   };
 
-  if (!permission) {
-    return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" color="#FFD700" />
-        <Text style={styles.loadingText}>Requesting camera permission...</Text>
-      </View>
-    );
-  }
-
-  if (!permission.granted) {
+  if (!hasPermission) {
     return (
       <View style={styles.container}>
         <Ionicons name="camera-off" size={64} color="#FFD700" />
@@ -73,6 +89,15 @@ const QRCodeScanner = ({ onScanSuccess, onCancel }: Props): JSX.Element => {
         <TouchableOpacity style={[styles.cancelButton, { marginTop: 10 }]} onPress={onCancel}>
           <Text style={styles.cancelButtonText}>Go Back</Text>
         </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (device == null) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color="#FFD700" />
+        <Text style={styles.loadingText}>Loading camera...</Text>
       </View>
     );
   }
@@ -89,8 +114,8 @@ const QRCodeScanner = ({ onScanSuccess, onCancel }: Props): JSX.Element => {
         </View>
 
         <View style={styles.scannerContainer}>
-          <CameraView style={styles.scanner} facing="back" onBarcodeScanned={scanned ? undefined : handleBarCodeScanned} barcodeScannerSettings={{ barcodeTypes: ['qr'] }} />
-          
+          <Camera style={styles.scanner} device={device} isActive={!scanned && !isLoading} codeScanner={codeScanner} />
+
           <View style={styles.overlay}>
             <View style={styles.scanArea}>
               <View style={[styles.corner, styles.topLeft]} />
@@ -111,7 +136,7 @@ const QRCodeScanner = ({ onScanSuccess, onCancel }: Props): JSX.Element => {
         <View style={styles.footer}>
           <Text style={styles.instructionText}>Position the QR code within the frame to scan</Text>
           <Text style={styles.subInstructionText}>Make sure the QR code is clearly visible and well-lit</Text>
-          
+
           {scanned && !isLoading && (
             <TouchableOpacity style={styles.rescanButton} onPress={() => setScanned(false)}>
               <Text style={styles.rescanButtonText}>Tap to Scan Again</Text>

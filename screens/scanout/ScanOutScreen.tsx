@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert, ActivityIndicator } from 'react-native';
-import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert, ActivityIndicator, Linking } from 'react-native';
+import { Camera, useCameraDevice, useCodeScanner } from 'react-native-vision-camera';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
@@ -14,12 +14,39 @@ interface ScannedOrder {
 }
 
 export default function ScanOutScreen(): JSX.Element {
-  const [permission, requestPermission] = useCameraPermissions();
+  const [hasPermission, setHasPermission] = useState(false);
   const [scannedOrders, setScannedOrders] = useState<ScannedOrder[]>([]);
   const [scanning, setScanning] = useState(true);
   const [currentScan, setCurrentScan] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
   const [pendingScans, setPendingScans] = useState<Set<string>>(new Set()); // Track pending backend requests
+  const device = useCameraDevice('back');
+
+  const codeScanner = useCodeScanner({
+    codeTypes: ['qr', 'code-128', 'code-39', 'ean-13', 'ean-8'],
+    onCodeScanned: (codes) => {
+      if (codes.length > 0 && codes[0].value) {
+        handleBarcodeScanned({ data: codes[0].value });
+      }
+    },
+  });
+
+  useEffect(() => {
+    checkPermission();
+  }, []);
+
+  const checkPermission = async () => {
+    const status = await Camera.getCameraPermissionStatus();
+    setHasPermission(status === 'granted');
+  };
+
+  const requestPermission = async () => {
+    const status = await Camera.requestCameraPermission();
+    if (status === 'denied') {
+      await Linking.openSettings();
+    }
+    setHasPermission(status === 'granted');
+  };
 
   const isOrderNumber = (data: string): boolean => {
     // Check if it's a no pesanan (order number) format:
@@ -38,7 +65,7 @@ export default function ScanOutScreen(): JSX.Element {
     return false; // This is likely a resi (tracking number)
   };
 
-  const handleBarcodeScanned = async ({ data }: BarcodeScanningResult) => {
+  const handleBarcodeScanned = async ({ data }: { data: string }) => {
     if (!scanning || processing) return;
 
     // Check if this resi is already being processed (prevent duplicate scans)
@@ -208,16 +235,7 @@ export default function ScanOutScreen(): JSX.Element {
     setScannedOrders(prev => prev.filter((_, i) => i !== index));
   };
 
-  if (!permission) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#f59e0b" />
-        <Text style={styles.loadingText}>Loading camera...</Text>
-      </View>
-    );
-  }
-
-  if (!permission.granted) {
+  if (!hasPermission) {
     return (
       <LinearGradient colors={['#fbbf24', '#f59e0b', '#d97706']} style={styles.container}>
         <View style={styles.permissionContainer}>
@@ -231,6 +249,15 @@ export default function ScanOutScreen(): JSX.Element {
           </TouchableOpacity>
         </View>
       </LinearGradient>
+    );
+  }
+
+  if (device == null) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#f59e0b" />
+        <Text style={styles.loadingText}>Loading camera...</Text>
+      </View>
     );
   }
 
@@ -287,13 +314,11 @@ export default function ScanOutScreen(): JSX.Element {
     <View style={styles.container}>
       {/* Camera View */}
       <View style={styles.cameraContainer}>
-        <CameraView 
-          style={styles.camera} 
-          facing="back"
-          onBarcodeScanned={scanning ? handleBarcodeScanned : undefined}
-          barcodeScannerSettings={{
-            barcodeTypes: ['qr', 'code128', 'code39', 'ean13', 'ean8', 'upc_a', 'upc_e']
-          }}
+        <Camera
+          style={styles.camera}
+          device={device}
+          isActive={scanning}
+          codeScanner={codeScanner}
         >
           <View style={styles.overlay}>
             <View style={styles.scanArea}>
@@ -312,7 +337,7 @@ export default function ScanOutScreen(): JSX.Element {
               </View>
             )}
           </View>
-        </CameraView>
+        </Camera>
       </View>
 
       {/* Scanned Orders List */}

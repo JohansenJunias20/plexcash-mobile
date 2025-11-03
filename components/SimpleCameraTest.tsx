@@ -1,27 +1,43 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
+import { Camera, useCameraDevice, useCodeScanner } from 'react-native-vision-camera';
 import { Ionicons } from '@expo/vector-icons';
 
 interface Props { onClose: () => void }
 
 const SimpleCameraTest = ({ onClose }: Props): JSX.Element => {
-  const [permission, requestPermission] = useCameraPermissions();
+  const [hasPermission, setHasPermission] = useState(false);
+  const device = useCameraDevice('back');
 
-  const handleBarcodeScanned = ({ type, data }: BarcodeScanningResult) => {
-    console.log('Barcode scanned:', { type, data });
-    alert(`QR Code scanned: ${data}`);
+  const codeScanner = useCodeScanner({
+    codeTypes: ['qr', 'ean-13'],
+    onCodeScanned: (codes) => {
+      if (codes.length > 0) {
+        const code = codes[0];
+        console.log('Barcode scanned:', { type: code.type, data: code.value });
+        alert(`QR Code scanned: ${code.value}`);
+      }
+    },
+  });
+
+  useEffect(() => {
+    checkPermission();
+  }, []);
+
+  const checkPermission = async () => {
+    const status = await Camera.getCameraPermissionStatus();
+    setHasPermission(status === 'granted');
   };
 
-  if (!permission) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.text}>Requesting camera permission...</Text>
-      </View>
-    );
-  }
+  const requestPermission = async () => {
+    const status = await Camera.requestCameraPermission();
+    if (status === 'denied') {
+      await Linking.openSettings();
+    }
+    setHasPermission(status === 'granted');
+  };
 
-  if (!permission.granted) {
+  if (!hasPermission) {
     return (
       <View style={styles.container}>
         <Text style={styles.text}>Camera permission not granted</Text>
@@ -35,6 +51,14 @@ const SimpleCameraTest = ({ onClose }: Props): JSX.Element => {
     );
   }
 
+  if (device == null) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.text}>Loading camera...</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -43,9 +67,9 @@ const SimpleCameraTest = ({ onClose }: Props): JSX.Element => {
         </TouchableOpacity>
         <Text style={styles.headerText}>Camera Test</Text>
       </View>
-      
-      <CameraView style={styles.camera} facing="back" onBarcodeScanned={handleBarcodeScanned} barcodeScannerSettings={{ barcodeTypes: ['qr'] }} />
-      
+
+      <Camera style={styles.camera} device={device} isActive={true} codeScanner={codeScanner} />
+
       <View style={styles.overlay}>
         <Text style={styles.overlayText}>Point camera at QR code</Text>
       </View>

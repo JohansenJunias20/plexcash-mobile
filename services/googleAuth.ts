@@ -3,6 +3,7 @@ import * as Crypto from 'expo-crypto';
 import * as AuthSession from 'expo-auth-session';
 import { Linking, Platform } from 'react-native';
 import ApiService from './api';
+import { logger, logGoogleAuth, logError, logCritical } from '../utils/logger';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -90,7 +91,10 @@ class GoogleAuthService {
    */
   static async signInWithGoogle() {
     try {
+      logGoogleAuth('🚀 Starting Google Sign-In flow...');
+
       if (!ENABLE_GOOGLE_SIGNIN) {
+        logError('Google Sign-In is disabled', { context: 'GOOGLE-AUTH' });
         return {
           success: false,
           error: 'Google Sign-In is disabled',
@@ -99,6 +103,7 @@ class GoogleAuthService {
       }
 
       if (GOOGLE_WEB_CLIENT_ID.includes('your-web-client-id')) {
+        logError('Google Client ID not configured', { context: 'GOOGLE-AUTH' });
         return {
           success: false,
           error: 'Please configure GOOGLE_WEB_CLIENT_ID',
@@ -106,13 +111,17 @@ class GoogleAuthService {
         } as const;
       }
 
+      logGoogleAuth('Configuration validated, proceeding with authentication');
       console.log('Starting Google Sign-In with backend redirect flow...');
 
       // Step 1: Get device ID
+      logGoogleAuth('Step 1: Getting device ID...');
       const deviceId = await this.getDeviceId();
+      logGoogleAuth('Device ID obtained', { deviceId: deviceId.substring(0, 16) + '...' });
       console.log('Device ID:', deviceId.substring(0, 16) + '...');
 
       // Step 2: Initialize session with backend
+      logGoogleAuth('Step 2: Initializing auth session with backend...');
       console.log('Initializing auth session with backend...');
       const initResponse = await fetch(`${BACKEND_URL}/auth/mobile/init`, {
         method: 'POST',
@@ -124,6 +133,11 @@ class GoogleAuthService {
       });
 
       if (!initResponse.ok) {
+        logError('Backend init request failed', {
+          context: 'GOOGLE-AUTH',
+          data: { status: initResponse.status }
+        });
+
         // Check if response is HTML (backend route not registered)
         const contentType = initResponse.headers.get('content-type');
         if (contentType && contentType.includes('text/html')) {
@@ -151,6 +165,7 @@ class GoogleAuthService {
       }
 
       const { sessionId, csrfToken } = await initResponse.json();
+      logGoogleAuth('Session initialized successfully', { sessionId: sessionId.substring(0, 8) + '...' });
       console.log('Session initialized:', sessionId.substring(0, 8) + '...');
 
       // Step 3: Get the proper mobile redirect URI for current environment
@@ -165,13 +180,26 @@ class GoogleAuthService {
         mobileRedirect: mobileRedirectUri
       });
       const backendCallbackUri = BACKEND_URL + '/auth/mobile/callback';
+
+      // IMPORTANT: OAuth parameters for device trust/remembering:
+      // - access_type=offline: Get refresh token for long-term access
+      // - prompt parameter options:
+      //   * 'none': No UI shown, fails if user not already authenticated (best for silent re-auth)
+      //   * 'consent': Always show consent screen (forces re-authentication)
+      //   * 'select_account': Always show account picker (forces re-authentication + 2FA)
+      //   * OMIT prompt: Google decides based on session state (RECOMMENDED for device trust)
+      //
+      // By OMITTING the prompt parameter, Google will:
+      // - Show account picker on first login
+      // - Remember the device after 2FA verification
+      // - Skip 2FA on subsequent logins from the same device/browser
       const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
         `client_id=${encodeURIComponent(GOOGLE_WEB_CLIENT_ID)}&` +
         `redirect_uri=${encodeURIComponent(backendCallbackUri)}&` +
         `response_type=code&` +
         `scope=${encodeURIComponent('openid profile email')}&` +
         `state=${encodeURIComponent(stateParam)}&` +
-        `prompt=select_account`;
+        `access_type=offline`;
 
       console.log('');
       console.log('═══════════════════════════════════════════════════════════');
@@ -199,60 +227,133 @@ class GoogleAuthService {
 
       // Step 4: Open browser for OAuth using openAuthSessionAsync
       // This method is specifically designed for OAuth flows and handles redirects properly
+      logGoogleAuth('Step 3: Opening browser for Google OAuth...');
       console.log('Opening browser for Google OAuth...');
-      console.log('Using WebBrowser.openAuthSessionAsync for better deep link handling...');
+      console.log('Using WebBrowser.openBrowserAsync with manual deep link listener...');
 
-      // Configure browser options to better handle 2FA flows
-      const result = await WebBrowser.openAuthSessionAsync(
-        authUrl, 
-        mobileRedirectUri,
-        {
-          // Show page title in browser (helps user know they're still in auth flow)
-          showTitle: true,
-          // Enable bar collapsing for better UX
-          enableBarCollapsing: false,
-          // Create a new task for the browser (Android)
-          createTask: false,
+      // Warm up browser for better performance and control
+      try {
+        await WebBrowser.warmUpAsync();
+        console.log('Browser warmed up');
+      } catch (e) {
+        console.warn('Failed to warm up browser:', e);
+      }
+
+      // Set up deep link listener BEFORE opening browser
+      const redirectUrlPromise = new Promise<string>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('Deep link timeout - no redirect received within 5 minutes'));
+        }, 5 * 60 * 1000); // 5 minute timeout
+
+        const subscription = Linking.addEventListener('url', (event) => {
+          console.log('Deep link received:', event.url);
+
+          // Check if this is our redirect URL
+          if (event.url.startsWith(mobileRedirectUri)) {
+            clearTimeout(timeout);
+            subscription.remove();
+
+            // CRITICAL: Dismiss browser IMMEDIATELY when deep link is received
+            // Try multiple times with different delays for maximum compatibility
+            console.log('Deep link matched! Dismissing browser with multiple attempts...');
+
+            // Attempt 1: Immediate
+            try {
+              WebBrowser.dismissBrowser();
+            } catch (e) {
+              // Ignore
+            }
+
+            // Attempt 2: After 50ms
+            setTimeout(() => {
+              try {
+                WebBrowser.dismissBrowser();
+              } catch (e) {
+                // Ignore
+              }
+            }, 50);
+
+            // Attempt 3: After 100ms
+            setTimeout(() => {
+              try {
+                WebBrowser.dismissBrowser();
+              } catch (e) {
+                // Ignore
+              }
+            }, 100);
+
+            // Attempt 4: After 200ms
+            setTimeout(() => {
+              try {
+                WebBrowser.dismissBrowser();
+              } catch (e) {
+                // Ignore
+              }
+            }, 200);
+
+            resolve(event.url);
+          }
+        });
+      });
+
+      // Open browser (non-blocking)
+      await WebBrowser.openBrowserAsync(authUrl, {
+        showTitle: true,
+        enableBarCollapsing: false,
+        createTask: false,
+      });
+
+      console.log('Browser opened, waiting for deep link redirect...');
+
+      // Wait for deep link
+      let redirectUrl: string;
+      try {
+        redirectUrl = await redirectUrlPromise;
+        logGoogleAuth('Received redirect URL from deep link', { url: redirectUrl.substring(0, 50) + '...' });
+        console.log('Received redirect URL:', redirectUrl);
+
+        // Give browser a moment to dismiss (already called in deep link handler)
+        await new Promise(resolve => setTimeout(resolve, 100));
+      } catch (error) {
+        logError('Deep link timeout or error', { context: 'GOOGLE-AUTH', data: { error } });
+        console.error('Deep link error:', error);
+
+        // Try to dismiss browser on error
+        try {
+          await WebBrowser.dismissBrowser();
+        } catch (e) {
+          // Ignore
         }
-      );
 
-      console.log('Browser result:', result);
-      console.log('Browser result type:', result.type);
-
-      // Handle user cancellation or dismissal (e.g., when 2FA opens in another app)
-      if (result.type === 'cancel' || result.type === 'dismiss') {
-        console.log(`User ${result.type}ed the browser - authentication cancelled`);
         return {
           success: false as const,
-          cancelled: true as const
+          error: 'Authentication timeout - no redirect received'
         };
       }
-
-      if (result.type !== 'success') {
-        console.error('Unexpected browser result type:', result.type);
-        return {
-          success: false as const,
-          error: `Authentication failed: ${result.type}`
-        };
-      }
-
-      const redirectUrl = result.url;
-      console.log('Received redirect URL:', redirectUrl);
 
       // Step 7: Parse redirect URL
+      logGoogleAuth('Step 4: Parsing redirect URL...');
       const url = new URL(redirectUrl);
       const returnedSessionId = url.searchParams.get('session');
       const error = url.searchParams.get('error');
 
       if (error) {
+        logError('Authentication error from redirect', {
+          context: 'GOOGLE-AUTH',
+          data: { error }
+        });
         throw new Error(`Authentication error: ${error}`);
       }
 
       if (!returnedSessionId) {
+        logError('No session returned from authentication', { context: 'GOOGLE-AUTH' });
         throw new Error('No session returned from authentication');
       }
 
+      logGoogleAuth('Session ID extracted from redirect', { sessionId: returnedSessionId.substring(0, 8) + '...' });
+
       // Step 8: Verify session and get Firebase token
+      logGoogleAuth('Step 5: Verifying session with backend...');
       console.log('Verifying session with backend...');
       const verifyResponse = await fetch(`${BACKEND_URL}/auth/mobile/verify`, {
         method: 'POST',
@@ -264,6 +365,11 @@ class GoogleAuthService {
       });
 
       if (!verifyResponse.ok) {
+        logError('Session verification failed', {
+          context: 'GOOGLE-AUTH',
+          data: { status: verifyResponse.status }
+        });
+
         // Check if response is HTML (backend route not registered)
         const contentType = verifyResponse.headers.get('content-type');
         if (contentType && contentType.includes('text/html')) {
@@ -280,29 +386,44 @@ class GoogleAuthService {
       }
 
       const { token: customToken, email } = await verifyResponse.json();
+      logGoogleAuth('Custom Firebase token received', { email });
       console.log('Custom Firebase token received for:', email);
 
       // Step 8: Sign in to Firebase with custom token to get ID token
+      logGoogleAuth('Step 6: Signing in to Firebase with custom token...');
       console.log('Signing in to Firebase with custom token...');
       const { auth } = require('../config/firebase');
       const { signInWithCustomToken } = require('firebase/auth');
 
       const userCredential = await signInWithCustomToken(auth, customToken);
+      logGoogleAuth('✅ Firebase sign-in successful!', { uid: userCredential.user.uid });
       console.log('Firebase sign-in successful!');
 
       // Get the ID token from the signed-in user
       const idToken = await userCredential.user.getIdToken();
+      logGoogleAuth('Firebase ID token obtained');
       console.log('Firebase ID token obtained');
 
       // Step 9: Exchange Firebase ID token with PlexSeller backend
+      logGoogleAuth('Step 7: Exchanging Firebase ID token with backend...');
       console.log('Exchanging Firebase ID token with backend...');
       const loginResponse = await ApiService.exchangeFirebaseToken(idToken);
 
       if (!loginResponse.status) {
+        logError('Backend authentication failed', { context: 'GOOGLE-AUTH' });
         throw new Error('Backend authentication failed');
       }
 
+      logGoogleAuth('✅ Backend authentication successful!');
       console.log('Google Sign-In completed successfully!');
+
+      // CRITICAL: This triggers AuthContext's onAuthStateChanged listener
+      // The listener will:
+      // 1. Store tokens in AsyncStorage/SecureStore
+      // 2. Set isAuthenticated = true
+      // 3. Trigger RootNavigator to show MainScreen
+      logGoogleAuth('⚠️ IMPORTANT: onAuthStateChanged listener should fire now...');
+      logGoogleAuth('Waiting for AuthContext to update authentication state...');
 
       // Note: Token storage is handled by AuthContext's onAuthStateChanged listener
       // which fires automatically after signInWithCustomToken() completes.
@@ -319,6 +440,13 @@ class GoogleAuthService {
       };
 
     } catch (error: any) {
+      logError('Google Sign-In Error', {
+        context: 'GOOGLE-AUTH',
+        data: {
+          message: error.message,
+          stack: error.stack
+        }
+      });
       console.error('Google Sign-In Error:', error);
       return {
         success: false as const,

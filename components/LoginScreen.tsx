@@ -6,10 +6,12 @@ import { Ionicons } from '@expo/vector-icons';
 import ApiService from '../services/api';
 import Settings from './Settings';
 import GoogleAuthService from '../services/googleAuth';
+import { useDeveloperMode } from '../context/DeveloperModeContext';
 
 const LoginScreen = (): JSX.Element => {
   const [isLoading, setIsLoading] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const { isDeveloperMode, toggleDeveloperMode } = useDeveloperMode();
 
   const handleQRCodeLogin = () => setShowSettings(true);
 
@@ -171,6 +173,42 @@ const LoginScreen = (): JSX.Element => {
             </View>
           </View>
         </ScrollView>
+
+        {/* Developer Mode Toggle Button - Long press (1s) or double-tap to toggle */}
+        <TouchableOpacity
+          style={[
+            styles.devModeButton,
+            !isDeveloperMode && styles.devModeButtonHidden
+          ]}
+          onPress={async () => {
+            // Single tap to disable when in dev mode
+            if (isDeveloperMode) {
+              await toggleDeveloperMode();
+              Alert.alert(
+                'Developer Mode',
+                'Developer mode has been disabled',
+                [{ text: 'OK' }]
+              );
+            }
+          }}
+          onLongPress={async () => {
+            await toggleDeveloperMode();
+            Alert.alert(
+              'Developer Mode',
+              isDeveloperMode ? 'Developer mode has been disabled' : 'Developer mode has been enabled',
+              [{ text: 'OK' }]
+            );
+          }}
+          delayLongPress={1000}
+          activeOpacity={0.8}
+        >
+          <Ionicons
+            name={isDeveloperMode ? 'bug' : 'bug-outline'}
+            size={isDeveloperMode ? 24 : 16}
+            color="white"
+          />
+          {isDeveloperMode && <View style={styles.devModeIndicator} />}
+        </TouchableOpacity>
       </LinearGradient>
     </View>
   );
@@ -354,6 +392,42 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     textAlign: 'center',
     marginTop: 8,
+  },
+  devModeButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  devModeButtonHidden: {
+    opacity: 0.1,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  devModeIndicator: {
+    position: 'absolute',
+    top: 5,
+    right: 5,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#10B981',
+    borderWidth: 2,
+    borderColor: 'white',
   },
 });
 

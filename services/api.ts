@@ -527,11 +527,16 @@ class ApiService {
 
       console.log(`✅ [AUTH-REQ] Request successful for ${endpoint}`);
 
-      const contentType = response.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        return await response.json();
+      // Try to parse as JSON first, fallback to text if parsing fails
+      const responseText = await response.text();
+      try {
+        const jsonData = JSON.parse(responseText);
+        return jsonData;
+      } catch (parseError) {
+        // If JSON parsing fails, return as text
+        console.log(`⚠️ [AUTH-REQ] Response is not JSON for ${endpoint}, returning as text`);
+        return responseText;
       }
-      return await response.text();
     } catch (error) {
       console.error(`💥 [AUTH-REQ] Request failed for ${endpoint}:`, error);
       throw error;

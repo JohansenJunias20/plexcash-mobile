@@ -5,6 +5,7 @@ import ApiService from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import MainScreen from '../components/MainScreen';
 import LoginScreen from '../components/LoginScreen';
+import { logger, logAuth, logStateChange, logError } from '../utils/logger';
 
 interface AuthUser {
   email: string;
@@ -39,10 +40,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
 
   useEffect(() => {
+    logAuth('🔄 AuthProvider mounted, initializing authentication check...');
+
     const checkExistingAuth = async () => {
       try {
+        logAuth('🔍 Checking existing authentication...');
         console.log('🔍 [AUTH] Checking existing authentication');
         const isDeviceAuthorized = await ApiService.isDeviceAuthorized();
+        logAuth('Device authorization check complete', { isDeviceAuthorized });
         console.log('🔍 [AUTH] Device authorized status:', isDeviceAuthorized);
 
         if (isDeviceAuthorized) {
@@ -87,19 +92,32 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
 
     const checkFirebaseAuth = () => {
+      logAuth('📡 Setting up Firebase auth state listener...');
+
       const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+        logAuth('🔥 Firebase auth state changed!', {
+          hasUser: !!firebaseUser,
+          email: firebaseUser?.email || 'null'
+        });
         console.log('🔥 [AUTH-STATE-CHANGED] Firebase auth state changed, user:', firebaseUser?.email || 'null');
+
+        logStateChange('Setting isLoading = true');
         setIsLoading(true);
 
         if (firebaseUser) {
           try {
+            logAuth('🔥 User detected, getting Firebase ID token...');
             console.log('🔥 [AUTH-STATE-CHANGED] Getting Firebase ID token...');
             const token = await firebaseUser.getIdToken();
+            logAuth('Token obtained, exchanging with backend...');
             console.log('🔥 [AUTH-STATE-CHANGED] Token obtained, exchanging with backend...');
             const backendResponse = await ApiService.exchangeFirebaseToken(token);
+            logAuth('Backend response received', { status: backendResponse.status });
             console.log('🔥 [AUTH-STATE-CHANGED] Backend response:', backendResponse);
 
             if (backendResponse.status) {
+              logAuth('✅ Backend authentication successful!');
+              logAuth('🔐 Storing Firebase token in SecureStore and AsyncStorage...');
               console.log('🔐 [AUTH] Storing Firebase token in SecureStore and AsyncStorage...');
 
               // Store token in both SecureStore and AsyncStorage (for consistency with QR code flow)
@@ -113,43 +131,77 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 authMethod: 'firebase' // ✅ This prevents validateDeviceAuth from being called
               });
 
+              logAuth('✅ Token storage complete!');
               console.log('🔐 [AUTH] Token storage complete, setting authenticated state');
 
               // Only set authenticated state AFTER token is stored
+              logStateChange('Setting user object', { email: firebaseUser.email });
               setUser(Object.assign(firebaseUser, { authMethod: 'firebase' as const }));
 
-              console.log('🔐 [AUTH] Setting isAuthenticated to TRUE...');
-              setIsAuthenticated(true);
-              console.log('🔐 [AUTH] isAuthenticated is now:', true);
-
+              // Store in AsyncStorage FIRST
               await AsyncStorage.setItem('isAuthenticated', 'true');
               await AsyncStorage.setItem('userEmail', firebaseUser.email ?? '');
+              logAuth('✅ AsyncStorage updated with authentication state');
 
+              // CRITICAL: Set isAuthenticated last to trigger navigation
+              // Use setTimeout to ensure state update happens in next tick
+              // This prevents race conditions in production builds
+              logStateChange('⚠️ CRITICAL: Setting isAuthenticated = TRUE');
+              console.log('🔐 [AUTH] Setting isAuthenticated to TRUE...');
+
+              // Set state immediately
+              setIsAuthenticated(true);
+
+              // Also force a re-render after a small delay to ensure navigation updates
+              setTimeout(() => {
+                logStateChange('🔄 Force re-render: Confirming isAuthenticated = TRUE');
+                setIsAuthenticated(true);
+                logAuth('✅ Authentication state confirmed - navigation to MainScreen should be complete');
+              }, 100);
+
+              logStateChange('✅ isAuthenticated is now TRUE - RootNavigator should re-render!');
+              console.log('🔐 [AUTH] isAuthenticated is now:', true);
+
+              logAuth('✅ Authentication state fully updated - navigation to MainScreen should occur NOW');
               console.log('✅ [AUTH] Authentication state updated - user should navigate to MainScreen');
             } else {
+              logError('Backend response status is false', { context: 'AUTH' });
               console.log('❌ [AUTH-STATE-CHANGED] Backend response status is false');
+              logStateChange('Clearing authentication state');
               setUser(null);
               setIsAuthenticated(false);
               await AsyncStorage.removeItem('isAuthenticated');
               await AsyncStorage.removeItem('userEmail');
             }
           } catch (error) {
+            logError('Authentication error in onAuthStateChanged', {
+              context: 'AUTH',
+              data: error
+            });
             console.error('❌ [AUTH-STATE-CHANGED] Authentication error:', error);
+            logStateChange('Clearing authentication state due to error');
             setUser(null);
             setIsAuthenticated(false);
             await AsyncStorage.removeItem('isAuthenticated');
             await AsyncStorage.removeItem('userEmail');
           }
         } else {
+          logAuth('No Firebase user detected, clearing auth state');
           console.log('🔥 [AUTH-STATE-CHANGED] No Firebase user, clearing auth state');
+          logStateChange('Clearing authentication state (no user)');
           setUser(null);
           setIsAuthenticated(false);
           await AsyncStorage.removeItem('isAuthenticated');
           await AsyncStorage.removeItem('userEmail');
         }
 
+        logStateChange('Setting isLoading = false');
         console.log('🔥 [AUTH-STATE-CHANGED] Setting isLoading to false');
         setIsLoading(false);
+        logAuth('🔥 Auth state change processing complete', {
+          isAuthenticated,
+          hasUser: !!user
+        });
       });
 
       return unsubscribe;

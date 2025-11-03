@@ -19,6 +19,8 @@ export interface Item {
   stok: number;
   hargajual: number;
   hargajual2: number;
+  hpp: number;
+  dpp: number;
   jumlah_online: number;
   sync_stock: boolean;
 }
@@ -116,6 +118,8 @@ export default function BarangListScreen(): JSX.Element {
           stok: Number(it.stok) || 0,
           hargajual: Number(it.hargajual) || 0,
           hargajual2: Number(it.hargajual2) || 0,
+          hpp: Number(it.hpp) || 0,
+          dpp: Number(it.dpp) || 0,
           jumlah_online: Number(it.jumlah_online) || 0,
           sync_stock: Boolean(it.sync_stock),
         }));
@@ -150,6 +154,7 @@ export default function BarangListScreen(): JSX.Element {
         <Text style={styles.subtitle}>{item.sku} • {item.merk}</Text>
         <View style={styles.row}>
           <Text style={styles.badge}>Stok: {item.stok}</Text>
+          {item.hpp > 0 && <Text style={styles.badgeHpp}>HPP: {item.hpp.toLocaleString('id-ID')}</Text>}
           <Text style={styles.badge}>HJ1: {item.hargajual.toLocaleString('id-ID')}</Text>
           <Text style={styles.badge}>HJ2: {item.hargajual2.toLocaleString('id-ID')}</Text>
         </View>
@@ -215,8 +220,9 @@ const styles = StyleSheet.create({
   card: { flexDirection: 'row', backgroundColor: 'white', marginHorizontal: 12, marginVertical: 6, padding: 12, borderRadius: 10, elevation: 2 },
   title: { fontSize: 16, fontWeight: '600', color: '#111827' },
   subtitle: { fontSize: 12, color: '#6B7280', marginTop: 2 },
-  row: { flexDirection: 'row', gap: 8 as any, marginTop: 6 },
+  row: { flexDirection: 'row', gap: 8 as any, marginTop: 6, flexWrap: 'wrap' },
   badge: { backgroundColor: '#eef2ff', color: '#3730a3', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, fontSize: 12 },
+  badgeHpp: { backgroundColor: '#fef3c7', color: '#92400e', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, fontSize: 12, fontWeight: '600' },
   kebab: { paddingHorizontal: 8, justifyContent: 'center' },
   loadMore: { alignSelf: 'center', paddingVertical: 8, paddingHorizontal: 12 },
   fab: { position: 'absolute', bottom: 20, right: 20, width: 56, height: 56, borderRadius: 28, backgroundColor: '#f59e0b', alignItems: 'center', justifyContent: 'center', elevation: 4 },

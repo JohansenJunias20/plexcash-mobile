@@ -2,11 +2,10 @@
   "expo": {
     "name": "PlexSeller",
     "slug": "plexcash-mobile",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
     "scheme": "plexcash",
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -16,16 +15,55 @@
     "ios": {
       "supportsTablet": true,
       "googleServicesFile": "./GoogleService-Info.plist",
-      "bundleIdentifier": "com.plexcash.mobile"
+      "bundleIdentifier": "com.plexcash.mobile",
+      "infoPlist": {
+        "NSCameraUsageDescription": "This app uses the camera to scan product barcodes for quick checkout.",
+        "NSBluetoothAlwaysUsageDescription": "This app uses Bluetooth to connect to thermal printers for printing receipts."
+      }
     },
     "android": {
+      "versionCode": 6,
       "adaptiveIcon": {
         "foregroundImage": "./assets/logo.png",
         "backgroundColor": "#f59e0b"
       },
-      "edgeToEdgeEnabled": true,
-      "package": "com.plexcash.mobile"
+      "package": "com.plexcash.mobile",
+      "permissions": [
+        "CAMERA",
+        "BLUETOOTH",
+        "BLUETOOTH_ADMIN",
+        "BLUETOOTH_CONNECT",
+        "BLUETOOTH_SCAN",
+        "ACCESS_FINE_LOCATION"
+      ]
     },
+    "plugins": [
+      [
+        "react-native-vision-camera",
+        {
+          "cameraPermissionText": "This app uses the camera to scan product barcodes for quick checkout."
+        }
+      ],
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": true,
+          "modes": ["peripheral", "central"],
+          "bluetoothAlwaysPermission": "This app uses Bluetooth to connect to thermal printers for printing receipts."
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35,
+            "buildToolsVersion": "35.0.0",
+            "kotlinVersion": "2.0.21"
+          }
+        }
+      ]
+    ],
     "web": {
       "favicon": "./assets/favicon.png"
     },
