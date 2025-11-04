@@ -13,8 +13,11 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+// import * as Application from 'expo-application';
 import ApiService from '../services/api';
 import { API_BASE_URL } from '../services/api';
+// import { useAppUpdate } from '../hooks/useAppUpdate';
+// import UpdateModal from '../components/UpdateModal';
 
 interface Props {
   navigation: any;
@@ -26,6 +29,18 @@ const Settingscreen = ({ navigation }: Props): JSX.Element => {
   const [activeTab, setActiveTab] = useState<TabType>('GENERAL');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  // Use app update hook
+  // const {
+  //   showUpdateModal,
+  //   versionInfo,
+  //   isUpdating,
+  //   isChecking,
+  //   handleUpdate,
+  //   handleSkip,
+  //   handleLater,
+  //   checkNow,
+  // } = useAppUpdate();
 
   // General Settings
   const [pkp, setPkp] = useState(false);
@@ -369,6 +384,38 @@ const Settingscreen = ({ navigation }: Props): JSX.Element => {
 
   const renderGeneralTab = () => (
     <ScrollView style={styles.tabContent} showsVerticalScrollIndicator={false}>
+      {/* App Version & Update - Temporarily disabled */}
+      {/* <View style={styles.card}>
+        <Text style={styles.cardTitle}>App Version</Text>
+        <View style={styles.versionContainer}>
+          <View style={styles.versionRow}>
+            <Text style={styles.versionLabel}>Current Version:</Text>
+            <Text style={styles.versionValue}>{Application.nativeApplicationVersion || '1.0.0'}</Text>
+          </View>
+          <View style={styles.versionRow}>
+            <Text style={styles.versionLabel}>Build Number:</Text>
+            <Text style={styles.versionValue}>{Application.nativeBuildVersion || '1'}</Text>
+          </View>
+        </View>
+        <TouchableOpacity 
+          style={[styles.checkUpdateButton, isChecking && styles.checkUpdateButtonDisabled]} 
+          onPress={checkNow}
+          disabled={isChecking}
+        >
+          {isChecking ? (
+            <>
+              <ActivityIndicator size="small" color="#fff" />
+              <Text style={styles.checkUpdateButtonText}>Checking...</Text>
+            </>
+          ) : (
+            <>
+              <Ionicons name="cloud-download-outline" size={20} color="#fff" />
+              <Text style={styles.checkUpdateButtonText}>Check for Updates</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </View> */}
+
       {/* PKP Setting */}
       <View style={styles.card}>
         <Text style={styles.cardTitle}>PKP (Pengusaha Kena Pajak)</Text>
@@ -440,36 +487,42 @@ const Settingscreen = ({ navigation }: Props): JSX.Element => {
           <TextInput
             style={styles.input}
             placeholder="Nama Toko"
+            placeholderTextColor="#999"
             value={namaToko}
             onChangeText={setNamaToko}
           />
           <TextInput
             style={styles.input}
             placeholder="Moto Toko"
+            placeholderTextColor="#999"
             value={motoToko}
             onChangeText={setMotoToko}
           />
           <TextInput
             style={styles.input}
             placeholder="Nama Pemilik"
+            placeholderTextColor="#999"
             value={namaPemilik}
             onChangeText={setNamaPemilik}
           />
           <TextInput
             style={styles.input}
             placeholder="Alamat Toko"
+            placeholderTextColor="#999"
             value={alamatToko}
             onChangeText={setAlamatToko}
           />
           <TextInput
             style={styles.input}
             placeholder="No Telp"
+            placeholderTextColor="#999"
             value={noTelpToko}
             onChangeText={setNoTelpToko}
           />
           <TextInput
             style={[styles.input, styles.textArea]}
             placeholder="Footer Struk"
+            placeholderTextColor="#999"
             value={footerToko}
             onChangeText={setFooterToko}
             multiline
@@ -478,18 +531,21 @@ const Settingscreen = ({ navigation }: Props): JSX.Element => {
           <TextInput
             style={styles.input}
             placeholder="No Rekening"
+            placeholderTextColor="#999"
             value={noRek}
             onChangeText={setNoRek}
           />
           <TextInput
             style={styles.input}
             placeholder="Pemilik Rekening"
+            placeholderTextColor="#999"
             value={pemilikRek}
             onChangeText={setPemilikRek}
           />
           <TextInput
             style={styles.input}
             placeholder="Nama Bank"
+            placeholderTextColor="#999"
             value={namaBank}
             onChangeText={setNamaBank}
           />
@@ -691,6 +747,7 @@ const Settingscreen = ({ navigation }: Props): JSX.Element => {
           <TextInput
             style={[styles.input, styles.textArea]}
             placeholder="Enter description template..."
+            placeholderTextColor="#999"
             value={descriptionTemplate}
             onChangeText={setDescriptionTemplate}
             multiline
@@ -717,6 +774,7 @@ const Settingscreen = ({ navigation }: Props): JSX.Element => {
             <TextInput
               style={[styles.input, styles.flexInput]}
               placeholder="Enter SKU..."
+              placeholderTextColor="#999"
               value={inputSku}
               onChangeText={setInputSku}
             />
@@ -803,6 +861,7 @@ const Settingscreen = ({ navigation }: Props): JSX.Element => {
                       <TextInput
                         style={styles.feeInput}
                         placeholder="0"
+                        placeholderTextColor="#999"
                         value={strategy.percentage_fee.toString()}
                         onChangeText={(text) => {
                           const newStrategies = [...marketplaceFeeStrategies];
@@ -817,6 +876,7 @@ const Settingscreen = ({ navigation }: Props): JSX.Element => {
                       <TextInput
                         style={styles.feeInput}
                         placeholder="0"
+                        placeholderTextColor="#999"
                         value={strategy.fixed_fee.toString()}
                         onChangeText={(text) => {
                           const newStrategies = [...marketplaceFeeStrategies];
@@ -907,6 +967,16 @@ const Settingscreen = ({ navigation }: Props): JSX.Element => {
         {activeTab === 'MARKETPLACE' && renderMarketplaceTab()}
       </View>
 
+      {/* Update Modal */}
+      {/* <UpdateModal
+        visible={showUpdateModal}
+        versionInfo={versionInfo}
+        onUpdate={handleUpdate}
+        onSkip={handleSkip}
+        onLater={handleLater}
+        isUpdating={isUpdating}
+      /> */}
+
       {/* PKP Warning Modal */}
       <Modal visible={showPkpWarning} transparent animationType="fade">
         <View style={styles.modalOverlay}>
@@ -990,6 +1060,7 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 12,
     fontSize: 14,
+    color: '#333',
   },
   textArea: { height: 80, textAlignVertical: 'top' },
   radioGroup: { marginTop: 8 },
@@ -1044,7 +1115,7 @@ const styles = StyleSheet.create({
   feeInputRow: { flexDirection: 'row', gap: 12 },
   feeInputContainer: { flex: 1 },
   feeLabel: { fontSize: 12, color: '#666', marginBottom: 4 },
-  feeInput: { backgroundColor: '#f5f5f5', borderRadius: 8, padding: 10, fontSize: 14 },
+  feeInput: { backgroundColor: '#f5f5f5', borderRadius: 8, padding: 10, fontSize: 14, color: '#333' },
   categoryList: { maxHeight: 300 },
   categoryItem: {
     flexDirection: 'row',
@@ -1077,6 +1148,46 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   modalButtonText: { color: 'white', fontWeight: '600', fontSize: 14 },
+  versionContainer: {
+    backgroundColor: '#f9fafb',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  versionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  versionLabel: {
+    fontSize: 13,
+    color: '#6b7280',
+    fontWeight: '500',
+  },
+  versionValue: {
+    fontSize: 13,
+    color: '#1f2937',
+    fontWeight: '600',
+  },
+  checkUpdateButton: {
+    backgroundColor: '#10b981',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    gap: 8,
+  },
+  checkUpdateButtonDisabled: {
+    backgroundColor: '#9ca3af',
+  },
+  checkUpdateButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
 });
 
 export default Settingscreen;

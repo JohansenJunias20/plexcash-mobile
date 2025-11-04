@@ -22,7 +22,7 @@
       }
     },
     "android": {
-      "versionCode": 6,
+      "versionCode": 7,
       "adaptiveIcon": {
         "foregroundImage": "./assets/logo.png",
         "backgroundColor": "#f59e0b"
@@ -48,7 +48,10 @@
         "react-native-ble-plx",
         {
           "isBackgroundEnabled": true,
-          "modes": ["peripheral", "central"],
+          "modes": [
+            "peripheral",
+            "central"
+          ],
           "bluetoothAlwaysPermission": "This app uses Bluetooth to connect to thermal printers for printing receipts."
         }
       ],
@@ -62,7 +65,9 @@
             "kotlinVersion": "2.0.21"
           }
         }
-      ]
+      ],
+      "expo-secure-store",
+      "expo-web-browser"
     ],
     "web": {
       "favicon": "./assets/favicon.png"

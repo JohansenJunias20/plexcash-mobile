@@ -147,6 +147,12 @@ const MainScreen = (): JSX.Element => {
                 <Text style={styles.actionSubtitle}>Paket Produk</Text>
               </TouchableOpacity>
 
+              <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('StokOpname')}>
+                <Ionicons name="clipboard-outline" size={32} color="white" />
+                <Text style={styles.actionTitle}>Stok Opname</Text>
+                <Text style={styles.actionSubtitle}>Stock Taking</Text>
+              </TouchableOpacity>
+
               <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('Settingscreen')}>
                 <Ionicons name="cog-outline" size={32} color="white" />
                 <Text style={styles.actionTitle}>Setting</Text>

@@ -597,6 +597,43 @@ class ApiService {
       return { status: false, reason: 'Failed to set database' };
     }
   }
+
+  /**
+   * Generic GET request
+   */
+  static async get(endpoint: string): Promise<any> {
+    return this.authenticatedRequest(endpoint, { method: 'GET' });
+  }
+
+  /**
+   * Generic POST request
+   */
+  static async post(endpoint: string, body: any): Promise<any> {
+    return this.authenticatedRequest(endpoint, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  /**
+   * Generic PATCH request
+   */
+  static async patch(endpoint: string, body: any): Promise<any> {
+    return this.authenticatedRequest(endpoint, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+  }
+
+  /**
+   * Generic DELETE request
+   */
+  static async delete(endpoint: string, body: any): Promise<any> {
+    return this.authenticatedRequest(endpoint, {
+      method: 'DELETE',
+      body: JSON.stringify(body),
+    });
+  }
 }
 
 export default ApiService;

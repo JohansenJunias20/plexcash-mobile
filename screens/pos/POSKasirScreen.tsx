@@ -36,6 +36,7 @@ interface Product {
   kategori?: string;
   harga_grosir?: number;
   qty_grosir?: number;
+  is_bundling?: boolean; // Flag to identify bundling items
 }
 
 interface CartItem extends Product {
@@ -43,6 +44,9 @@ interface CartItem extends Product {
   subtotal: number;
   is_wholesale: boolean;
   is_manual?: boolean; // Flag to identify manual items
+  is_bundling?: boolean; // Flag to identify bundling items
+  id_barang?: number; // For regular products
+  id_bundling?: number; // For bundling products
 }
 
 interface Customer {
@@ -313,10 +317,9 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
         return;
       }
 
-      // Strategy: Make 2 separate searches (SKU and nama) and merge results
-      // This is because /get/masterbarang/search uses AND condition, not OR
-
-      // Search 1: By SKU
+      // Strategy: Search both masterbarang and bundling, then merge results
+      
+      // PART 1: Search masterbarang (existing logic)
       const qsSku = new URLSearchParams();
       qsSku.set('start', '0');
       qsSku.set('end', '20');
@@ -325,7 +328,6 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
       qsSku.set('merk', '');
       qsSku.set('kategori', '');
 
-      // Search 2: By nama
       const qsNama = new URLSearchParams();
       qsNama.set('start', '0');
       qsNama.set('end', '20');
@@ -334,9 +336,9 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
       qsNama.set('merk', '');
       qsNama.set('kategori', '');
 
-      console.log('🔍 [POS] Searching products by SKU and nama...');
+      console.log('🔍 [POS] Searching products and bundling...');
 
-      // Execute both searches in parallel
+      // Execute masterbarang searches in parallel
       const [responseSku, responseNama] = await Promise.all([
         fetch(`${API_BASE_URL}/get/masterbarang/search?${qsSku.toString()}`, {
           headers: { Authorization: `Bearer ${token}` }
@@ -349,14 +351,14 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
       const dataSku = await responseSku.json();
       const dataNama = await responseNama.json();
 
-      // Merge results and remove duplicates by ID
-      const allProducts: Product[] = [];
+      // Merge masterbarang results and remove duplicates by ID
+      const barangProducts: Product[] = [];
       const seenIds = new Set<number>();
 
       if (dataSku.status && dataSku.data) {
         dataSku.data.forEach((product: Product) => {
           if (!seenIds.has(product.id)) {
-            allProducts.push(product);
+            barangProducts.push({ ...product, is_bundling: false });
             seenIds.add(product.id);
           }
         });
@@ -365,13 +367,48 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
       if (dataNama.status && dataNama.data) {
         dataNama.data.forEach((product: Product) => {
           if (!seenIds.has(product.id)) {
-            allProducts.push(product);
+            barangProducts.push({ ...product, is_bundling: false });
             seenIds.add(product.id);
           }
         });
       }
 
-      console.log(`🔍 [POS] Found ${allProducts.length} products (${dataSku.data?.length || 0} by SKU, ${dataNama.data?.length || 0} by nama)`);
+      // PART 2: Search bundling
+      const bundlingResponse = await fetch(`${API_BASE_URL}/get/bundling`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      const bundlingData = await bundlingResponse.json();
+      const bundlingProducts: Product[] = [];
+
+      if (bundlingData.status && bundlingData.data) {
+        // Filter bundling by query (search in nama or sku)
+        const filteredBundling = bundlingData.data.filter((bundling: any) => {
+          const searchLower = query.toLowerCase();
+          const namaMatch = bundling.nama?.toLowerCase().includes(searchLower);
+          const skuMatch = bundling.sku?.toLowerCase().includes(searchLower);
+          return namaMatch || skuMatch;
+        });
+
+        // Map bundling to Product interface
+        filteredBundling.forEach((bundling: any) => {
+          bundlingProducts.push({
+            id: bundling.id,
+            nama: bundling.nama,
+            sku: bundling.sku,
+            hargajual: bundling.harga || bundling.hargajual || 0,
+            hargabeli: bundling.hpp || 0,
+            stok: bundling.stok || 0,
+            satuan: 'set', // Bundling typically sold as set
+            is_bundling: true,
+          });
+        });
+      }
+
+      // Merge both results
+      const allProducts = [...barangProducts, ...bundlingProducts];
+
+      console.log(`🔍 [POS] Found ${barangProducts.length} products and ${bundlingProducts.length} bundling items`);
 
       setProducts(allProducts);
       setShowProductList(allProducts.length > 0);
@@ -405,8 +442,8 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
 
       const product = data.data[0];
 
-      // Add product to cart
-      addToCart(product);
+      // Add product to cart (mark as regular product, not bundling)
+      addToCart({ ...product, is_bundling: false });
 
       // Show success feedback
       Alert.alert('Success', `${product.nama} ditambahkan ke keranjang`);
@@ -431,15 +468,27 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
   };
 
   const addToCart = (product: Product) => {
-    const existingIndex = cart.findIndex(item => item.id === product.id);
+    // Check if it's a bundling or regular product
+    const isBundling = product.is_bundling === true;
+    
+    // Find existing item in cart
+    const existingIndex = cart.findIndex(item => {
+      if (isBundling) {
+        // For bundling: match by id_bundling
+        return item.id_bundling === product.id && item.is_bundling === true;
+      } else {
+        // For regular product: match by id_barang
+        return item.id_barang === product.id && !item.is_bundling;
+      }
+    });
 
     if (existingIndex >= 0) {
       // Update quantity
       const newCart = [...cart];
       const newQty = newCart[existingIndex].qty + 1;
 
-      // Check wholesale pricing
-      const isWholesale = product.harga_grosir && product.qty_grosir && newQty >= product.qty_grosir;
+      // Check wholesale pricing (only for regular products, not bundling)
+      const isWholesale = !isBundling && product.harga_grosir && product.qty_grosir && newQty >= product.qty_grosir;
       const price = isWholesale ? (product.harga_grosir || 0) : (product.hargajual || 0);
 
       newCart[existingIndex].qty = newQty;
@@ -449,15 +498,23 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
       setCart(newCart);
     } else {
       // Add new item
-      const isWholesale = product.harga_grosir && product.qty_grosir && 1 >= product.qty_grosir;
+      const isWholesale = !isBundling && product.harga_grosir && product.qty_grosir && 1 >= product.qty_grosir;
       const price = isWholesale ? (product.harga_grosir || 0) : (product.hargajual || 0);
 
-      setCart([...cart, {
+      const newItem: CartItem = {
         ...product,
         qty: 1,
         subtotal: price,
         is_wholesale: !!isWholesale,
-      }]);
+        is_bundling: isBundling,
+        // Set appropriate ID field
+        ...(isBundling 
+          ? { id_bundling: product.id, id_barang: undefined }
+          : { id_barang: product.id, id_bundling: undefined }
+        ),
+      };
+
+      setCart([...cart, newItem]);
     }
 
     // Clear search
@@ -607,8 +664,8 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
       const tanggal = new Date().toISOString();
       const detailpenjualan = cart.map(item => {
         const itemData = {
-          id_barang: item.is_manual ? undefined : item.id, // undefined for manual items, id for regular items
-          id_bundling: undefined,
+          id_barang: item.is_manual || item.is_bundling ? undefined : item.id_barang, // undefined for manual/bundling items
+          id_bundling: item.is_bundling ? item.id_bundling : undefined, // set for bundling items
           qty: item.qty.toString(),
           harga_beli: (item.hargabeli || 0).toString(),
           harga_jual: item.is_wholesale && item.harga_grosir ? item.harga_grosir.toString() : item.hargajual.toString(),
@@ -627,8 +684,10 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
         console.log('Item mapping:', {
           nama: item.nama,
           is_manual_source: item.is_manual,
+          is_bundling_source: item.is_bundling,
           is_manual_result: itemData.is_manual,
-          id_barang: itemData.id_barang
+          id_barang: itemData.id_barang,
+          id_bundling: itemData.id_bundling
         });
 
         return itemData;
@@ -637,7 +696,8 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
       console.log('=== SUBMITTING SALE ===');
       console.log('Total items:', detailpenjualan.length);
       console.log('Manual items:', detailpenjualan.filter(i => i.is_manual).length);
-      console.log('Regular items:', detailpenjualan.filter(i => !i.is_manual).length);
+      console.log('Bundling items:', detailpenjualan.filter(i => i.id_bundling).length);
+      console.log('Regular items:', detailpenjualan.filter(i => !i.is_manual && !i.id_bundling).length);
       console.log('Detail penjualan:', JSON.stringify(detailpenjualan, null, 2));
 
       const response = await fetch(`${API_BASE_URL}/penjualan`, {
@@ -937,14 +997,21 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
           <View style={styles.productListContainer}>
             <FlatList
               data={products}
-              keyExtractor={(item) => item.id.toString()}
+              keyExtractor={(item) => `${item.is_bundling ? 'b' : 'p'}-${item.id}`}
               renderItem={({ item }) => (
                 <TouchableOpacity
                   style={styles.productItem}
                   onPress={() => addToCart(item)}
                 >
                   <View style={styles.productInfo}>
-                    <Text style={styles.productName}>{item.nama}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Text style={styles.productName}>{item.nama}</Text>
+                      {item.is_bundling && (
+                        <View style={styles.bundlingBadge}>
+                          <Text style={styles.bundlingBadgeText}>Bundling</Text>
+                        </View>
+                      )}
+                    </View>
                     <Text style={styles.productSku}>SKU: {item.sku}</Text>
                     <Text style={styles.productStock}>Stock: {item.stok} {item.satuan}</Text>
                   </View>
@@ -971,7 +1038,7 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
 
           <FlatList
             data={cart}
-            keyExtractor={(item, index) => `${item.id}-${index}`}
+            keyExtractor={(item, index) => `${item.is_bundling ? 'b' : item.is_manual ? 'm' : 'p'}-${item.id || index}`}
             renderItem={({ item, index }) => (
               <View style={styles.cartItem}>
                 <View style={styles.cartItemInfo}>
@@ -982,39 +1049,48 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
                         <Text style={styles.manualBadgeText}>Manual</Text>
                       </View>
                     )}
+                    {item.is_bundling && (
+                      <View style={styles.bundlingBadge}>
+                        <Text style={styles.bundlingBadgeText}>Bundling</Text>
+                      </View>
+                    )}
                   </View>
-                  <Text style={styles.cartItemSku}>{item.sku}</Text>
+                  <Text style={styles.cartItemSku}>
+                    SKU: {item.sku} {!item.is_manual && `• Stock: ${item.stok} ${item.satuan}`}
+                  </Text>
                   {item.is_wholesale && (
                     <Text style={styles.wholesaleTag}>Wholesale Price</Text>
                   )}
-                  {/* Editable Price */}
-                  <View style={styles.priceEditContainer}>
-                    <Text style={styles.priceEditLabel}>Price: Rp </Text>
-                    <TextInput
-                      style={styles.priceEditInput}
-                      keyboardType="numeric"
-                      value={(item.hargajual || 0).toString()}
-                      onChangeText={(val) => updateCartItemPrice(index, val)}
-                    />
-                    <Text style={styles.priceEditMultiplier}> × {item.qty}</Text>
+                  {/* Editable Price with Quantity */}
+                  <View style={styles.priceQtyContainer}>
+                    <View style={styles.priceEditContainer}>
+                      <Text style={styles.priceEditLabel}>Rp </Text>
+                      <TextInput
+                        style={styles.priceEditInput}
+                        keyboardType="numeric"
+                        value={(item.hargajual || 0).toString()}
+                        onChangeText={(val) => updateCartItemPrice(index, val)}
+                      />
+                    </View>
+                    <Text style={styles.priceQtyMultiplier}> × </Text>
+                    <View style={styles.qtyContainer}>
+                      <TouchableOpacity
+                        onPress={() => updateCartItemQty(index, item.qty - 1)}
+                        style={styles.qtyButton}
+                      >
+                        <Ionicons name="remove" size={16} color="white" />
+                      </TouchableOpacity>
+                      <Text style={styles.qtyText}>{item.qty}</Text>
+                      <TouchableOpacity
+                        onPress={() => updateCartItemQty(index, item.qty + 1)}
+                        style={styles.qtyButton}
+                      >
+                        <Ionicons name="add" size={16} color="white" />
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 </View>
                 <View style={styles.cartItemActions}>
-                  <View style={styles.qtyContainer}>
-                    <TouchableOpacity
-                      onPress={() => updateCartItemQty(index, item.qty - 1)}
-                      style={styles.qtyButton}
-                    >
-                      <Ionicons name="remove" size={16} color="white" />
-                    </TouchableOpacity>
-                    <Text style={styles.qtyText}>{item.qty}</Text>
-                    <TouchableOpacity
-                      onPress={() => updateCartItemQty(index, item.qty + 1)}
-                      style={styles.qtyButton}
-                    >
-                      <Ionicons name="add" size={16} color="white" />
-                    </TouchableOpacity>
-                  </View>
                   <Text style={styles.cartItemPrice}>
                     Rp {(item.subtotal || 0).toLocaleString('id-ID')}
                   </Text>
@@ -1715,6 +1791,17 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#92400E',
   },
+  bundlingBadge: {
+    backgroundColor: '#DBEAFE',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  bundlingBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#1E40AF',
+  },
   cartItemSku: {
     fontSize: 12,
     color: '#6B7280',
@@ -1728,11 +1815,11 @@ const styles = StyleSheet.create({
   },
   cartItemActions: {
     alignItems: 'flex-end',
+    justifyContent: 'space-between',
   },
   qtyContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
   },
   qtyButton: {
     backgroundColor: '#f59e0b',
@@ -1740,20 +1827,19 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   qtyText: {
-    marginHorizontal: 12,
-    fontSize: 16,
+    marginHorizontal: 8,
+    fontSize: 14,
     fontWeight: '600',
   },
   cartItemPrice: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 4,
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#f59e0b',
+    marginBottom: 8,
   },
   priceEditContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
   },
   priceEditLabel: {
     fontSize: 12,
@@ -1765,8 +1851,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 2,
     fontSize: 12,
-    minWidth: 60,
+    minWidth: 80,
     textAlign: 'right',
+  },
+  priceQtyContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  priceQtyMultiplier: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginHorizontal: 4,
+    fontWeight: '600',
   },
   priceEditMultiplier: {
     fontSize: 12,

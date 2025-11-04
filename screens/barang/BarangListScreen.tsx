@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, FlatList, StyleSheet, TextInput, TouchableOpacity, RefreshControl, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, FlatList, StyleSheet, TextInput, TouchableOpacity, RefreshControl, ActivityIndicator, Alert, Modal, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { AppStackParamList } from '../../navigation/RootNavigator';
@@ -38,6 +38,8 @@ export default function BarangListScreen(): JSX.Element {
   const [filters, setFilters] = useState<{ merk?: string; kategori?: string; uploadFilter?: 'all' | 'not_uploaded' | 'uploaded'; jumlah_online?: number | null }>({ uploadFilter: 'all', jumlah_online: null });
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
+  const [selectedItem, setSelectedItem] = useState<Item | null>(null);
+  const [showActionSheet, setShowActionSheet] = useState(false);
   const PAGE_SIZE = 30;
 
   const fetchItems = async (reset = false) => {
@@ -147,6 +149,33 @@ export default function BarangListScreen(): JSX.Element {
     fetchItems(true);
   };
 
+  const handleActionSheet = (item: Item) => {
+    setSelectedItem(item);
+    setShowActionSheet(true);
+  };
+
+  const handleKartuStok = () => {
+    if (selectedItem) {
+      setShowActionSheet(false);
+      navigation.navigate('Kartustok', { id: selectedItem.id });
+    }
+  };
+
+  const handleOnline = () => {
+    if (selectedItem) {
+      setShowActionSheet(false);
+      navigation.navigate('NewOnline', { id: selectedItem.id });
+    }
+  };
+
+  const handleSyncStock = async () => {
+    if (selectedItem) {
+      setShowActionSheet(false);
+      // TODO: Implement sync stock functionality
+      Alert.alert('Sync Stock', `Sync stock untuk ${selectedItem.nama}`);
+    }
+  };
+
   const renderItem = ({ item }: { item: Item }) => (
     <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('BarangEdit', { id: item.id })}>
       <View style={{ flex: 1 }}>
@@ -159,7 +188,7 @@ export default function BarangListScreen(): JSX.Element {
           <Text style={styles.badge}>HJ2: {item.hargajual2.toLocaleString('id-ID')}</Text>
         </View>
       </View>
-      <TouchableOpacity style={styles.kebab} onPress={() => {/* open action sheet */}}>
+      <TouchableOpacity style={styles.kebab} onPress={() => handleActionSheet(item)}>
         <Ionicons name="ellipsis-vertical" size={18} color="#6B7280" />
       </TouchableOpacity>
     </TouchableOpacity>
@@ -208,6 +237,42 @@ export default function BarangListScreen(): JSX.Element {
       <TouchableOpacity style={styles.fab} onPress={() => navigation.navigate('BarangEdit') /* open add new */}>
         <Ionicons name="add" size={28} color="#fff" />
       </TouchableOpacity>
+
+      {/* Action Sheet Modal */}
+      <Modal
+        visible={showActionSheet}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowActionSheet(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setShowActionSheet(false)}>
+          <View style={styles.actionSheet}>
+            <View style={styles.actionSheetHeader}>
+              <Text style={styles.actionSheetTitle}>{selectedItem?.nama}</Text>
+              <Text style={styles.actionSheetSubtitle}>SKU: {selectedItem?.sku}</Text>
+            </View>
+            
+            <TouchableOpacity style={styles.actionItem} onPress={handleKartuStok}>
+              <Ionicons name="receipt-outline" size={22} color="#2563eb" />
+              <Text style={styles.actionText}>Kartu Stok</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.actionItem} onPress={handleOnline}>
+              <Ionicons name="cloud-upload-outline" size={22} color="#059669" />
+              <Text style={styles.actionText}>Online</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.actionItem} onPress={handleSyncStock}>
+              <Ionicons name="sync-outline" size={22} color="#d97706" />
+              <Text style={styles.actionText}>Sync Stock</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={[styles.actionItem, styles.cancelItem]} onPress={() => setShowActionSheet(false)}>
+              <Text style={styles.cancelText}>Batal</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -226,5 +291,14 @@ const styles = StyleSheet.create({
   kebab: { paddingHorizontal: 8, justifyContent: 'center' },
   loadMore: { alignSelf: 'center', paddingVertical: 8, paddingHorizontal: 12 },
   fab: { position: 'absolute', bottom: 20, right: 20, width: 56, height: 56, borderRadius: 28, backgroundColor: '#f59e0b', alignItems: 'center', justifyContent: 'center', elevation: 4 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  actionSheet: { backgroundColor: 'white', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 20 },
+  actionSheetHeader: { padding: 16, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
+  actionSheetTitle: { fontSize: 16, fontWeight: '600', color: '#111827' },
+  actionSheetSubtitle: { fontSize: 12, color: '#6B7280', marginTop: 4 },
+  actionItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 20, gap: 12 as any },
+  actionText: { fontSize: 16, color: '#111827' },
+  cancelItem: { borderTopWidth: 1, borderTopColor: '#e5e7eb', marginTop: 8 },
+  cancelText: { fontSize: 16, color: '#dc2626', fontWeight: '600', textAlign: 'center', flex: 1 },
 });
 

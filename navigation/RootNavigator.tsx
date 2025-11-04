@@ -22,6 +22,7 @@ import UserListScreen from '../screens/user/UserListScreen';
 import UserEditScreen from '../screens/user/UserEditScreen';
 import BundlingListScreen from '../screens/bundling/BundlingListScreen';
 import BundlingEditScreen from '../screens/bundling/BundlingEditScreen';
+import StokOpnameScreen from '../screens/stokopname/StokOpnameScreen';
 import Settingscreen from '../screens/Settingscreen';
 import { View, ActivityIndicator } from 'react-native';
 import { logNavigation, logStateChange } from '../utils/logger';
@@ -47,6 +48,7 @@ export type AppStackParamList = {
   UserEdit: { email: string } | undefined;
   BundlingList: undefined;
   BundlingEdit: { id: number } | undefined;
+  StokOpname: undefined;
   Settingscreen: undefined;
 };
 
@@ -132,6 +134,7 @@ export default function RootNavigator() {
       <AppStack.Screen name="POSKasir" component={POSKasirScreen} options={{ headerShown: false }} />
       <AppStack.Screen name="BundlingList" component={BundlingListScreen} options={{ title: 'Bundling' }} />
       <AppStack.Screen name="BundlingEdit" component={BundlingEditScreen} options={{ title: 'Bundling' }} />
+      <AppStack.Screen name="StokOpname" component={StokOpnameScreen} options={{ headerShown: false }} />
       <AppStack.Screen name="Settingscreen" component={Settingscreen} options={{ headerShown: false }} />
     </AppStack.Navigator>
   );
