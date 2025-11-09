@@ -123,7 +123,7 @@ const Settings = ({ onClose }: Props): JSX.Element => {
                 <Ionicons name="information-circle" size={24} color="white" />
                 <View style={styles.settingText}>
                   <Text style={styles.settingTitle}>App Version</Text>
-                  <Text style={styles.settingSubtitle}>1.0.0</Text>
+                  <Text style={styles.settingSubtitle}>1.0.8</Text>
                 </View>
               </View>
             </TouchableOpacity>

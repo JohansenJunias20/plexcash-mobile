@@ -8,11 +8,13 @@ import {
   hasSkippedVersion,
   clearSkippedVersion,
   reloadApp,
+  wasJustUpdated,
   VersionInfo,
 } from '../services/versionCheck';
 
 export const useAppUpdate = () => {
   const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [showUpdateSuccessModal, setShowUpdateSuccessModal] = useState(false);
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
   const [isChecking, setIsChecking] = useState(false);
@@ -41,8 +43,8 @@ export const useAppUpdate = () => {
 
       if (storeVersionInfo && storeVersionInfo.updateAvailable) {
         // Check if user has skipped this version
-        const skipped = await hasSkippedVersion(storeVersionInfo.latestVersion);
-        
+        const skipped = await hasSkippedVersion(storeVersionInfo.latestVersionCode.toString());
+
         // Only show modal if:
         // 1. Force update is required, OR
         // 2. User hasn't skipped this version
@@ -66,6 +68,21 @@ export const useAppUpdate = () => {
   }, []);
 
   /**
+   * Check if app was just updated on mount
+   */
+  useEffect(() => {
+    const checkIfUpdated = async () => {
+      const justUpdated = await wasJustUpdated();
+      if (justUpdated) {
+        console.log('[AppUpdate] App was just updated, showing success modal');
+        setShowUpdateSuccessModal(true);
+      }
+    };
+
+    checkIfUpdated();
+  }, []);
+
+  /**
    * Initialize update check on app start
    */
   useEffect(() => {
@@ -84,13 +101,10 @@ export const useAppUpdate = () => {
     try {
       setIsUpdating(true);
 
-      // If there's an update URL, the modal will handle opening it
-      // Otherwise, perform OTA update
-      if (!versionInfo?.updateUrl) {
-        const success = await checkForOTAUpdates();
-        if (success) {
-          await reloadApp();
-        }
+      // Perform OTA update
+      const success = await checkForOTAUpdates();
+      if (success) {
+        await reloadApp();
       }
 
       // Clear skipped version when user updates
@@ -107,7 +121,7 @@ export const useAppUpdate = () => {
    */
   const handleSkip = useCallback(async () => {
     if (versionInfo) {
-      await skipVersion(versionInfo.latestVersion);
+      await skipVersion(versionInfo.latestVersionCode.toString());
       setShowUpdateModal(false);
     }
   }, [versionInfo]);
@@ -120,6 +134,13 @@ export const useAppUpdate = () => {
   }, []);
 
   /**
+   * Handle close update success modal
+   */
+  const handleCloseUpdateSuccess = useCallback(() => {
+    setShowUpdateSuccessModal(false);
+  }, []);
+
+  /**
    * Manual update check (for settings screen)
    */
   const checkNow = useCallback(async () => {
@@ -128,12 +149,14 @@ export const useAppUpdate = () => {
 
   return {
     showUpdateModal,
+    showUpdateSuccessModal,
     versionInfo,
     isUpdating,
     isChecking,
     handleUpdate,
     handleSkip,
     handleLater,
+    handleCloseUpdateSuccess,
     checkNow,
   };
 };

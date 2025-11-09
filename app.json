@@ -19,10 +19,13 @@
       "infoPlist": {
         "NSCameraUsageDescription": "This app uses the camera to scan product barcodes for quick checkout.",
         "NSBluetoothAlwaysUsageDescription": "This app uses Bluetooth to connect to thermal printers for printing receipts."
+      },
+      "runtimeVersion": {
+        "policy": "appVersion"
       }
     },
     "android": {
-      "versionCode": 7,
+      "versionCode": 8,
       "adaptiveIcon": {
         "foregroundImage": "./assets/logo.png",
         "backgroundColor": "#f59e0b"
@@ -34,8 +37,23 @@
         "BLUETOOTH_ADMIN",
         "BLUETOOTH_CONNECT",
         "BLUETOOTH_SCAN",
-        "ACCESS_FINE_LOCATION"
-      ]
+        "ACCESS_FINE_LOCATION",
+        "android.permission.CAMERA",
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_ADMIN",
+        "android.permission.BLUETOOTH_CONNECT",
+        "CAMERA",
+        "BLUETOOTH",
+        "BLUETOOTH_ADMIN",
+        "BLUETOOTH_CONNECT",
+        "BLUETOOTH_SCAN",
+        "ACCESS_FINE_LOCATION",
+        "android.permission.CAMERA",
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_ADMIN",
+        "android.permission.BLUETOOTH_CONNECT"
+      ],
+      "runtimeVersion": "1.0.0"
     },
     "plugins": [
       [
@@ -76,6 +94,9 @@
       "eas": {
         "projectId": "e83382ab-9765-42af-b2fa-3a2d9dbc3da2"
       }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/e83382ab-9765-42af-b2fa-3a2d9dbc3da2"
     }
   }
 }

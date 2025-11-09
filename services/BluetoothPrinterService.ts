@@ -414,6 +414,9 @@ class BluetoothPrinterService {
     const ESC = '\x1B';
     const GS = '\x1D';
 
+    // Determine max width based on paper size
+    const maxChars = paperWidth === '58mm' ? 32 : 48;
+
     // Language labels
     const labels = language === 'id' ? {
       date: 'Tanggal',
@@ -439,6 +442,22 @@ class BluetoothPrinterService {
       change: 'Change',
       thankYou: 'Thank you for your purchase!',
       comeAgain: 'Please come again'
+    };
+
+    // Helper function to format line with right alignment
+    const formatRightAlign = (left: string, right: string, maxWidth: number): string => {
+      const totalLen = left.length + right.length;
+      if (totalLen <= maxWidth) {
+        const spaces = maxWidth - totalLen;
+        return left + ' '.repeat(spaces) + right;
+      }
+      // If too long, truncate left side to ensure right side is fully visible
+      const maxLeftLen = maxWidth - right.length - 1;
+      if (maxLeftLen > 0) {
+        return left.substring(0, maxLeftLen) + ' ' + right;
+      }
+      // If still too long, just return the right side
+      return right;
     };
 
     let output = '';
@@ -469,7 +488,7 @@ class BluetoothPrinterService {
 
     // Separator
     output += ESC + 'a' + '\x00'; // Left align
-    output += '================================\n';
+    output += '='.repeat(maxChars) + '\n';
 
     // Date and receipt number
     output += `${labels.date}: ${data.date}\n`;
@@ -477,40 +496,46 @@ class BluetoothPrinterService {
     if (data.customerName) {
       output += `${labels.customer}: ${data.customerName}\n`;
     }
-    output += '================================\n';
+    output += '='.repeat(maxChars) + '\n';
 
-    // Items
+    // Items - ensure price is always on same line as qty, total on separate line if needed
     for (const item of data.items) {
       output += `${item.name}\n`;
-      output += `  ${item.qty} x ${this.formatCurrency(item.price)}`;
-      output += `${' '.repeat(Math.max(0, 20 - item.qty.toString().length - this.formatCurrency(item.price).length))}`;
-      output += `${this.formatCurrency(item.total)}\n`;
+      
+      const qtyPrice = `  ${item.qty} x ${this.formatCurrency(item.price)}`;
+      const itemTotal = this.formatCurrency(item.total);
+      
+      // Always put qty x price and total on same line with proper alignment
+      output += formatRightAlign(qtyPrice, itemTotal, maxChars) + '\n';
     }
 
-    output += '================================\n';
+    output += '='.repeat(maxChars) + '\n';
 
-    // Totals (right align)
-    output += `${labels.subtotal}:${' '.repeat(Math.max(0, 23 - labels.subtotal.length - this.formatCurrency(data.subtotal).length))}${this.formatCurrency(data.subtotal)}\n`;
+    // Totals (right align) - ensure values are always on same line as label
+    output += formatRightAlign(labels.subtotal + ':', this.formatCurrency(data.subtotal), maxChars) + '\n';
 
     if (data.discount && data.discount > 0) {
-      output += `${labels.discount}:${' '.repeat(Math.max(0, 23 - labels.discount.length - this.formatCurrency(data.discount).length))}${this.formatCurrency(data.discount)}\n`;
+      output += formatRightAlign(labels.discount + ':', this.formatCurrency(data.discount), maxChars) + '\n';
     }
 
     if (data.tax && data.tax > 0) {
-      output += `${labels.tax}:${' '.repeat(Math.max(0, 23 - labels.tax.length - this.formatCurrency(data.tax).length))}${this.formatCurrency(data.tax)}\n`;
+      output += formatRightAlign(labels.tax + ':', this.formatCurrency(data.tax), maxChars) + '\n';
     }
 
-    output += '================================\n';
-    output += GS + '!' + '\x11'; // Double size
-    output += `${labels.total}:${' '.repeat(Math.max(0, 20 - labels.total.length - this.formatCurrency(data.total).length))}${this.formatCurrency(data.total)}\n`;
-    output += GS + '!' + '\x00'; // Normal size
-    output += '================================\n';
+    output += '='.repeat(maxChars) + '\n';
+    
+    // Total - use normal size font to prevent overflow, but make it bold
+    output += ESC + 'E' + '\x01'; // Bold on
+    const totalLine = formatRightAlign(labels.total + ':', this.formatCurrency(data.total), maxChars);
+    output += totalLine + '\n';
+    output += ESC + 'E' + '\x00'; // Bold off
+    output += '='.repeat(maxChars) + '\n';
 
-    // Payment info
+    // Payment info - ensure values stay on same line
     if (data.payment) {
-      output += `${labels.payment}: ${this.formatCurrency(data.payment)}\n`;
+      output += formatRightAlign(labels.payment + ':', this.formatCurrency(data.payment), maxChars) + '\n';
       if (data.change && data.change > 0) {
-        output += `${labels.change}: ${this.formatCurrency(data.change)}\n`;
+        output += formatRightAlign(labels.change + ':', this.formatCurrency(data.change), maxChars) + '\n';
       }
     }
 

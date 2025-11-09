@@ -6,8 +6,9 @@ import { NavigationContainer } from '@react-navigation/native';
 import RootNavigator from './navigation/RootNavigator';
 import ApiService from './services/api';
 import LogViewer from './components/LogViewer';
-// import UpdateModal from './components/UpdateModal';
-// import { useAppUpdate } from './hooks/useAppUpdate';
+import UpdateModal from './components/UpdateModal';
+import UpdateSuccessModal from './components/UpdateSuccessModal';
+import { useAppUpdate } from './hooks/useAppUpdate';
 import * as AuthSession from "expo-auth-session";
 
 // Safely log redirect URI only after modules are ready
@@ -20,14 +21,16 @@ try {
 // Inner component that uses DeveloperModeContext
 const AppContent = (): JSX.Element => {
   const { isDeveloperMode } = useDeveloperMode();
-  // const {
-  //   showUpdateModal,
-  //   versionInfo,
-  //   isUpdating,
-  //   handleUpdate,
-  //   handleSkip,
-  //   handleLater,
-  // } = useAppUpdate();
+  const {
+    showUpdateModal,
+    showUpdateSuccessModal,
+    versionInfo,
+    isUpdating,
+    handleUpdate,
+    handleSkip,
+    handleLater,
+    handleCloseUpdateSuccess,
+  } = useAppUpdate();
 
   return (
     <View style={styles.container}>
@@ -36,15 +39,21 @@ const AppContent = (): JSX.Element => {
         <RootNavigator />
       </NavigationContainer>
 
-      {/* Update Modal */}
-      {/* <UpdateModal
+      {/* Update Modal - Always check on app start */}
+      <UpdateModal
         visible={showUpdateModal}
         versionInfo={versionInfo}
         onUpdate={handleUpdate}
         onSkip={handleSkip}
         onLater={handleLater}
         isUpdating={isUpdating}
-      /> */}
+      />
+
+      {/* Update Success Modal - Show after OTA update */}
+      <UpdateSuccessModal
+        visible={showUpdateSuccessModal}
+        onClose={handleCloseUpdateSuccess}
+      />
 
       {/* Developer Mode Log Viewer */}
       {isDeveloperMode && <LogViewer visible={true} />}

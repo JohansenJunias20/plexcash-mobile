@@ -31,13 +31,8 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
   if (!versionInfo) return null;
 
   const handleUpdate = () => {
-    if (versionInfo.updateUrl) {
-      // Open store link for full app update
-      Linking.openURL(versionInfo.updateUrl);
-    } else {
-      // Trigger OTA update
-      onUpdate();
-    }
+    // Trigger update action
+    onUpdate();
   };
 
   const isForceUpdate = versionInfo.forceUpdate;
@@ -68,10 +63,10 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
           {/* Version Info */}
           <View style={styles.versionContainer}>
             <Text style={styles.versionText}>
-              Versi Saat Ini: <Text style={styles.versionNumber}>{versionInfo.currentVersion}</Text>
+              Version Code Saat Ini: <Text style={styles.versionNumber}>{versionInfo.currentVersionCode}</Text>
             </Text>
             <Text style={styles.versionText}>
-              Versi Terbaru: <Text style={styles.versionNumber}>{versionInfo.latestVersion}</Text>
+              Version Code Terbaru: <Text style={styles.versionNumber}>{versionInfo.latestVersionCode}</Text>
             </Text>
           </View>
 
@@ -81,14 +76,6 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
               ? 'Aplikasi perlu diupdate ke versi terbaru untuk melanjutkan.'
               : 'Versi baru aplikasi tersedia dengan perbaikan dan fitur terbaru.'}
           </Text>
-
-          {/* Release Notes */}
-          {versionInfo.releaseNotes && (
-            <View style={styles.releaseNotesContainer}>
-              <Text style={styles.releaseNotesTitle}>Yang Baru:</Text>
-              <Text style={styles.releaseNotes}>{versionInfo.releaseNotes}</Text>
-            </View>
-          )}
 
           {/* Loading Indicator */}
           {isUpdating && (
@@ -107,7 +94,7 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
               disabled={isUpdating}
             >
               <Text style={styles.updateButtonText}>
-                {versionInfo.updateUrl ? 'Buka Store' : 'Update Sekarang'}
+                Update Sekarang
               </Text>
             </TouchableOpacity>
 
