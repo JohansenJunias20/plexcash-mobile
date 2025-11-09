@@ -47,8 +47,11 @@ function Print-Info {
 
 $PROJECT_DIR = $PSScriptRoot
 $ANDROID_DIR = Join-Path $PROJECT_DIR "android"
-$OUTPUT_DIR = Join-Path $ANDROID_DIR "app\build\outputs\bundle\release"
-$AAB_FILE = Join-Path $OUTPUT_DIR "app-release.aab"
+
+# Default flavor is production
+$FLAVOR = "production"
+$OUTPUT_DIR = Join-Path $ANDROID_DIR "app\build\outputs\bundle\${FLAVOR}Release"
+$AAB_FILE = Join-Path $OUTPUT_DIR "app-${FLAVOR}-release.aab"
 
 # ============================================
 # Check Prerequisites
@@ -90,6 +93,29 @@ if (-not (Test-Path $GRADLEW)) {
 Print-Success "Gradle wrapper found"
 
 # ============================================
+# Auto-Increment Version Code
+# ============================================
+
+Print-Header "Auto-Increment Version Code"
+
+$BUILD_GRADLE = Join-Path $ANDROID_DIR "app\build.gradle"
+
+# Extract current versionCode
+$CURRENT_VERSION_CODE = (Get-Content $BUILD_GRADLE | Select-String "versionCode" | Select-Object -First 1).ToString().Trim().Split()[-1]
+Print-Info "Current versionCode: $CURRENT_VERSION_CODE"
+
+# Increment versionCode
+$NEW_VERSION_CODE = [int]$CURRENT_VERSION_CODE + 1
+Print-Info "New versionCode: $NEW_VERSION_CODE"
+
+# Update versionCode in build.gradle
+$BUILD_GRADLE_CONTENT = Get-Content $BUILD_GRADLE -Raw
+$BUILD_GRADLE_CONTENT = $BUILD_GRADLE_CONTENT -replace "versionCode $CURRENT_VERSION_CODE", "versionCode $NEW_VERSION_CODE"
+Set-Content $BUILD_GRADLE $BUILD_GRADLE_CONTENT -NoNewline
+
+Print-Success "Version code incremented: $CURRENT_VERSION_CODE → $NEW_VERSION_CODE"
+
+# ============================================
 # Clean Previous Build
 # ============================================
 
@@ -119,12 +145,15 @@ Print-Success "Clean completed"
 
 Print-Header "Building Android App Bundle"
 
-Print-Info "Starting Gradle build..."
+Print-Info "Starting Gradle build for flavor: $FLAVOR"
 Print-Warning "This may take 3-5 minutes..."
 
-# Run Gradle build
+# Run Gradle build with flavor
+$GRADLE_TASK = "bundle$($FLAVOR.Substring(0,1).ToUpper())$($FLAVOR.Substring(1))Release"
+Print-Info "Running: .\gradlew.bat $GRADLE_TASK --no-daemon"
+
 try {
-    & .\gradlew.bat bundleRelease --no-daemon
+    & .\gradlew.bat $GRADLE_TASK --no-daemon
     if ($LASTEXITCODE -ne 0) {
         throw "Gradle build failed with exit code $LASTEXITCODE"
     }
@@ -167,12 +196,10 @@ Print-Info "Created: $FILE_TIME"
 
 Print-Header "Build Information"
 
-# Extract version from build.gradle
-$BUILD_GRADLE = Join-Path $ANDROID_DIR "app\build.gradle"
-$VERSION_CODE = (Get-Content $BUILD_GRADLE | Select-String "versionCode" | Select-Object -First 1).ToString().Trim().Split()[-1]
+# Version info (already updated above)
 $VERSION_NAME = (Get-Content $BUILD_GRADLE | Select-String "versionName" | Select-Object -First 1).ToString().Trim().Split('"')[1]
 
-Print-Info "Version Code: $VERSION_CODE"
+Print-Info "Version Code: $NEW_VERSION_CODE"
 Print-Info "Version Name: $VERSION_NAME"
 
 # ============================================
@@ -188,7 +215,7 @@ Print-Info "   $AAB_FILE"
 Write-Host ""
 Print-Info "📊 File Details:"
 Print-Info "   Size: $FILE_SIZE_MB MB"
-Print-Info "   Version: $VERSION_NAME (Code: $VERSION_CODE)"
+Print-Info "   Version: $VERSION_NAME (Code: $NEW_VERSION_CODE)"
 Print-Info "   Created: $FILE_TIME"
 Write-Host ""
 Print-Success "✅ Ready to upload to Google Play Store!"
@@ -210,7 +237,7 @@ if ($COPY_TO_DESKTOP -eq "y" -or $COPY_TO_DESKTOP -eq "Y") {
     $DESKTOP = [Environment]::GetFolderPath("Desktop")
     
     if (Test-Path $DESKTOP) {
-        $DEST_FILE = Join-Path $DESKTOP "plexcash-mobile-v$VERSION_NAME-$VERSION_CODE.aab"
+        $DEST_FILE = Join-Path $DESKTOP "plexcash-mobile-v$VERSION_NAME-$NEW_VERSION_CODE.aab"
         Copy-Item $AAB_FILE $DEST_FILE -Force
         Print-Success "AAB copied to: $DEST_FILE"
     } else {

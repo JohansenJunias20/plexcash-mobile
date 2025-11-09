@@ -53,8 +53,11 @@ print_info() {
 
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ANDROID_DIR="$PROJECT_DIR/android"
-OUTPUT_DIR="$ANDROID_DIR/app/build/outputs/bundle/release"
-AAB_FILE="$OUTPUT_DIR/app-release.aab"
+
+# Default flavor is production
+FLAVOR="production"
+OUTPUT_DIR="$ANDROID_DIR/app/build/outputs/bundle/${FLAVOR}Release"
+AAB_FILE="$OUTPUT_DIR/app-${FLAVOR}-release.aab"
 
 # ============================================
 # Check Prerequisites
@@ -107,6 +110,33 @@ print_success "Gradle wrapper found"
 chmod +x "$GRADLEW"
 
 # ============================================
+# Auto-Increment Version Code
+# ============================================
+
+print_header "Auto-Increment Version Code"
+
+BUILD_GRADLE="$ANDROID_DIR/app/build.gradle"
+
+# Extract current versionCode
+CURRENT_VERSION_CODE=$(grep "versionCode" "$BUILD_GRADLE" | head -1 | awk '{print $2}')
+print_info "Current versionCode: $CURRENT_VERSION_CODE"
+
+# Increment versionCode
+NEW_VERSION_CODE=$((CURRENT_VERSION_CODE + 1))
+print_info "New versionCode: $NEW_VERSION_CODE"
+
+# Update versionCode in build.gradle
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    # macOS
+    sed -i '' "s/versionCode $CURRENT_VERSION_CODE/versionCode $NEW_VERSION_CODE/" "$BUILD_GRADLE"
+else
+    # Linux/Git Bash
+    sed -i "s/versionCode $CURRENT_VERSION_CODE/versionCode $NEW_VERSION_CODE/" "$BUILD_GRADLE"
+fi
+
+print_success "Version code incremented: $CURRENT_VERSION_CODE → $NEW_VERSION_CODE"
+
+# ============================================
 # Clean Previous Build
 # ============================================
 
@@ -132,11 +162,14 @@ print_success "Clean completed"
 
 print_header "Building Android App Bundle"
 
-print_info "Starting Gradle build..."
+print_info "Starting Gradle build for flavor: $FLAVOR"
 print_warning "This may take 3-5 minutes..."
 
-# Run Gradle build
-if ./gradlew bundleRelease --no-daemon; then
+# Run Gradle build with flavor
+GRADLE_TASK="bundle${FLAVOR^}Release"
+print_info "Running: ./gradlew $GRADLE_TASK --no-daemon"
+
+if ./gradlew "$GRADLE_TASK" --no-daemon; then
     print_success "Gradle build completed successfully!"
 else
     print_error "Gradle build failed!"
@@ -185,12 +218,9 @@ print_info "Created: $FILE_TIME"
 
 print_header "Build Information"
 
-# Extract version from build.gradle
-VERSION_CODE=$(grep "versionCode" "$ANDROID_DIR/app/build.gradle" | head -1 | awk '{print $2}')
-VERSION_NAME=$(grep "versionName" "$ANDROID_DIR/app/build.gradle" | head -1 | awk '{print $2}' | tr -d '"')
-
-print_info "Version Code: $VERSION_CODE"
-print_info "Version Name: $VERSION_NAME"
+# Version info (already updated above)
+print_info "Version Code: $NEW_VERSION_CODE"
+print_info "Version Name: $(grep "versionName" "$ANDROID_DIR/app/build.gradle" | head -1 | awk '{print $2}' | tr -d '"')"
 
 # ============================================
 # Summary
@@ -205,7 +235,7 @@ print_info "   $AAB_FILE"
 echo ""
 print_info "📊 File Details:"
 print_info "   Size: ${FILE_SIZE_MB} MB"
-print_info "   Version: $VERSION_NAME (Code: $VERSION_CODE)"
+print_info "   Version: $(grep "versionName" "$ANDROID_DIR/app/build.gradle" | head -1 | awk '{print $2}' | tr -d '"') (Code: $NEW_VERSION_CODE)"
 print_info "   Created: $FILE_TIME"
 echo ""
 print_success "✅ Ready to upload to Google Play Store!"
@@ -232,7 +262,8 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     fi
     
     if [ -d "$DESKTOP" ]; then
-        DEST_FILE="$DESKTOP/plexcash-mobile-v${VERSION_NAME}-${VERSION_CODE}.aab"
+        VERSION_NAME=$(grep "versionName" "$ANDROID_DIR/app/build.gradle" | head -1 | awk '{print $2}' | tr -d '"')
+        DEST_FILE="$DESKTOP/plexcash-mobile-v${VERSION_NAME}-${NEW_VERSION_CODE}.aab"
         cp "$AAB_FILE" "$DEST_FILE"
         print_success "AAB copied to: $DEST_FILE"
     else
