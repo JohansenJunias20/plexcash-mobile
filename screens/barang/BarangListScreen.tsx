@@ -7,6 +7,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { API_BASE_URL } from '../../services/api';
 import { getTokenAuth } from '../../services/token';
 import { useAuth } from '../../context/AuthContext';
+import NewOnlineModal from '../../components/NewOnlineModal';
 
 // Types aligned with web Item interface (subset used for list)
 export interface Item {
@@ -40,6 +41,7 @@ export default function BarangListScreen(): JSX.Element {
   const [hasMore, setHasMore] = useState(true);
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [showActionSheet, setShowActionSheet] = useState(false);
+  const [showOnlineModal, setShowOnlineModal] = useState(false);
   const PAGE_SIZE = 30;
 
   const fetchItems = async (reset = false) => {
@@ -164,7 +166,7 @@ export default function BarangListScreen(): JSX.Element {
   const handleOnline = () => {
     if (selectedItem) {
       setShowActionSheet(false);
-      navigation.navigate('NewOnline', { id: selectedItem.id });
+      setShowOnlineModal(true);
     }
   };
 
@@ -273,6 +275,13 @@ export default function BarangListScreen(): JSX.Element {
           </View>
         </Pressable>
       </Modal>
+
+      {/* Online Product Management Modal */}
+      <NewOnlineModal
+        visible={showOnlineModal}
+        productId={selectedItem?.id || null}
+        onClose={() => setShowOnlineModal(false)}
+      />
     </View>
   );
 }

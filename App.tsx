@@ -1,6 +1,7 @@
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, View } from 'react-native';
 import { AuthProvider } from './context/AuthContext';
+import { AccessProvider } from './context/AccessContext';
 import { DeveloperModeProvider, useDeveloperMode } from './context/DeveloperModeContext';
 import { NavigationContainer } from '@react-navigation/native';
 import RootNavigator from './navigation/RootNavigator';
@@ -22,6 +23,10 @@ console.log('[App] Starting PlexSeller...', {
   channel: Updates.channel,
   runtimeVersion: Updates.runtimeVersion,
 });
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import DrawerNavigator from './navigation/DrawerNavigator';
+// import { createDrawerNavigator } from '@react-navigation/drawer';
+// import MainScreen from './components/MainScreen';
 
 // Safely log redirect URI only after modules are ready
 try {
@@ -29,6 +34,12 @@ try {
 } catch (error) {
   console.warn('AuthSession not ready yet:', error);
 }
+
+// const Drawer = createDrawerNavigator({
+//   screens: {
+//     MainHome: MainScreen,
+//   }
+// });
 
 // Inner component that uses DeveloperModeContext
 const AppContent = (): JSX.Element => {
@@ -48,7 +59,8 @@ const AppContent = (): JSX.Element => {
     <View style={styles.container}>
       <StatusBar style="light" />
       <NavigationContainer>
-        <RootNavigator />
+        {/* <RootNavigator /> */}
+        <DrawerNavigator />
       </NavigationContainer>
 
       {/* Update Modal - Always check on app start */}
@@ -75,11 +87,15 @@ const AppContent = (): JSX.Element => {
 
 export default function App(): JSX.Element {
   return (
-    <DeveloperModeProvider>
-      <AuthProvider>
-        <AppContent />
-      </AuthProvider>
-    </DeveloperModeProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <DeveloperModeProvider>
+        <AuthProvider>
+          <AccessProvider>
+            <AppContent />
+          </AccessProvider>
+        </AuthProvider>
+      </DeveloperModeProvider>
+    </GestureHandlerRootView>
   );
 }
 

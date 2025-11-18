@@ -1,0 +1,146 @@
+import { createDrawerNavigator } from '@react-navigation/drawer';
+import CustomDrawerContent from './CustomDrawerContent';
+import MainScreen from '../components/MainScreen';
+import BarangListScreen from '../screens/barang/BarangListScreen';
+import POSKasirScreen from '../screens/pos/POSKasirScreen';
+import OrdersListScreen from '../screens/orders/OrdersListScreen';
+import ScanOutScreen from '../screens/scanout/ScanOutScreen';
+import UserListScreen from '../screens/user/UserListScreen';
+import BundlingListScreen from '../screens/bundling/BundlingListScreen';
+import StokOpnameScreen from '../screens/stokopname/StokOpnameScreen';
+import Settingscreen from '../screens/Settingscreen';
+
+// MASTER Section Imports
+import SupplierListScreen from '../screens/supplier/SupplierListScreen';
+import CustomerListScreen from '../screens/customer/CustomerListScreen';
+import SatuanListScreen from '../screens/master/SatuanListScreen';
+import BaganAkunListScreen from '../screens/master/BaganAkunListScreen';
+import UploadScreen from '../screens/master/UploadScreen';
+import ImportBarangScreen from '../screens/master/ImportBarangScreen';
+import WarehouseListScreen from '../screens/master/WarehouseListScreen';
+
+// TRANSAKSI Section - Pembelian
+import PembelianTambahScreen from '../screens/transaksi/pembelian/PembelianTambahScreen';
+import PembelianSearchScreen from '../screens/transaksi/pembelian/PembelianSearchScreen';
+import PembelianRincianScreen from '../screens/transaksi/pembelian/PembelianRincianScreen';
+import PembelianPelunasanScreen from '../screens/transaksi/pembelian/PembelianPelunasanScreen';
+import PembelianReturScreen from '../screens/transaksi/pembelian/PembelianReturScreen';
+import PembelianDPBeliScreen from '../screens/transaksi/pembelian/PembelianDPBeliScreen';
+
+// TRANSAKSI Section - Penjualan
+import PenjualanTambahScreen from '../screens/transaksi/penjualan/PenjualanTambahScreen';
+import PenjualanSearchScreen from '../screens/transaksi/penjualan/PenjualanSearchScreen';
+import PenjualanPelunasanScreen from '../screens/transaksi/penjualan/PenjualanPelunasanScreen';
+import PenjualanReturScreen from '../screens/transaksi/penjualan/PenjualanReturScreen';
+
+// TRANSAKSI Section - Jurnal
+import JurnalTambahScreen from '../screens/transaksi/jurnal/JurnalTambahScreen';
+import JurnalSearchScreen from '../screens/transaksi/jurnal/JurnalSearchScreen';
+
+// TRANSAKSI Section - Others
+import MutasiAkunScreen from '../screens/transaksi/MutasiAkunScreen';
+import PesanBarangScreen from '../screens/transaksi/PesanBarangScreen';
+
+// ECOMMERCE Section
+import EcommerceChatScreen from '../screens/ecommerce/EcommerceChatScreen';
+import NotifikasiScreen from '../screens/ecommerce/NotifikasiScreen';
+import PenarikanScreen from '../screens/ecommerce/PenarikanScreen';
+import ReturOnlineScreen from '../screens/ecommerce/ReturOnlineScreen';
+import BookingOrdersScreen from '../screens/ecommerce/BookingOrdersScreen';
+import IntegrationScreen from '../screens/ecommerce/IntegrationScreen';
+import EcommerceToolsProductScreen from '../screens/ecommerce/tools/EcommerceToolsProductScreen';
+import NaikkanProdukScreen from '../screens/ecommerce/NaikkanProdukScreen';
+import ProsesOtomatisScreen from '../screens/ecommerce/ProsesOtomatisScreen';
+
+// LAPORAN Section
+import NeracaScreen from '../screens/laporan/NeracaScreen';
+import LabaRugiScreen from '../screens/laporan/LabaRugiScreen';
+import LaporanBarangScreen from '../screens/laporan/LaporanBarangScreen';
+import IklanScreen from '../screens/laporan/IklanScreen';
+
+const Drawer = createDrawerNavigator();
+
+export default function DrawerNavigator() {
+  return (
+    <Drawer.Navigator
+      drawerContent={(props) => <CustomDrawerContent {...props} />}
+      screenOptions={{
+        headerShown: false,
+        drawerStyle: {
+          width: 280,
+        },
+      }}
+    >
+      {/* Home */}
+      <Drawer.Screen name="Main" component={MainScreen} />
+
+      {/* POS Kasir */}
+      <Drawer.Screen name="POSKasir" component={POSKasirScreen} />
+
+      {/* MASTER Section */}
+      <Drawer.Screen name="BarangList" component={BarangListScreen} />
+      <Drawer.Screen name="SupplierList" component={SupplierListScreen} />
+      <Drawer.Screen name="CustomerList" component={CustomerListScreen} />
+      <Drawer.Screen name="SatuanList" component={SatuanListScreen} />
+      <Drawer.Screen name="BaganAkunList" component={BaganAkunListScreen} />
+      <Drawer.Screen name="UserList" component={UserListScreen} />
+      <Drawer.Screen name="UploadScreen" component={UploadScreen} />
+      <Drawer.Screen name="BundlingList" component={BundlingListScreen} />
+      <Drawer.Screen name="ImportBarang" component={ImportBarangScreen} />
+      <Drawer.Screen name="WarehouseList" component={WarehouseListScreen} />
+
+      {/* TRANSAKSI Section - Pembelian */}
+      <Drawer.Screen name="PembelianTambah" component={PembelianTambahScreen} />
+      <Drawer.Screen name="PembelianSearch" component={PembelianSearchScreen} />
+      <Drawer.Screen
+        name="PembelianRincian"
+        component={PembelianRincianScreen}
+        options={{
+          drawerItemStyle: { display: 'none' } // Hide from drawer menu
+        }}
+      />
+      <Drawer.Screen name="PembelianPelunasan" component={PembelianPelunasanScreen} />
+      <Drawer.Screen name="PembelianRetur" component={PembelianReturScreen} />
+      <Drawer.Screen name="PembelianDPBeli" component={PembelianDPBeliScreen} />
+
+      {/* TRANSAKSI Section - Penjualan */}
+      <Drawer.Screen name="PenjualanTambah" component={PenjualanTambahScreen} />
+      <Drawer.Screen name="PenjualanSearch" component={PenjualanSearchScreen} />
+      <Drawer.Screen name="PenjualanPelunasan" component={PenjualanPelunasanScreen} />
+      <Drawer.Screen name="PenjualanRetur" component={PenjualanReturScreen} />
+
+      {/* TRANSAKSI Section - Jurnal */}
+      <Drawer.Screen name="JurnalTambah" component={JurnalTambahScreen} />
+      <Drawer.Screen name="JurnalSearch" component={JurnalSearchScreen} />
+
+      {/* TRANSAKSI Section - Others */}
+      <Drawer.Screen name="MutasiAkun" component={MutasiAkunScreen} />
+      <Drawer.Screen name="StokOpname" component={StokOpnameScreen} />
+      <Drawer.Screen name="PesanBarang" component={PesanBarangScreen} />
+
+      {/* ECOMMERCE Section */}
+      <Drawer.Screen name="Pesanan" component={OrdersListScreen} />
+      <Drawer.Screen name="EcommerceChat" component={EcommerceChatScreen} />
+      <Drawer.Screen name="Notifikasi" component={NotifikasiScreen} />
+      <Drawer.Screen name="Penarikan" component={PenarikanScreen} />
+      <Drawer.Screen name="ReturOnline" component={ReturOnlineScreen} />
+      <Drawer.Screen name="BookingOrders" component={BookingOrdersScreen} />
+      <Drawer.Screen name="Integration" component={IntegrationScreen} />
+      <Drawer.Screen name="EcommerceToolsProduct" component={EcommerceToolsProductScreen} />
+      <Drawer.Screen name="NaikkanProduk" component={NaikkanProdukScreen} />
+      <Drawer.Screen name="ProsesOtomatis" component={ProsesOtomatisScreen} />
+
+      {/* LAPORAN Section */}
+      <Drawer.Screen name="Neraca" component={NeracaScreen} />
+      <Drawer.Screen name="LabaRugi" component={LabaRugiScreen} />
+      <Drawer.Screen name="LaporanBarang" component={LaporanBarangScreen} />
+      <Drawer.Screen name="Iklan" component={IklanScreen} />
+
+      {/* SETTING Section */}
+      <Drawer.Screen name="Setting" component={Settingscreen} />
+
+      {/* Scan Out - Special */}
+      <Drawer.Screen name="ScanOut" component={ScanOutScreen} />
+    </Drawer.Navigator>
+  );
+}
