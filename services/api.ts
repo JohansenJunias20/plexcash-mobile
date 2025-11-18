@@ -634,6 +634,19 @@ class ApiService {
       body: JSON.stringify(body),
     });
   }
+
+  /**
+   * Get user access permissions
+   */
+  static async getUserAccess(): Promise<{ status: boolean; access?: any; reason?: string }> {
+    try {
+      const response = await this.authenticatedRequest('/get/access');
+      return response;
+    } catch (error) {
+      console.error('Error fetching user access:', error);
+      return { status: false, reason: 'Failed to fetch user access' };
+    }
+  }
 }
 
 export default ApiService;

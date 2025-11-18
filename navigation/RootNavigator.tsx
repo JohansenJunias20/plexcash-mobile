@@ -24,6 +24,7 @@ import BundlingListScreen from '../screens/bundling/BundlingListScreen';
 import BundlingEditScreen from '../screens/bundling/BundlingEditScreen';
 import StokOpnameScreen from '../screens/stokopname/StokOpnameScreen';
 import Settingscreen from '../screens/Settingscreen';
+import PembelianRincianScreen from '../screens/transaksi/pembelian/PembelianRincianScreen';
 import { View, ActivityIndicator } from 'react-native';
 import { logNavigation, logStateChange } from '../utils/logger';
 
@@ -50,6 +51,7 @@ export type AppStackParamList = {
   BundlingEdit: { id: number } | undefined;
   StokOpname: undefined;
   Settingscreen: undefined;
+  PembelianRincian: { id: number };
 };
 
 const AuthStack = createNativeStackNavigator();
@@ -100,6 +102,9 @@ export default function RootNavigator() {
 
   logNavigation('✅ User IS authenticated - showing MainScreen');
   console.log('🧭 [NAVIGATOR] User IS authenticated - showing MainScreen');
+
+  // const Drawer = createDrawerNavigator();
+
   return (
     <AppStack.Navigator
       screenOptions={{
@@ -113,7 +118,7 @@ export default function RootNavigator() {
         statusBarStyle: 'light',
         statusBarTranslucent: false,
       }}
-    >
+    > 
       <AppStack.Screen name="MainHome" component={MainScreen} options={{ headerShown: false }} />
       <AppStack.Screen name="BarangList" component={BarangListScreen} options={{ title: 'Barang' }} />
       <AppStack.Screen name="BarangEdit" component={BarangEditScreen} options={{ title: 'Edit Barang' }} />
@@ -136,6 +141,7 @@ export default function RootNavigator() {
       <AppStack.Screen name="BundlingEdit" component={BundlingEditScreen} options={{ title: 'Bundling' }} />
       <AppStack.Screen name="StokOpname" component={StokOpnameScreen} options={{ headerShown: false }} />
       <AppStack.Screen name="Settingscreen" component={Settingscreen} options={{ headerShown: false }} />
+      <AppStack.Screen name="PembelianRincian" component={PembelianRincianScreen} options={{ title: 'Rincian Pembelian' }} />
     </AppStack.Navigator>
   );
 }

@@ -4,7 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import Settings from './Settings';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, DrawerActions } from '@react-navigation/native';
 import ApiService from '../services/api';
 import { useDeveloperMode } from '../context/DeveloperModeContext';
 
@@ -98,8 +98,16 @@ const MainScreen = (): JSX.Element => {
     <LinearGradient colors={['#fbbf24', '#f59e0b', '#d97706']} style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={styles.welcomeText}>Welcome!</Text>
-          <Text style={styles.userEmail}>{(user as any)?.email || 'Guest'}</Text>
+          <TouchableOpacity 
+            style={styles.hamburgerButton}
+            onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
+          >
+            <Ionicons name="menu" size={28} color="white" />
+          </TouchableOpacity>
+          <View style={styles.welcomeTextContainer}>
+            <Text style={styles.welcomeText}>Welcome!</Text>
+            <Text style={styles.userEmail}>{(user as any)?.email || 'Guest'}</Text>
+          </View>
         </View>
         <TouchableOpacity style={styles.settingsIcon} onPress={handleOpenSettings}>
           <Ionicons name="settings" size={24} color="white" />
@@ -325,8 +333,15 @@ const MainScreen = (): JSX.Element => {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 50, paddingHorizontal: 20, paddingBottom: 20 },
-  headerLeft: { flex: 1 },
+  headerLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 2 },
+  welcomeTextContainer: {
+    flex: 1,
+    flexDirection: 'column',
+  },
   welcomeText: { color: 'white', fontSize: 24, fontWeight: 'bold' },
+  hamburgerButton: {
+    padding: 5,
+  },
   userEmail: { color: 'rgba(255,255,255,0.8)', fontSize: 14 },
   settingsIcon: { padding: 10 },
   content: { flex: 1 },
