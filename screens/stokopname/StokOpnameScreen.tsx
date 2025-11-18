@@ -78,6 +78,75 @@ const StokOpnameScreen = ({ navigation }: any) => {
     }
   }, [mode]);
 
+  // Reset search when modal opens/closes
+  useEffect(() => {
+    if (!showSearchBarang) {
+      // Reset when modal closes
+      setSearchQuery('');
+      setSearchResults([]);
+      setSearchLoading(false);
+    }
+  }, [showSearchBarang]);
+
+  // Debounced search effect
+  useEffect(() => {
+    if (!showSearchBarang) {
+      return;
+    }
+
+    if (searchQuery.length < 2) {
+      setSearchResults([]);
+      setSearchLoading(false);
+      return;
+    }
+
+    setSearchLoading(true);
+    const timeoutId = setTimeout(async () => {
+      try {
+        // Use the proper /get/masterbarang/search endpoint with OR logic
+        // Backend will detect OR logic when all search params are the same
+        // SQL: WHERE (NAMA LIKE '%query%' OR SKU LIKE '%query%' OR MERK LIKE '%query%' OR KATEGORI LIKE '%query%')
+        const params = new URLSearchParams({
+          nama: searchQuery,
+          sku: searchQuery,
+          merk: searchQuery,
+          kategori: searchQuery,
+          start: '0',
+          end: '50', // Get up to 50 results
+          jumlah_online: '2147483647', // Max int to get all items
+          search_mode: 'or' // Explicitly request OR logic
+        });
+
+        console.log('🔍 Searching with query:', searchQuery);
+
+        const response = await ApiService.get(`/get/masterbarang/search?${params.toString()}`);
+
+        console.log('📦 Search response:', response.status, 'Results:', response.data?.length || 0);
+
+        if (response.status && response.data) {
+          const results = response.data.slice(0, 20); // Limit to 20 results for display
+          console.log('✅ Setting search results:', results.length, 'items');
+          if (results.length > 0) {
+            console.log('First result:', results[0].nama, results[0].sku);
+          }
+          setSearchResults(results);
+        } else {
+          console.log('❌ No results or failed response');
+          setSearchResults([]);
+        }
+      } catch (error) {
+        console.error('❌ Error searching barang:', error);
+        setSearchResults([]);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 500); // 500ms debounce
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [searchQuery, showSearchBarang]);
+
   const loadStokOpnameList = async () => {
     try {
       setRefreshing(true);
@@ -117,30 +186,7 @@ const StokOpnameScreen = ({ navigation }: any) => {
     }
   };
 
-  const handleSearchBarang = async (query: string) => {
-    setSearchQuery(query);
-    if (query.length < 2) {
-      setSearchResults([]);
-      return;
-    }
 
-    try {
-      setSearchLoading(true);
-      const conditions = `nama:like:${encodeURIComponent(query)}|merk:like:${encodeURIComponent(query)}|kategori:like:${encodeURIComponent(query)}|sku:like:${encodeURIComponent(query)}`;
-      const response = await ApiService.get(`/get/masterbarang/condition/or/${conditions}`);
-      
-      if (response.status && response.data) {
-        setSearchResults(response.data.slice(0, 20)); // Limit to 20 results
-      } else {
-        setSearchResults([]);
-      }
-    } catch (error) {
-      console.error('Error searching barang:', error);
-      setSearchResults([]);
-    } finally {
-      setSearchLoading(false);
-    }
-  };
 
   const handleSelectBarang = (barang: any) => {
     const exists = items.find(item => item.id === barang.id);
@@ -571,17 +617,21 @@ const StokOpnameScreen = ({ navigation }: any) => {
                 style={styles.searchInput}
                 placeholder="Cari nama, merk, kategori, atau SKU..."
                 value={searchQuery}
-                onChangeText={handleSearchBarang}
+                onChangeText={setSearchQuery}
                 autoFocus
               />
             </View>
 
             <ScrollView style={styles.searchResults} keyboardShouldPersistTaps="handled">
-              {searchLoading ? (
+              {searchQuery.length < 2 ? (
+                <View style={styles.searchEmpty}>
+                  <Text style={styles.searchEmptyText}>Ketik minimal 2 karakter untuk mencari</Text>
+                </View>
+              ) : searchLoading ? (
                 <View style={styles.searchLoading}>
                   <ActivityIndicator size="large" color="#f59e0b" />
                 </View>
-              ) : searchResults.length === 0 && searchQuery.length >= 2 ? (
+              ) : searchResults.length === 0 ? (
                 <View style={styles.searchEmpty}>
                   <Text style={styles.searchEmptyText}>Barang tidak ditemukan</Text>
                 </View>

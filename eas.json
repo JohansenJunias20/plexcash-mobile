@@ -1,6 +1,7 @@
 {
   "cli": {
-    "version": ">= 13.2.0"
+    "version": ">= 13.2.0",
+    "appVersionSource": "remote"
   },
   "build": {
     "development": {
@@ -8,29 +9,34 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
-      }
+      },
+      "channel": "development"
     },
     "preview": {
       "distribution": "internal",
       "android": {
         "buildType": "apk"
-      }
+      },
+      "channel": "preview"
     },
     "preview-aab": {
       "distribution": "internal",
       "android": {
         "buildType": "app-bundle"
-      }
+      },
+      "channel": "preview"
     },
     "production": {
       "android": {
         "buildType": "apk"
-      }
+      },
+      "channel": "production"
     },
     "production-aab": {
       "android": {
         "buildType": "app-bundle"
-      }
+      },
+      "channel": "production"
     }
   },
   "submit": {

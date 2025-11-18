@@ -1,15 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import {
-  getAuth,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  sendEmailVerification,
-  GoogleAuthProvider,
-  signInWithCredential,
-  initializeAuth,
-  getReactNativePersistence
-} from 'firebase/auth';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getAuth } from 'firebase/auth';
 
 // Firebase configuration - same as web app
 const firebaseConfig = {
@@ -25,26 +15,22 @@ const firebaseConfig = {
 // Initialize Firebase
 const firebaseApp = initializeApp(firebaseConfig);
 
-// Initialize Firebase Auth with AsyncStorage persistence for React Native
-const auth = initializeAuth(firebaseApp, {
-  persistence: getReactNativePersistence(AsyncStorage)
-});
+// Initialize Firebase Auth
+// For React Native, Firebase automatically uses AsyncStorage for persistence
+// when @react-native-async-storage/async-storage is installed
+// This auth instance is used by:
+// - context/AuthContext.tsx: onAuthStateChanged listener and signOut
+// - components/AuthTest.tsx: checking currentUser
+// - services/api.ts: getting Firebase ID token for API requests
+// - services/googleAuth.ts: signInWithCustomToken (imported dynamically from 'firebase/auth')
+const auth = getAuth(firebaseApp);
 
-// Google Auth Provider
-const googleProvider = new GoogleAuthProvider();
-googleProvider.setCustomParameters({
-  prompt: "select_account"
-});
-
-export { 
-  auth, 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword,
-  sendEmailVerification,
-  GoogleAuthProvider,
-  signInWithCredential,
-  googleProvider,
-  firebaseConfig 
+// Export only what's actually used by the mobile app
+// Note: Other Firebase auth functions (signInWithCustomToken, onAuthStateChanged, etc.)
+// are imported directly from 'firebase/auth' where needed
+export {
+  auth,
+  firebaseConfig
 };
 
 export default firebaseApp;

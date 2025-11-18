@@ -25,21 +25,26 @@ export const useAppUpdate = () => {
   const performUpdateCheck = useCallback(async (force: boolean = false) => {
     try {
       setIsChecking(true);
+      console.log('[AppUpdate] Starting update check...', { force });
 
       // Check if we should check for updates
       if (!force) {
         const shouldCheck = await shouldCheckForUpdate();
         if (!shouldCheck) {
-          console.log('Skipping update check - too soon since last check');
+          console.log('[AppUpdate] Skipping update check - too soon since last check');
           return;
         }
       }
 
       // First check for OTA updates (faster, silent)
+      console.log('[AppUpdate] Checking for OTA updates...');
       const otaUpdateAvailable = await checkForOTAUpdates();
-      
+      console.log('[AppUpdate] OTA update available:', otaUpdateAvailable);
+
       // Then check for store updates (requires backend API)
+      console.log('[AppUpdate] Checking for store updates...');
       const storeVersionInfo = await checkForUpdates();
+      console.log('[AppUpdate] Store version info:', storeVersionInfo);
 
       if (storeVersionInfo && storeVersionInfo.updateAvailable) {
         // Check if user has skipped this version
@@ -49,19 +54,22 @@ export const useAppUpdate = () => {
         // 1. Force update is required, OR
         // 2. User hasn't skipped this version
         if (storeVersionInfo.forceUpdate || !skipped) {
+          console.log('[AppUpdate] Showing update modal');
           setVersionInfo(storeVersionInfo);
           setShowUpdateModal(true);
         }
       } else if (otaUpdateAvailable) {
         // OTA update is available
-        console.log('OTA update available - reloading app');
+        console.log('[AppUpdate] OTA update available - reloading app');
         await reloadApp();
+      } else {
+        console.log('[AppUpdate] No updates available');
       }
 
       // Mark that we've checked
       await markVersionChecked();
     } catch (error) {
-      console.error('Error performing update check:', error);
+      console.error('[AppUpdate] Error performing update check:', error);
     } finally {
       setIsChecking(false);
     }

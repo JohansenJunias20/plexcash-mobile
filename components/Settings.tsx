@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Switch } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Switch, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import * as Application from 'expo-application';
 import { useAuth } from '../context/AuthContext';
 import SimpleQRScanner from './SimpleQRScanner';
 import QRCodeInput from './QRCodeInput';
+import { checkForOTAUpdates, reloadApp } from '../services/versionCheck';
 
 interface Props { onClose: () => void }
 
@@ -14,6 +16,7 @@ const Settings = ({ onClose }: Props): JSX.Element => {
   const [showQRInput, setShowQRInput] = useState(false);
   const [notifications, setNotifications] = useState(true);
   const [autoSync, setAutoSync] = useState(false);
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
 
   const handleQRCodeLogin = () => {
     Alert.alert('QR Code Authentication', 'Choose how you want to authenticate with QR code:', [
@@ -21,6 +24,49 @@ const Settings = ({ onClose }: Props): JSX.Element => {
       { text: 'Enter Manually', onPress: () => setShowQRInput(true) },
       { text: 'Cancel', style: 'cancel' }
     ]);
+  };
+
+  const handleCheckForUpdates = async () => {
+    try {
+      setIsCheckingUpdate(true);
+
+      // Check for OTA updates
+      const updateAvailable = await checkForOTAUpdates();
+
+      if (updateAvailable) {
+        Alert.alert(
+          'Update Available',
+          'A new update has been downloaded. The app will restart to apply the update.',
+          [
+            {
+              text: 'Restart Now',
+              onPress: async () => {
+                await reloadApp();
+              }
+            },
+            {
+              text: 'Later',
+              style: 'cancel'
+            }
+          ]
+        );
+      } else {
+        Alert.alert(
+          'No Updates',
+          'You are already using the latest version!',
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error) {
+      console.error('Error checking for updates:', error);
+      Alert.alert(
+        'Update Check Failed',
+        'Unable to check for updates. Please try again later.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setIsCheckingUpdate(false);
+    }
   };
 
   const handleQRScanSuccess = async (user: any, token: string) => {
@@ -123,9 +169,30 @@ const Settings = ({ onClose }: Props): JSX.Element => {
                 <Ionicons name="information-circle" size={24} color="white" />
                 <View style={styles.settingText}>
                   <Text style={styles.settingTitle}>App Version</Text>
-                  <Text style={styles.settingSubtitle}>1.0.8</Text>
+                  <Text style={styles.settingSubtitle}>
+                    {Application.nativeApplicationVersion || '1.0.8'} ({Application.nativeBuildVersion || '9'})
+                  </Text>
                 </View>
               </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.settingItem}
+              onPress={handleCheckForUpdates}
+              disabled={isCheckingUpdate}
+            >
+              <View style={styles.settingLeft}>
+                <Ionicons name="cloud-download-outline" size={24} color="white" />
+                <View style={styles.settingText}>
+                  <Text style={styles.settingTitle}>Check for Updates</Text>
+                  <Text style={styles.settingSubtitle}>
+                    {isCheckingUpdate ? 'Checking...' : 'Tap to check for OTA updates'}
+                  </Text>
+                </View>
+              </View>
+              {isCheckingUpdate && (
+                <ActivityIndicator size="small" color="#f59e0b" style={{ marginLeft: 10 }} />
+              )}
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.settingItem}>
