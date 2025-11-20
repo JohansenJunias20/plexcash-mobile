@@ -43,6 +43,7 @@ import PesanBarangScreen from '../screens/transaksi/PesanBarangScreen';
 
 // ECOMMERCE Section
 import EcommerceChatScreen from '../screens/ecommerce/EcommerceChatScreen';
+import EcommerceChatDetailScreen from '../screens/ecommerce/EcommerceChatDetailScreen';
 import NotifikasiScreen from '../screens/ecommerce/NotifikasiScreen';
 import PenarikanScreen from '../screens/ecommerce/PenarikanScreen';
 import ReturOnlineScreen from '../screens/ecommerce/ReturOnlineScreen';
@@ -121,6 +122,11 @@ export default function DrawerNavigator() {
       {/* ECOMMERCE Section */}
       <Drawer.Screen name="Pesanan" component={OrdersListScreen} />
       <Drawer.Screen name="EcommerceChat" component={EcommerceChatScreen} />
+      <Drawer.Screen
+        name="EcommerceChatDetail"
+        component={EcommerceChatDetailScreen}
+        options={{ drawerItemStyle: { display: 'none' } }}
+      />
       <Drawer.Screen name="Notifikasi" component={NotifikasiScreen} />
       <Drawer.Screen name="Penarikan" component={PenarikanScreen} />
       <Drawer.Screen name="ReturOnline" component={ReturOnlineScreen} />
