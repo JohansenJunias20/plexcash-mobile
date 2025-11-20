@@ -148,6 +148,14 @@ cd "$ANDROID_DIR"
 print_info "Stopping Gradle daemon..."
 ./gradlew --stop || true
 
+# Remove .cxx directory to avoid CMake errors
+print_info "Removing .cxx directory..."
+rm -rf "$ANDROID_DIR/app/.cxx" || true
+
+# Clean build directory
+print_info "Cleaning build directory..."
+./gradlew clean || true
+
 # Remove old AAB file
 if [ -f "$AAB_FILE" ]; then
     print_info "Removing old AAB file..."
@@ -157,10 +165,48 @@ fi
 print_success "Clean completed"
 
 # ============================================
+# Export JavaScript Bundle
+# ============================================
+
+print_header "Exporting JavaScript Bundle"
+
+cd "$PROJECT_DIR"
+
+print_info "Running npx expo export..."
+print_warning "This will compile TypeScript and bundle JavaScript..."
+
+# Export for production
+if npx expo export --platform android --output-dir dist; then
+    print_success "JavaScript bundle exported successfully!"
+else
+    print_error "Failed to export JavaScript bundle!"
+    exit 1
+fi
+
+# Copy bundle to Android assets
+ASSETS_DIR="$ANDROID_DIR/app/src/main/assets"
+print_info "Copying bundle to Android assets..."
+
+# Create assets directory if it doesn't exist
+mkdir -p "$ASSETS_DIR"
+
+# Copy the exported bundle
+if [ -d "dist" ]; then
+    # Copy all files from dist to assets
+    cp -r dist/* "$ASSETS_DIR/" || true
+    print_success "Bundle copied to assets"
+else
+    print_warning "No dist directory found, using existing bundle"
+fi
+
+# ============================================
 # Build AAB
 # ============================================
 
 print_header "Building Android App Bundle"
+
+# Go back to Android directory
+cd "$ANDROID_DIR"
 
 print_info "Starting Gradle build for flavor: $FLAVOR"
 print_warning "This may take 3-5 minutes..."

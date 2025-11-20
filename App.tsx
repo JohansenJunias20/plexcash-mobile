@@ -11,6 +11,18 @@ import UpdateModal from './components/UpdateModal';
 import UpdateSuccessModal from './components/UpdateSuccessModal';
 import { useAppUpdate } from './hooks/useAppUpdate';
 import * as AuthSession from "expo-auth-session";
+import * as Updates from 'expo-updates';
+import * as Application from 'expo-application';
+
+// Log app and update configuration on startup
+console.log('[App] Starting PlexSeller...', {
+  version: Application.nativeApplicationVersion,
+  buildVersion: Application.nativeBuildVersion,
+  updatesEnabled: Updates.isEnabled,
+  updateId: Updates.updateId,
+  channel: Updates.channel,
+  runtimeVersion: Updates.runtimeVersion,
+});
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import DrawerNavigator from './navigation/DrawerNavigator';
 // import { createDrawerNavigator } from '@react-navigation/drawer';

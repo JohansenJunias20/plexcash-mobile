@@ -1,5 +1,10 @@
+import React from 'react';
+import { View, ActivityIndicator } from 'react-native';
 import { createDrawerNavigator } from '@react-navigation/drawer';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { useAuth } from '../context/AuthContext';
 import CustomDrawerContent from './CustomDrawerContent';
+import LoginScreen from '../components/LoginScreen';
 import MainScreen from '../components/MainScreen';
 import BarangListScreen from '../screens/barang/BarangListScreen';
 import POSKasirScreen from '../screens/pos/POSKasirScreen';
@@ -60,8 +65,15 @@ import LaporanBarangScreen from '../screens/laporan/LaporanBarangScreen';
 import IklanScreen from '../screens/laporan/IklanScreen';
 
 const Drawer = createDrawerNavigator();
+const AuthStack = createNativeStackNavigator();
 
-export default function DrawerNavigator() {
+const LoadingScreen = () => (
+  <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#1F2937' }}>
+    <ActivityIndicator size="large" color="#f59e0b" />
+  </View>
+);
+
+const DrawerNavigatorContent = () => {
   return (
     <Drawer.Navigator
       drawerContent={(props) => <CustomDrawerContent {...props} />}
@@ -149,4 +161,27 @@ export default function DrawerNavigator() {
       <Drawer.Screen name="ScanOut" component={ScanOutScreen} />
     </Drawer.Navigator>
   );
+};
+
+export default function DrawerNavigator() {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  console.log('🧭 [DRAWER-NAVIGATOR] Render - isLoading:', isLoading, 'isAuthenticated:', isAuthenticated);
+
+  if (isLoading) {
+    console.log('🧭 [DRAWER-NAVIGATOR] Showing loading screen');
+    return <LoadingScreen />;
+  }
+
+  if (!isAuthenticated) {
+    console.log('🧭 [DRAWER-NAVIGATOR] User NOT authenticated - showing LoginScreen');
+    return (
+      <AuthStack.Navigator>
+        <AuthStack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
+      </AuthStack.Navigator>
+    );
+  }
+
+  console.log('🧭 [DRAWER-NAVIGATOR] User IS authenticated - showing DrawerNavigator');
+  return <DrawerNavigatorContent />;
 }
