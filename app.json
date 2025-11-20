@@ -3,7 +3,7 @@
     "name": "PlexSeller",
     "slug": "plexcash-mobile",
     "version": "1.0.8",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "scheme": "plexcash",

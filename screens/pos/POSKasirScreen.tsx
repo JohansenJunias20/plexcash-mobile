@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Image,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -22,6 +23,7 @@ import { API_BASE_URL } from '../../services/api';
 import { getTokenAuth } from '../../services/token';
 import BluetoothPrinterService, { BluetoothDevice, ReceiptData } from '../../services/BluetoothPrinterService';
 import { useAuth } from '../../context/AuthContext';
+import { useOrientation } from '../../hooks/useOrientation';
 
 interface Product {
   id: number;
@@ -65,6 +67,7 @@ interface BaganAkun {
 const POSKasirScreen = ({ navigation }: any): JSX.Element => {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
+  const orientation = useOrientation();
   const [searchQuery, setSearchQuery] = useState('');
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -950,19 +953,273 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
     }
   };
 
-  return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <LinearGradient colors={['#fbbf24', '#f59e0b']} style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="white" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>POS Kasir</Text>
-        <TouchableOpacity onPress={() => setShowPrinterModal(true)} style={styles.printerButton}>
-          <Ionicons name="print" size={24} color="white" />
-        </TouchableOpacity>
-      </LinearGradient>
+  // Render landscape layout for tablets
+  const renderLandscapeLayout = () => (
+    <View style={styles.landscapeContainer}>
+      {/* Left Panel - Product Search and List */}
+      <View style={styles.landscapeLeftPanel}>
+        {/* Search Bar */}
+        <View style={styles.landscapeSearchContainer}>
+          <Ionicons name="search" size={20} color="#9CA3AF" style={styles.searchIcon} />
+          <TextInput
+            ref={searchInputRef}
+            style={styles.searchInput}
+            placeholder="Search by SKU, Barcode, or Name..."
+            value={searchQuery}
+            onChangeText={(text) => {
+              setSearchQuery(text);
+              searchProducts(text);
+            }}
+            autoCapitalize="none"
+          />
+          {loading && <ActivityIndicator size="small" color="#f59e0b" />}
+          <TouchableOpacity
+            style={styles.barcodeButton}
+            onPress={() => setShowManualItemModal(true)}
+          >
+            <Ionicons name="add-circle-outline" size={24} color="#10B981" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.barcodeButton}
+            onPress={() => setShowBarcodeScanner(true)}
+          >
+            <Ionicons name="barcode-outline" size={24} color="#f59e0b" />
+          </TouchableOpacity>
+        </View>
 
-      <View style={styles.content}>
+        {/* Product List - Enhanced for Landscape */}
+        <View style={styles.landscapeProductListContainer}>
+          {showProductList && products.length > 0 ? (
+            <FlatList
+              data={products}
+              keyExtractor={(item) => `${item.is_bundling ? 'b' : 'p'}-${item.id}`}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.landscapeProductItem}
+                  onPress={() => addToCart(item)}
+                >
+                  <View style={styles.landscapeProductInfo}>
+                    <View style={styles.landscapeProductHeader}>
+                      <Text style={styles.landscapeProductName} numberOfLines={2}>{item.nama}</Text>
+                      {item.is_bundling && (
+                        <View style={styles.bundlingBadge}>
+                          <Text style={styles.bundlingBadgeText}>Bundling</Text>
+                        </View>
+                      )}
+                    </View>
+                    <View style={styles.landscapeProductDetails}>
+                      <View style={styles.landscapeProductDetailRow}>
+                        <Text style={styles.landscapeProductLabel}>SKU:</Text>
+                        <Text style={styles.landscapeProductValue}>{item.sku}</Text>
+                      </View>
+                      {item.barcode && (
+                        <View style={styles.landscapeProductDetailRow}>
+                          <Text style={styles.landscapeProductLabel}>Barcode:</Text>
+                          <Text style={styles.landscapeProductValue}>{item.barcode}</Text>
+                        </View>
+                      )}
+                      <View style={styles.landscapeProductDetailRow}>
+                        <Text style={styles.landscapeProductLabel}>Stock:</Text>
+                        <Text style={[styles.landscapeProductValue, { color: item.stok > 0 ? '#10B981' : '#EF4444' }]}>
+                          {item.stok} {item.satuan}
+                        </Text>
+                      </View>
+                      {item.merk && (
+                        <View style={styles.landscapeProductDetailRow}>
+                          <Text style={styles.landscapeProductLabel}>Brand:</Text>
+                          <Text style={styles.landscapeProductValue}>{item.merk}</Text>
+                        </View>
+                      )}
+                      {item.kategori && (
+                        <View style={styles.landscapeProductDetailRow}>
+                          <Text style={styles.landscapeProductLabel}>Category:</Text>
+                          <Text style={styles.landscapeProductValue}>{item.kategori}</Text>
+                        </View>
+                      )}
+                      {item.harga_grosir && item.qty_grosir && (
+                        <View style={styles.landscapeProductDetailRow}>
+                          <Text style={styles.landscapeProductLabel}>Wholesale:</Text>
+                          <Text style={styles.landscapeProductValue}>
+                            Rp {item.harga_grosir.toLocaleString('id-ID')} (min {item.qty_grosir})
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                  <View style={styles.landscapeProductPriceContainer}>
+                    <Text style={styles.landscapeProductPrice}>
+                      Rp {(item.hargajual || 0).toLocaleString('id-ID')}
+                    </Text>
+                    {item.hargabeli && (
+                      <Text style={styles.landscapeProductCost}>
+                        Cost: Rp {item.hargabeli.toLocaleString('id-ID')}
+                      </Text>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              )}
+            />
+          ) : (
+            <View style={styles.landscapeEmptyProducts}>
+              <Ionicons name="search-outline" size={64} color="#D1D5DB" />
+              <Text style={styles.landscapeEmptyProductsText}>
+                {searchQuery ? 'No products found' : 'Search for products to add to cart'}
+              </Text>
+            </View>
+          )}
+        </View>
+      </View>
+
+      {/* Right Panel - Cart and Checkout */}
+      <View style={styles.landscapeRightPanel}>
+        {/* Customer Info */}
+        <TouchableOpacity
+          style={styles.landscapeCustomerCard}
+          onPress={() => setShowCustomerModal(true)}
+        >
+          <View style={styles.landscapeCustomerInfo}>
+            <Ionicons name="person" size={24} color="#f59e0b" />
+            <View style={styles.landscapeCustomerTextContainer}>
+              <Text style={styles.landscapeCustomerLabel}>Customer</Text>
+              <Text style={styles.landscapeCustomerName}>{selectedCustomer.nama}</Text>
+            </View>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+        </TouchableOpacity>
+
+        {/* Cart */}
+        <View style={styles.landscapeCartContainer}>
+          <View style={styles.landscapeCartHeader}>
+            <Text style={styles.landscapeCartTitle}>Cart ({cart.length} items)</Text>
+          </View>
+
+          <FlatList
+            data={cart}
+            keyExtractor={(item, index) => `${item.is_bundling ? 'b' : item.is_manual ? 'm' : 'p'}-${item.id || index}`}
+            renderItem={({ item, index }) => (
+              <View style={styles.landscapeCartItem}>
+                <View style={styles.landscapeCartItemMain}>
+                  <View style={styles.landscapeCartItemHeader}>
+                    <Text style={styles.landscapeCartItemName} numberOfLines={1}>{item.nama}</Text>
+                    <TouchableOpacity onPress={() => removeFromCart(index)}>
+                      <Ionicons name="trash" size={20} color="#EF4444" />
+                    </TouchableOpacity>
+                  </View>
+                  <View style={styles.landscapeCartItemBadges}>
+                    {item.is_manual && (
+                      <View style={styles.manualBadge}>
+                        <Text style={styles.manualBadgeText}>Manual</Text>
+                      </View>
+                    )}
+                    {item.is_bundling && (
+                      <View style={styles.bundlingBadge}>
+                        <Text style={styles.bundlingBadgeText}>Bundling</Text>
+                      </View>
+                    )}
+                    {item.is_wholesale && (
+                      <View style={styles.wholesaleBadge}>
+                        <Text style={styles.wholesaleBadgeText}>Wholesale</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.landscapeCartItemSku}>
+                    SKU: {item.sku} {!item.is_manual && `• Stock: ${item.stok} ${item.satuan}`}
+                  </Text>
+                </View>
+
+                <View style={styles.landscapeCartItemControls}>
+                  <View style={styles.landscapePriceQtyRow}>
+                    <View style={styles.landscapePriceEdit}>
+                      <Text style={styles.landscapePriceLabel}>Price:</Text>
+                      <View style={styles.landscapePriceInputContainer}>
+                        <Text style={styles.landscapePricePrefix}>Rp </Text>
+                        <TextInput
+                          style={styles.landscapePriceInput}
+                          keyboardType="numeric"
+                          value={(item.hargajual || 0).toString()}
+                          onChangeText={(val) => updateCartItemPrice(index, val)}
+                        />
+                      </View>
+                    </View>
+
+                    <View style={styles.landscapeQtyControl}>
+                      <Text style={styles.landscapeQtyLabel}>Qty:</Text>
+                      <View style={styles.landscapeQtyButtons}>
+                        <TouchableOpacity
+                          onPress={() => updateCartItemQty(index, item.qty - 1)}
+                          style={styles.landscapeQtyButton}
+                        >
+                          <Ionicons name="remove" size={18} color="white" />
+                        </TouchableOpacity>
+                        <Text style={styles.landscapeQtyText}>{item.qty}</Text>
+                        <TouchableOpacity
+                          onPress={() => updateCartItemQty(index, item.qty + 1)}
+                          style={styles.landscapeQtyButton}
+                        >
+                          <Ionicons name="add" size={18} color="white" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </View>
+
+                  <View style={styles.landscapeSubtotalRow}>
+                    <Text style={styles.landscapeSubtotalLabel}>Subtotal:</Text>
+                    <Text style={styles.landscapeSubtotalValue}>
+                      Rp {(item.subtotal || 0).toLocaleString('id-ID')}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            )}
+            ListEmptyComponent={
+              <View style={styles.landscapeEmptyCart}>
+                <Ionicons name="cart-outline" size={64} color="#D1D5DB" />
+                <Text style={styles.landscapeEmptyCartText}>Cart is empty</Text>
+              </View>
+            }
+          />
+        </View>
+
+        {/* Total and Checkout */}
+        <View style={styles.landscapeFooter}>
+          <View style={styles.landscapeTotalContainer}>
+            <View style={styles.landscapeTotalRow}>
+              <Text style={styles.landscapeTotalLabel}>Subtotal:</Text>
+              <Text style={styles.landscapeTotalValue}>
+                Rp {calculateTotal().subtotal.toLocaleString('id-ID')}
+              </Text>
+            </View>
+            {isPkpActive && (
+              <View style={styles.landscapeTotalRow}>
+                <Text style={styles.landscapeTotalLabel}>PPN ({ppnRate}%):</Text>
+                <Text style={styles.landscapeTotalValue}>
+                  Rp {calculateTotal().ppn.toLocaleString('id-ID')}
+                </Text>
+              </View>
+            )}
+            <View style={[styles.landscapeTotalRow, styles.landscapeGrandTotalRow]}>
+              <Text style={styles.landscapeGrandTotalLabel}>Total:</Text>
+              <Text style={styles.landscapeGrandTotalValue}>
+                Rp {calculateTotal().total.toLocaleString('id-ID')}
+              </Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            style={[styles.landscapeCheckoutButton, cart.length === 0 && styles.landscapeCheckoutButtonDisabled]}
+            onPress={handleCheckout}
+            disabled={cart.length === 0}
+          >
+            <Ionicons name="card-outline" size={24} color="white" style={{ marginRight: 8 }} />
+            <Text style={styles.landscapeCheckoutButtonText}>Checkout</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  );
+
+  // Render portrait layout (original)
+  const renderPortraitLayout = () => (
+    <View style={styles.content}>
         {/* Search Bar */}
         <View style={styles.searchContainer}>
           <Ionicons name="search" size={20} color="#9CA3AF" style={styles.searchIcon} />
@@ -1143,6 +1400,22 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
           </TouchableOpacity>
         </View>
       </View>
+  );
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <LinearGradient colors={['#fbbf24', '#f59e0b']} style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color="white" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>POS Kasir {orientation.isLandscape && orientation.isTablet && '(Tablet Mode)'}</Text>
+        <TouchableOpacity onPress={() => setShowPrinterModal(true)} style={styles.printerButton}>
+          <Ionicons name="print" size={24} color="white" />
+        </TouchableOpacity>
+      </LinearGradient>
+
+      {/* Conditionally render layout based on orientation */}
+      {orientation.isLandscape && orientation.isTablet ? renderLandscapeLayout() : renderPortraitLayout()}
 
       {/* Payment Modal */}
       <Modal visible={showPaymentModal} transparent animationType="slide">
@@ -2391,6 +2664,349 @@ const styles = StyleSheet.create({
   addManualItemButtonText: {
     fontSize: 16,
     fontWeight: '600',
+    color: 'white',
+  },
+  // Landscape-specific styles
+  landscapeContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    backgroundColor: '#F3F4F6',
+  },
+  landscapeLeftPanel: {
+    flex: 1,
+    backgroundColor: '#F3F4F6',
+    paddingRight: 8,
+  },
+  landscapeRightPanel: {
+    width: 480,
+    backgroundColor: '#F3F4F6',
+    paddingLeft: 8,
+  },
+  landscapeSearchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    margin: 16,
+    marginBottom: 12,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  landscapeProductListContainer: {
+    flex: 1,
+    backgroundColor: 'white',
+    marginHorizontal: 16,
+    marginBottom: 16,
+    borderRadius: 8,
+    elevation: 2,
+  },
+  landscapeProductItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    minHeight: 120,
+  },
+  landscapeProductInfo: {
+    flex: 1,
+    marginRight: 16,
+  },
+  landscapeProductHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+    gap: 8,
+  },
+  landscapeProductName: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  landscapeProductDetails: {
+    gap: 4,
+  },
+  landscapeProductDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  landscapeProductLabel: {
+    fontSize: 13,
+    color: '#6B7280',
+    fontWeight: '500',
+    width: 80,
+  },
+  landscapeProductValue: {
+    fontSize: 13,
+    color: '#111827',
+    flex: 1,
+  },
+  landscapeProductPriceContainer: {
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+    minWidth: 140,
+  },
+  landscapeProductPrice: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#f59e0b',
+  },
+  landscapeProductCost: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 4,
+  },
+  landscapeEmptyProducts: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  landscapeEmptyProductsText: {
+    fontSize: 16,
+    color: '#9CA3AF',
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  landscapeCustomerCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    marginHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 12,
+    padding: 16,
+    borderRadius: 8,
+    elevation: 2,
+  },
+  landscapeCustomerInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  landscapeCustomerTextContainer: {
+    gap: 2,
+  },
+  landscapeCustomerLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  landscapeCustomerName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  landscapeCartContainer: {
+    flex: 1,
+    backgroundColor: 'white',
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderRadius: 8,
+    elevation: 2,
+  },
+  landscapeCartHeader: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  landscapeCartTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#111827',
+  },
+  landscapeCartItem: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  landscapeCartItemMain: {
+    marginBottom: 12,
+  },
+  landscapeCartItemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  landscapeCartItemName: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+    marginRight: 8,
+  },
+  landscapeCartItemBadges: {
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: 4,
+  },
+  wholesaleBadge: {
+    backgroundColor: '#D1FAE5',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  wholesaleBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#065F46',
+  },
+  landscapeCartItemSku: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  landscapeCartItemControls: {
+    gap: 8,
+  },
+  landscapePriceQtyRow: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  landscapePriceEdit: {
+    flex: 1,
+  },
+  landscapePriceLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginBottom: 4,
+  },
+  landscapePriceInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  landscapePricePrefix: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  landscapePriceInput: {
+    flex: 1,
+    paddingVertical: 8,
+    fontSize: 14,
+    color: '#111827',
+  },
+  landscapeQtyControl: {
+    width: 140,
+  },
+  landscapeQtyLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginBottom: 4,
+  },
+  landscapeQtyButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  landscapeQtyButton: {
+    backgroundColor: '#f59e0b',
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  landscapeQtyText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+    minWidth: 32,
+    textAlign: 'center',
+  },
+  landscapeSubtotalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  landscapeSubtotalLabel: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  landscapeSubtotalValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  landscapeEmptyCart: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 64,
+  },
+  landscapeEmptyCartText: {
+    fontSize: 16,
+    color: '#9CA3AF',
+    marginTop: 16,
+  },
+  landscapeFooter: {
+    backgroundColor: 'white',
+    marginHorizontal: 16,
+    marginBottom: 16,
+    borderRadius: 8,
+    padding: 16,
+    elevation: 2,
+  },
+  landscapeTotalContainer: {
+    marginBottom: 16,
+  },
+  landscapeTotalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  landscapeTotalLabel: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  landscapeTotalValue: {
+    fontSize: 14,
+    color: '#111827',
+  },
+  landscapeGrandTotalRow: {
+    paddingTop: 12,
+    borderTopWidth: 2,
+    borderTopColor: '#E5E7EB',
+    marginTop: 4,
+  },
+  landscapeGrandTotalLabel: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#111827',
+  },
+  landscapeGrandTotalValue: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#f59e0b',
+  },
+  landscapeCheckoutButton: {
+    backgroundColor: '#f59e0b',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 16,
+    borderRadius: 8,
+    elevation: 2,
+  },
+  landscapeCheckoutButtonDisabled: {
+    backgroundColor: '#D1D5DB',
+  },
+  landscapeCheckoutButtonText: {
+    fontSize: 18,
+    fontWeight: 'bold',
     color: 'white',
   },
 });
