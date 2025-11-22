@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert, ActivityIndicator, Linking } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Camera, useCameraDevice, useCodeScanner } from 'react-native-vision-camera';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
+import { useNavigation, DrawerActions } from '@react-navigation/native';
 import ApiService from '../../services/api';
 
 interface ScannedOrder {
@@ -14,6 +16,7 @@ interface ScannedOrder {
 }
 
 export default function ScanOutScreen(): JSX.Element {
+  const navigation = useNavigation();
   const [hasPermission, setHasPermission] = useState(false);
   const [scannedOrders, setScannedOrders] = useState<ScannedOrder[]>([]);
   const [scanning, setScanning] = useState(true);
@@ -311,16 +314,29 @@ export default function ScanOutScreen(): JSX.Element {
   );
 
   return (
-    <View style={styles.container}>
-      {/* Camera View */}
-      <View style={styles.cameraContainer}>
-        <Camera
-          style={styles.camera}
-          device={device}
-          isActive={scanning}
-          codeScanner={codeScanner}
+    <SafeAreaView style={styles.safeContainer}>
+      {/* Header with Hamburger Menu */}
+      <View style={styles.topHeader}>
+        <TouchableOpacity
+          style={styles.hamburgerButton}
+          onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
         >
-          <View style={styles.overlay}>
+          <Ionicons name="menu" size={28} color="#f59e0b" />
+        </TouchableOpacity>
+        <Text style={styles.topHeaderTitle}>Scan Out</Text>
+        <View style={styles.headerRight} />
+      </View>
+
+      <View style={styles.container}>
+        {/* Camera View */}
+        <View style={styles.cameraContainer}>
+          <Camera
+            style={styles.camera}
+            device={device}
+            isActive={scanning}
+            codeScanner={codeScanner}
+          >
+            <View style={styles.overlay}>
             <View style={styles.scanArea}>
               <View style={[styles.corner, styles.topLeft]} />
               <View style={[styles.corner, styles.topRight]} />
@@ -383,10 +399,28 @@ export default function ScanOutScreen(): JSX.Element {
         {processing && <ActivityIndicator size="small" color="#F59E0B" style={{ marginLeft: 8 }} />}
       </View>
     </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeContainer: {
+    flex: 1,
+    backgroundColor: '#f9fafb',
+  },
+  topHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: 'white',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb'
+  },
+  hamburgerButton: { padding: 5 },
+  topHeaderTitle: { fontSize: 18, fontWeight: '600', color: '#111827', flex: 1, textAlign: 'center' },
+  headerRight: { width: 38 },
   container: {
     flex: 1,
     backgroundColor: '#f9fafb',

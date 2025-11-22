@@ -69,14 +69,16 @@ export const useChatList = (): IUseChatListReturn => {
 
   /**
    * Apply filters to chat list
+   * NOTE: This is NOT wrapped in useCallback to prevent unnecessary re-renders
+   * It will be called directly in useEffect with proper dependencies
    */
-  const applyFilters = useCallback(() => {
+  const applyFilters = () => {
     let filtered = [...chats];
 
     // Filter by platform
     if (filters.platform !== 'ALL') {
       filtered = filtered.filter(
-        (chat) => chat.platform.toUpperCase() === filters.platform
+        (chat) => chat.platform?.toUpperCase() === filters.platform
       );
     }
 
@@ -90,11 +92,14 @@ export const useChatList = (): IUseChatListReturn => {
     // Filter by search query
     if (filters.searchQuery.trim()) {
       const query = filters.searchQuery.toLowerCase();
-      filtered = filtered.filter(
-        (chat) =>
-          chat.buyer.name.toLowerCase().includes(query) ||
-          chat.chat.toLowerCase().includes(query)
-      );
+      filtered = filtered.filter((chat) => {
+        // Safely check buyer name
+        const buyerName = chat.buyer?.name?.toLowerCase() || '';
+        // Safely check chat message
+        const chatMessage = chat.chat?.toLowerCase() || '';
+
+        return buyerName.includes(query) || chatMessage.includes(query);
+      });
     }
 
     setFilteredChats(filtered);
@@ -105,7 +110,7 @@ export const useChatList = (): IUseChatListReturn => {
       originalCount: chats.length,
       filteredCount: filtered.length,
     });
-  }, [chats, filters]);
+  };
 
   /**
    * Refresh chat list
@@ -131,10 +136,12 @@ export const useChatList = (): IUseChatListReturn => {
 
   /**
    * Apply filters whenever chats or filters change
+   * Using direct dependencies instead of applyFilters function to prevent re-render loop
    */
   useEffect(() => {
     applyFilters();
-  }, [applyFilters]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chats, filters.platform, filters.readStatus, filters.searchQuery]);
 
   return {
     chats: filteredChats,

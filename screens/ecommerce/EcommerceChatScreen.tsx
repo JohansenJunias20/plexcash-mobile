@@ -10,8 +10,9 @@ import {
   TextInput,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation, useFocusEffect, DrawerActions } from '@react-navigation/native';
 import { useChatList } from './chat/hooks/useChatList';
 import { useWebSocket } from './chat/hooks/useWebSocket';
 import ChatListItem from './chat/components/ChatListItem';
@@ -26,6 +27,7 @@ import {
 export default function EcommerceChatScreen() {
   const navigation = useNavigation();
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState<string>('');
   const [platformFilter, setPlatformFilter] = useState<PlatformFilter>('ALL');
   const [readStatusFilter, setReadStatusFilter] = useState<ReadStatusFilter>('ALL');
 
@@ -53,14 +55,36 @@ export default function EcommerceChatScreen() {
     }, [refresh])
   );
 
-  // Update filters when search or filter changes
+  // Debounce search query to prevent keyboard from hiding on every keystroke
+  // Search will only trigger 500ms after user stops typing
   useEffect(() => {
+    console.log('⌨️ [EcommerceChatScreen] Search query changed:', searchQuery);
+    const timer = setTimeout(() => {
+      console.log('🔍 [EcommerceChatScreen] Debounced search query triggered:', searchQuery);
+      setDebouncedSearchQuery(searchQuery);
+    }, 500); // 500ms delay
+
+    // Cleanup timer on every searchQuery change
+    return () => {
+      console.log('🧹 [EcommerceChatScreen] Cleaning up timer for:', searchQuery);
+      clearTimeout(timer);
+    };
+  }, [searchQuery]);
+
+  // Update filters when debounced search or filter changes
+  // This prevents re-render on every keystroke
+  useEffect(() => {
+    console.log('🎯 [EcommerceChatScreen] Updating filters:', {
+      platform: platformFilter,
+      readStatus: readStatusFilter,
+      searchQuery: debouncedSearchQuery,
+    });
     setFilters({
       platform: platformFilter,
       readStatus: readStatusFilter,
-      searchQuery: searchQuery,
+      searchQuery: debouncedSearchQuery,
     });
-  }, [searchQuery, platformFilter, readStatusFilter, setFilters]);
+  }, [debouncedSearchQuery, platformFilter, readStatusFilter, setFilters]);
 
   // Handle chat item press
   const handleChatPress = (chat: IChatList) => {
@@ -132,26 +156,9 @@ export default function EcommerceChatScreen() {
     </View>
   );
 
-  // Render header
+  // Render header (without search bar to prevent keyboard issues)
   const renderHeader = () => (
     <View>
-      {/* Search bar */}
-      <View style={styles.searchContainer}>
-        <Ionicons name="search" size={20} color="#9CA3AF" style={styles.searchIcon} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search by buyer name..."
-          placeholderTextColor="#9CA3AF"
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery('')}>
-            <Ionicons name="close-circle" size={20} color="#9CA3AF" />
-          </TouchableOpacity>
-        )}
-      </View>
-
       {/* Filters */}
       {renderFilterButtons()}
 
@@ -207,7 +214,36 @@ export default function EcommerceChatScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
+      {/* Header with Hamburger Menu */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.hamburgerButton}
+          onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
+        >
+          <Ionicons name="menu" size={28} color="#f59e0b" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Ecommerce Chat</Text>
+        <View style={styles.headerRight} />
+      </View>
+
+      {/* Search bar - Outside FlatList to prevent keyboard issues */}
+      <View style={styles.searchContainer}>
+        <Ionicons name="search" size={20} color="#9CA3AF" style={styles.searchIcon} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search by buyer name..."
+          placeholderTextColor="#9CA3AF"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery('')}>
+            <Ionicons name="close-circle" size={20} color="#9CA3AF" />
+          </TouchableOpacity>
+        )}
+      </View>
+
       {/* Loading overlay */}
       {loading && !refreshing && (
         <View style={styles.loadingOverlay}>
@@ -235,16 +271,28 @@ export default function EcommerceChatScreen() {
         }
         contentContainerStyle={chats.length === 0 ? styles.emptyList : undefined}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    marginTop: 28,
     flex: 1,
     backgroundColor: '#F9FAFB',
   },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: 'white',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb'
+  },
+  hamburgerButton: { padding: 5 },
+  headerTitle: { fontSize: 18, fontWeight: '600', color: '#111827', flex: 1, textAlign: 'center' },
+  headerRight: { width: 38 },
   loadingOverlay: {
     position: 'absolute',
     top: 0,

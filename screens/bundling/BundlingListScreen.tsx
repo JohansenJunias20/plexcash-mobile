@@ -10,8 +10,9 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation, useFocusEffect, DrawerActions } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AppStackParamList } from '../../navigation/RootNavigator';
 import { API_BASE_URL } from '../../services/api';
@@ -193,7 +194,19 @@ export default function BundlingListScreen(): JSX.Element {
   );
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
+      {/* Header with Hamburger Menu */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.hamburgerButton}
+          onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
+        >
+          <Ionicons name="menu" size={28} color="#f59e0b" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Bundling</Text>
+        <View style={styles.headerRight} />
+      </View>
+
       {/* Search Bar */}
       <View style={styles.searchBar}>
         <Ionicons name="search" size={18} color="#9CA3AF" />
@@ -239,7 +252,7 @@ export default function BundlingListScreen(): JSX.Element {
       >
         <Ionicons name="add" size={28} color="#fff" />
       </TouchableOpacity>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -248,6 +261,19 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f9fafb',
   },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: 'white',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb'
+  },
+  hamburgerButton: { padding: 5 },
+  headerTitle: { fontSize: 18, fontWeight: '600', color: '#111827', flex: 1, textAlign: 'center' },
+  headerRight: { width: 38 },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',

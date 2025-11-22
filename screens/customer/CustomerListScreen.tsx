@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, FlatList, StyleSheet, TextInput, TouchableOpacity, RefreshControl, ActivityIndicator, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, DrawerActions } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import ApiService from '../../services/api';
 import type { AppStackParamList } from '../../navigation/RootNavigator';
@@ -117,7 +118,19 @@ export default function CustomerListScreen(): JSX.Element {
   );
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
+      {/* Header with Hamburger Menu */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.hamburgerButton}
+          onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
+        >
+          <Ionicons name="menu" size={28} color="#f59e0b" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Customer</Text>
+        <View style={styles.headerRight} />
+      </View>
+
       <View style={styles.searchBar}>
         <Ionicons name="search" size={18} color="#9CA3AF" />
         <TextInput style={styles.input} placeholder={'Search customer'} value={query} onChangeText={setQuery} returnKeyType="search" />
@@ -140,12 +153,16 @@ export default function CustomerListScreen(): JSX.Element {
       >
         <Ionicons name="add" size={28} color="#fff" />
       </TouchableOpacity>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f9fafb' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: 'white', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
+  hamburgerButton: { padding: 5 },
+  headerTitle: { fontSize: 18, fontWeight: '600', color: '#111827', flex: 1, textAlign: 'center' },
+  headerRight: { width: 38 },
   searchBar: { flexDirection: 'row', alignItems: 'center', gap: 8 as any, padding: 12, backgroundColor: 'white' },
   input: { flex: 1, paddingHorizontal: 8, height: 40 },
   card: { flexDirection: 'row', backgroundColor: 'white', marginHorizontal: 12, marginVertical: 6, padding: 12, borderRadius: 10, elevation: 2 },

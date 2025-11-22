@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, RefreshControl, ActivityIndicator, Alert, Animated } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, DrawerActions } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ApiService from '../../services/api';
 import type { AppStackParamList } from '../../navigation/RootNavigator';
 import BottomActionSheet, { ActionSheetAction } from '../../components/BottomActionSheet';
@@ -50,7 +50,6 @@ export default function OrdersListScreen() {
   const [query, setQuery] = useState('');
   const [dateStart, setDateStart] = useState<Date>(() => new Date(Date.now() - 5 * 24 * 3600 * 1000)); // Changed from 7 to 5 days
   const [dateEnd, setDateEnd] = useState<Date>(() => new Date());
-  const [mode, setMode] = useState<'cepat' | 'normal'>('cepat'); // Mode selector state
 
   const [allItems, setAllItems] = useState<OrderCard[]>([]);
   const [visibleItems, setVisibleItems] = useState<OrderCard[]>([]);
@@ -88,7 +87,14 @@ export default function OrdersListScreen() {
     try {
       const start = unix(dateStart); const end = unix(dateEnd);
       const shop = selectedShopId || 0;
-      // Use mode state (cepat or normal) to fetch orders
+
+      // Map frontend status to backend mode parameter
+      // SEMUA -> normal (fetch all)
+      // Other statuses -> send status directly to backend for filtering
+      const mode = status === 'SEMUA' ? 'normal' : status.replace(/ /g, '_');
+
+      console.log('[OrdersListScreen] Fetching orders with status:', status, 'mode:', mode);
+
       const res = await ApiService.authenticatedRequest(`/get/ecommerce/order/date/${start}/${end}?id_ecommerce=${shop}&mode=${mode}&timestamp=${Math.floor(Date.now()/1000)}`);
       if (res?.status && Array.isArray(res.data)) {
         const mapped: OrderCard[] = res.data.map((rd: any) => {
@@ -130,10 +136,8 @@ export default function OrdersListScreen() {
           };
         });
 
-        // Debug: Log unique statuses
-        const uniqueStatuses = new Set(mapped.map(m => m.status));
-        console.log('[OrdersListScreen] Unique statuses from API:', Array.from(uniqueStatuses));
         console.log('[OrdersListScreen] Total orders fetched:', mapped.length);
+        console.log('[OrdersListScreen] Status filter:', status);
 
         setAllItems(mapped);
         const initial = mapped.slice(0, PAGE_SIZE);
@@ -152,7 +156,7 @@ export default function OrdersListScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [dateStart, dateEnd, selectedShopId, shops, mode]);
+  }, [dateStart, dateEnd, selectedShopId, shops, status]);
 
   useEffect(() => { fetchAccess(); fetchShops(); }, [fetchAccess, fetchShops]);
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
@@ -170,20 +174,15 @@ export default function OrdersListScreen() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    // Normalize status comparison - trim and uppercase both sides
-    const base = visibleItems.filter(it => {
-      if (status === 'SEMUA') return true;
-      const itemStatus = (it.status || '').trim().toUpperCase();
-      const filterStatus = status.trim().toUpperCase();
-      return itemStatus === filterStatus;
-    });
-    if (!q) return base;
-    return base.filter(it =>
+    // Backend already filters by status, so we only need to filter by search query
+    // No need to filter by status again in frontend
+    if (!q) return visibleItems;
+    return visibleItems.filter(it =>
       it.id.toLowerCase().includes(q) ||
       (it.invoice || '').toLowerCase().includes(q) ||
       (it.ecommerce_name || '').toLowerCase().includes(q)
     );
-  }, [query, visibleItems, status]);
+  }, [query, visibleItems]);
 
   // Selection handlers
   const toggleSelection = (id: string) => {
@@ -589,6 +588,18 @@ export default function OrdersListScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Header with Hamburger Menu */}
+      <View style={[styles.header, { paddingTop: insets.top }]}>
+        <TouchableOpacity
+          style={styles.hamburgerButton}
+          onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
+        >
+          <Ionicons name="menu" size={28} color="#f59e0b" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Pesanan</Text>
+        <View style={styles.headerRight} />
+      </View>
+
       {/* Selection mode bar */}
       {selectionMode && (
         <View style={styles.selectionBar}>
@@ -641,17 +652,30 @@ export default function OrdersListScreen() {
       </View>
 
       {/* Orders */}
-      <FlatList
-        data={filtered}
-        keyExtractor={(it) => `${it.id}-${it.id_ecommerce}`}
-        renderItem={renderItem}
-        onEndReached={loadMore}
-        onEndReachedThreshold={0.5}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        ListFooterComponent={
-          <View style={{ paddingVertical: 12 }}>{loading && <ActivityIndicator />}</View>
-        }
-      />
+      {loading && visibleItems.length === 0 ? (
+        // Show full-screen loading indicator when fetching initial data
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#007AFF" />
+          <Text style={styles.loadingText}>Loading orders...</Text>
+          {status === 'SEMUA' && (
+            <Text style={styles.loadingSubtext}>
+              Fetching all orders may take a moment
+            </Text>
+          )}
+        </View>
+      ) : (
+        <FlatList
+          data={filtered}
+          keyExtractor={(it) => `${it.id}-${it.id_ecommerce}`}
+          renderItem={renderItem}
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.5}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          ListFooterComponent={
+            <View style={{ paddingVertical: 12 }}>{loading && <ActivityIndicator />}</View>
+          }
+        />
+      )}
 
       {/* Shop quick toggles */}
       {!selectionMode && (
@@ -730,6 +754,19 @@ export default function OrdersListScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F9FAFB' },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: 'white',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb'
+  },
+  hamburgerButton: { padding: 5 },
+  headerTitle: { fontSize: 18, fontWeight: '600', color: '#111827', flex: 1, textAlign: 'center' },
+  headerRight: { width: 38 },
   selectionBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -935,6 +972,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  loadingSubtext: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
   },
 });
 

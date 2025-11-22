@@ -101,8 +101,20 @@ export default function App(): JSX.Element {
 
 // Register global 401/403 handler to auto-redirect to login
 ApiService.setAuthErrorHandler(() => {
-  const { useAuth } = require('./context/AuthContext');
-  try { const { signOut } = useAuth(); signOut(); } catch {}
+  console.log('🚨 [AUTH-ERROR-HANDLER] Token expired or unauthorized - triggering logout');
+
+  // Use the global signOut reference from AuthContext
+  const { getGlobalSignOut } = require('./context/AuthContext');
+  const signOut = getGlobalSignOut();
+
+  if (signOut) {
+    console.log('🚨 [AUTH-ERROR-HANDLER] Calling signOut...');
+    signOut().catch((error: any) => {
+      console.error('❌ [AUTH-ERROR-HANDLER] Error during signOut:', error);
+    });
+  } else {
+    console.error('❌ [AUTH-ERROR-HANDLER] signOut function not available yet');
+  }
 });
 
 const styles = StyleSheet.create({

@@ -108,8 +108,7 @@ const Settingscreen = ({ navigation }: Props): JSX.Element => {
   const loadSettings = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/get/settings`);
-      const result = await response.json();
+      const result = await ApiService.get('/get/settings');
 
       if (result.status && Array.isArray(result.data)) {
         const settings = result.data;
@@ -201,8 +200,7 @@ const Settingscreen = ({ navigation }: Props): JSX.Element => {
         }
 
         // Load Kolom Penjualan
-        const pjResponse = await fetch(`${API_BASE_URL}/get/penjualan/columns`);
-        const pjResult = await pjResponse.json();
+        const pjResult = await ApiService.get('/get/penjualan/columns');
         if (pjResult.status && Array.isArray(pjResult.data)) {
           const columns: { [key: string]: boolean } = {};
           pjResult.data.forEach((col: string) => {
@@ -218,8 +216,7 @@ const Settingscreen = ({ navigation }: Props): JSX.Element => {
 
       // Load TikTok categories list
       try {
-        const tiktokResponse = await fetch(`${API_BASE_URL}/get/tiktok/categories`);
-        const tiktokResult = await tiktokResponse.json();
+        const tiktokResult = await ApiService.get('/get/tiktok/categories');
         if (tiktokResult.status && Array.isArray(tiktokResult.data)) {
           setTiktokCategories(tiktokResult.data);
         }

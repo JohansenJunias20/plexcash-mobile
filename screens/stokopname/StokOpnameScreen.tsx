@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   RefreshControl,
   KeyboardAvoidingView,
   Platform,
+  FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import ApiService from '../../services/api';
@@ -76,6 +77,7 @@ const StokOpnameScreen = ({ navigation }: any) => {
     if (mode === 'list') {
       loadStokOpnameList();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
   // Reset search when modal opens/closes
@@ -359,6 +361,37 @@ const StokOpnameScreen = ({ navigation }: any) => {
     setMode('create');
   };
 
+  // Memoized render functions for better performance
+  const renderStokOpnameItem = useCallback(({ item }: { item: StokOpname }) => (
+    <TouchableOpacity
+      style={styles.listCard}
+      onPress={() => loadStokOpname(item.id, item.tanggal)}
+    >
+      <View style={styles.listCardHeader}>
+        <Text style={styles.listCardId}>ID: {item.id}</Text>
+        <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+      </View>
+      <Text style={styles.listCardDate}>
+        {formatDate(item.tanggal)}
+      </Text>
+      {item.user && (
+        <Text style={styles.listCardUser}>User: {item.user}</Text>
+      )}
+    </TouchableOpacity>
+  ), []);
+
+  const renderEmptyList = useMemo(() => (
+    <View style={styles.emptyState}>
+      <Ionicons name="document-text-outline" size={64} color="#D1D5DB" />
+      <Text style={styles.emptyStateText}>Belum ada stok opname</Text>
+      <TouchableOpacity style={styles.emptyStateButton} onPress={handleNewStokOpname}>
+        <Text style={styles.emptyStateButtonText}>Buat Stok Opname Baru</Text>
+      </TouchableOpacity>
+    </View>
+  ), []);
+
+  const keyExtractor = useCallback((item: StokOpname) => item.id, []);
+
   if (mode === 'list') {
     return (
       <View style={styles.container}>
@@ -372,41 +405,20 @@ const StokOpnameScreen = ({ navigation }: any) => {
           </TouchableOpacity>
         </View>
 
-        <ScrollView
-          style={styles.content}
+        <FlatList
+          data={stokOpnameList}
+          renderItem={renderStokOpnameItem}
+          keyExtractor={keyExtractor}
+          contentContainerStyle={styles.content}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={loadStokOpnameList} />
           }
-        >
-          {stokOpnameList.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Ionicons name="document-text-outline" size={64} color="#D1D5DB" />
-              <Text style={styles.emptyStateText}>Belum ada stok opname</Text>
-              <TouchableOpacity style={styles.emptyStateButton} onPress={handleNewStokOpname}>
-                <Text style={styles.emptyStateButtonText}>Buat Stok Opname Baru</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            stokOpnameList.map((stokop) => (
-              <TouchableOpacity
-                key={stokop.id}
-                style={styles.listCard}
-                onPress={() => loadStokOpname(stokop.id, stokop.tanggal)}
-              >
-                <View style={styles.listCardHeader}>
-                  <Text style={styles.listCardId}>ID: {stokop.id}</Text>
-                  <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
-                </View>
-                <Text style={styles.listCardDate}>
-                  {formatDate(stokop.tanggal)}
-                </Text>
-                {stokop.user && (
-                  <Text style={styles.listCardUser}>User: {stokop.user}</Text>
-                )}
-              </TouchableOpacity>
-            ))
-          )}
-        </ScrollView>
+          ListEmptyComponent={renderEmptyList}
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          removeClippedSubviews={true}
+        />
       </View>
     );
   }
@@ -622,23 +634,20 @@ const StokOpnameScreen = ({ navigation }: any) => {
               />
             </View>
 
-            <ScrollView style={styles.searchResults} keyboardShouldPersistTaps="handled">
-              {searchQuery.length < 2 ? (
-                <View style={styles.searchEmpty}>
-                  <Text style={styles.searchEmptyText}>Ketik minimal 2 karakter untuk mencari</Text>
-                </View>
-              ) : searchLoading ? (
-                <View style={styles.searchLoading}>
-                  <ActivityIndicator size="large" color="#f59e0b" />
-                </View>
-              ) : searchResults.length === 0 ? (
-                <View style={styles.searchEmpty}>
-                  <Text style={styles.searchEmptyText}>Barang tidak ditemukan</Text>
-                </View>
-              ) : (
-                searchResults.map((barang) => (
+            {searchQuery.length < 2 ? (
+              <View style={styles.searchEmpty}>
+                <Text style={styles.searchEmptyText}>Ketik minimal 2 karakter untuk mencari</Text>
+              </View>
+            ) : searchLoading ? (
+              <View style={styles.searchLoading}>
+                <ActivityIndicator size="large" color="#f59e0b" />
+              </View>
+            ) : (
+              <FlatList
+                data={searchResults}
+                keyExtractor={(item) => item.id.toString()}
+                renderItem={({ item: barang }) => (
                   <TouchableOpacity
-                    key={barang.id}
                     style={styles.searchResultItem}
                     onPress={() => handleSelectBarang(barang)}
                   >
@@ -651,9 +660,20 @@ const StokOpnameScreen = ({ navigation }: any) => {
                     </View>
                     <Ionicons name="add-circle-outline" size={24} color="#f59e0b" />
                   </TouchableOpacity>
-                ))
-              )}
-            </ScrollView>
+                )}
+                ListEmptyComponent={
+                  <View style={styles.searchEmpty}>
+                    <Text style={styles.searchEmptyText}>Barang tidak ditemukan</Text>
+                  </View>
+                }
+                style={styles.searchResults}
+                keyboardShouldPersistTaps="handled"
+                initialNumToRender={10}
+                maxToRenderPerBatch={5}
+                windowSize={3}
+                removeClippedSubviews={true}
+              />
+            )}
           </View>
         </KeyboardAvoidingView>
       </Modal>

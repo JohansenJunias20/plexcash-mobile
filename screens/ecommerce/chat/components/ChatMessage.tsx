@@ -141,18 +141,6 @@ const ChatMessage: React.FC<IChatMessageProps> = ({ message, isCurrentUser }) =>
                 {message.msg.product_price}
               </Text>
             )}
-
-            {/* View Product Button */}
-            {message.msg.product_image && (
-              <TouchableOpacity
-                style={styles.viewProductButton}
-                onPress={() => handleShowImagePreview(message.msg.product_image!)}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="image-outline" size={16} color="#FFFFFF" />
-                <Text style={styles.viewProductText}>View Product</Text>
-              </TouchableOpacity>
-            )}
           </View>
         );
 

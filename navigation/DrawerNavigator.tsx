@@ -7,17 +7,28 @@ import CustomDrawerContent from './CustomDrawerContent';
 import LoginScreen from '../components/LoginScreen';
 import MainScreen from '../components/MainScreen';
 import BarangListScreen from '../screens/barang/BarangListScreen';
+import BarangEditScreen from '../screens/barang/BarangEditScreen';
+import KartustokScreen from '../screens/barang/KartustokScreen';
+import StockDetailsScreen from '../screens/barang/StockDetailsScreen';
+import BulkBarcodeScreen from '../screens/barang/BulkBarcodeScreen';
+import NewOnlineScreen from '../screens/barang/NewOnlineScreen';
 import POSKasirScreen from '../screens/pos/POSKasirScreen';
 import OrdersListScreen from '../screens/orders/OrdersListScreen';
+import OrderDetailScreen from '../screens/orders/OrderDetailScreen';
+import LabelPreviewScreen from '../screens/orders/LabelPreviewScreen';
 import ScanOutScreen from '../screens/scanout/ScanOutScreen';
 import UserListScreen from '../screens/user/UserListScreen';
+import UserEditScreen from '../screens/user/UserEditScreen';
 import BundlingListScreen from '../screens/bundling/BundlingListScreen';
+import BundlingEditScreen from '../screens/bundling/BundlingEditScreen';
 import StokOpnameScreen from '../screens/stokopname/StokOpnameScreen';
 import Settingscreen from '../screens/Settingscreen';
 
 // MASTER Section Imports
 import SupplierListScreen from '../screens/supplier/SupplierListScreen';
+import SupplierEditScreen from '../screens/supplier/SupplierEditScreen';
 import CustomerListScreen from '../screens/customer/CustomerListScreen';
+import CustomerEditScreen from '../screens/customer/CustomerEditScreen';
 import SatuanListScreen from '../screens/master/SatuanListScreen';
 import BaganAkunListScreen from '../screens/master/BaganAkunListScreen';
 import UploadScreen from '../screens/master/UploadScreen';
@@ -35,6 +46,7 @@ import PembelianDPBeliScreen from '../screens/transaksi/pembelian/PembelianDPBel
 // TRANSAKSI Section - Penjualan
 import PenjualanTambahScreen from '../screens/transaksi/penjualan/PenjualanTambahScreen';
 import PenjualanSearchScreen from '../screens/transaksi/penjualan/PenjualanSearchScreen';
+import PenjualanRincianScreen from '../screens/transaksi/penjualan/PenjualanRincianScreen';
 import PenjualanPelunasanScreen from '../screens/transaksi/penjualan/PenjualanPelunasanScreen';
 import PenjualanReturScreen from '../screens/transaksi/penjualan/PenjualanReturScreen';
 
@@ -56,7 +68,9 @@ import BookingOrdersScreen from '../screens/ecommerce/BookingOrdersScreen';
 import IntegrationScreen from '../screens/ecommerce/IntegrationScreen';
 import EcommerceToolsProductScreen from '../screens/ecommerce/tools/EcommerceToolsProductScreen';
 import NaikkanProdukScreen from '../screens/ecommerce/NaikkanProdukScreen';
+import BoostProdukScreen from '../screens/ecommerce/BoostProdukScreen';
 import ProsesOtomatisScreen from '../screens/ecommerce/ProsesOtomatisScreen';
+import ProsesOtomatisConfigScreen from '../screens/ecommerce/ProsesOtomatisConfigScreen';
 
 // LAPORAN Section
 import NeracaScreen from '../screens/laporan/NeracaScreen';
@@ -92,13 +106,58 @@ const DrawerNavigatorContent = () => {
 
       {/* MASTER Section */}
       <Drawer.Screen name="BarangList" component={BarangListScreen} />
+      <Drawer.Screen
+        name="BarangEdit"
+        component={BarangEditScreen}
+        options={{ drawerItemStyle: { display: 'none' } }}
+      />
+      <Drawer.Screen
+        name="Kartustok"
+        component={KartustokScreen}
+        options={{ drawerItemStyle: { display: 'none' } }}
+      />
+      <Drawer.Screen
+        name="StockDetails"
+        component={StockDetailsScreen}
+        options={{ drawerItemStyle: { display: 'none' } }}
+      />
+      <Drawer.Screen
+        name="BulkBarcode"
+        component={BulkBarcodeScreen}
+        options={{ drawerItemStyle: { display: 'none' } }}
+      />
+      <Drawer.Screen
+        name="NewOnline"
+        component={NewOnlineScreen}
+        options={{ drawerItemStyle: { display: 'none' } }}
+      />
       <Drawer.Screen name="SupplierList" component={SupplierListScreen} />
+      <Drawer.Screen
+        name="SupplierEdit"
+        component={SupplierEditScreen}
+        options={{ drawerItemStyle: { display: 'none' } }}
+      />
       <Drawer.Screen name="CustomerList" component={CustomerListScreen} />
+      <Drawer.Screen
+        name="CustomerEdit"
+        component={CustomerEditScreen}
+        options={{ drawerItemStyle: { display: 'none' } }}
+      />
       <Drawer.Screen name="SatuanList" component={SatuanListScreen} />
       <Drawer.Screen name="BaganAkunList" component={BaganAkunListScreen} />
       <Drawer.Screen name="UserList" component={UserListScreen} />
+      <Drawer.Screen
+        name="UserEdit"
+        component={UserEditScreen}
+        options={{ drawerItemStyle: { display: 'none' } }}
+      />
       <Drawer.Screen name="UploadScreen" component={UploadScreen} />
       <Drawer.Screen name="BundlingList" component={BundlingListScreen} />
+      <Drawer.Screen
+        name="BundlingEdit"
+        component={BundlingEditScreen}
+        options={{ drawerItemStyle: { display: 'none' } }}
+      />
       <Drawer.Screen name="ImportBarang" component={ImportBarangScreen} />
       <Drawer.Screen name="WarehouseList" component={WarehouseListScreen} />
 
@@ -109,7 +168,7 @@ const DrawerNavigatorContent = () => {
         name="PembelianRincian"
         component={PembelianRincianScreen}
         options={{
-          drawerItemStyle: { display: 'none' } // Hide from drawer menu
+          drawerItemStyle: { display: 'none' }
         }}
       />
       <Drawer.Screen name="PembelianPelunasan" component={PembelianPelunasanScreen} />
@@ -119,6 +178,13 @@ const DrawerNavigatorContent = () => {
       {/* TRANSAKSI Section - Penjualan */}
       <Drawer.Screen name="PenjualanTambah" component={PenjualanTambahScreen} />
       <Drawer.Screen name="PenjualanSearch" component={PenjualanSearchScreen} />
+      <Drawer.Screen
+        name="PenjualanRincian"
+        component={PenjualanRincianScreen}
+        options={{
+          drawerItemStyle: { display: 'none' }
+        }}
+      />
       <Drawer.Screen name="PenjualanPelunasan" component={PenjualanPelunasanScreen} />
       <Drawer.Screen name="PenjualanRetur" component={PenjualanReturScreen} />
 
@@ -133,6 +199,16 @@ const DrawerNavigatorContent = () => {
 
       {/* ECOMMERCE Section */}
       <Drawer.Screen name="Pesanan" component={OrdersListScreen} />
+      <Drawer.Screen
+        name="OrderDetail"
+        component={OrderDetailScreen}
+        options={{ drawerItemStyle: { display: 'none' } }}
+      />
+      <Drawer.Screen
+        name="LabelPreview"
+        component={LabelPreviewScreen}
+        options={{ drawerItemStyle: { display: 'none' } }}
+      />
       <Drawer.Screen name="EcommerceChat" component={EcommerceChatScreen} />
       <Drawer.Screen
         name="EcommerceChatDetail"
@@ -146,7 +222,17 @@ const DrawerNavigatorContent = () => {
       <Drawer.Screen name="Integration" component={IntegrationScreen} />
       <Drawer.Screen name="EcommerceToolsProduct" component={EcommerceToolsProductScreen} />
       <Drawer.Screen name="NaikkanProduk" component={NaikkanProdukScreen} />
+      <Drawer.Screen
+        name="BoostProduk"
+        component={BoostProdukScreen}
+        options={{ drawerItemStyle: { display: 'none' } }}
+      />
       <Drawer.Screen name="ProsesOtomatis" component={ProsesOtomatisScreen} />
+      <Drawer.Screen
+        name="ProsesOtomatisConfig"
+        component={ProsesOtomatisConfigScreen}
+        options={{ drawerItemStyle: { display: 'none' } }}
+      />
 
       {/* LAPORAN Section */}
       <Drawer.Screen name="Neraca" component={NeracaScreen} />
