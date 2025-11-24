@@ -10,8 +10,9 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, DrawerActions } from '@react-navigation/native';
 import { API_BASE_URL } from '../../../services/api';
 import { getTokenAuth } from '../../../services/token';
 import IntervalDatePicker from '../../../components/pembelian/IntervalDatePicker';
@@ -463,12 +464,23 @@ export default function PembelianSearchScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
+      {/* Header with Hamburger Menu */}
+      <View style={styles.topHeader}>
+        <TouchableOpacity
+          style={styles.hamburgerButton}
+          onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
+        >
+          <Ionicons name="menu" size={28} color="#f59e0b" />
+        </TouchableOpacity>
+        <Text style={styles.topHeaderTitle}>Pembelian</Text>
+        <View style={styles.headerRight} />
+      </View>
+
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTop}>
           <View>
-            <Text style={styles.headerTitle}>Pembelian</Text>
             <Text style={styles.headerSubtitle}>
               {formatDate(intervalDate.start)} - {formatDate(intervalDate.end)}
             </Text>
@@ -571,16 +583,28 @@ export default function PembelianSearchScreen() {
         }}
         onSelect={handleSupplierSelect}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    marginTop: 24,
     flex: 1,
     backgroundColor: '#F9FAFB',
   },
+  topHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: 'white',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb'
+  },
+  hamburgerButton: { padding: 5 },
+  topHeaderTitle: { fontSize: 18, fontWeight: '600', color: '#111827', flex: 1, textAlign: 'center' },
+  headerRight: { width: 38 },
   header: {
     backgroundColor: 'white',
     padding: 16,

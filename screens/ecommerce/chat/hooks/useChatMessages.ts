@@ -55,108 +55,71 @@ export const useChatMessages = (
         // Handle case where data.data might not be an array
         const messagesArray = Array.isArray(data.data) ? data.data : [];
 
-        // Group messages by message_id to combine product image + text
-        const messageGroups = new Map<string, any[]>();
-        messagesArray.forEach((item: any) => {
-          const msgId = item.message_id || item.id;
-          if (!messageGroups.has(msgId)) {
-            messageGroups.set(msgId, []);
-          }
-          messageGroups.get(msgId)!.push(item);
-        });
-
         // Transform API data to expected format
-        const transformedMessages: any[] = [];
-
-        messageGroups.forEach((items, msgId) => {
-          // If single message, process normally
-          if (items.length === 1) {
-            const item = items[0];
-
-            // If msg already exists and is valid, use it
-            if (item.msg && typeof item.msg === 'object') {
-              transformedMessages.push(item);
-              return;
-            }
-
-            // SPECIAL CASE: Lazada/Tiktok product messages come as single message with type="product"
-            // and already have product_image, product_price, product_url fields
-            if (item.type === 'product') {
-              const msg: any = {
-                type: 'product',
-                text: item.content || '',
-                product_image: item.product_image || '',
-                product_price: item.product_price || '',
-                product_url: item.product_url || '',
-                product_id: item.product_id || '',
-              };
-
-              console.log('🛍️ [useChatMessages] Lazada/Tiktok product message:', {
-                message_id: msgId,
-                product_name: msg.text,
-                product_image: msg.product_image,
-                product_price: msg.product_price,
-                has_image: !!msg.product_image,
-              });
-
-              transformedMessages.push({
-                ...item,
-                msg,
-              });
-              return;
-            }
-
-            // Transform flat structure to nested structure
-            const msg: any = {
-              type: item.type === 'chat' ? 'text' : item.type,
-              text: item.content || item.msg || item.msg_shopee || '',
-            };
-
-            // Add type-specific fields
-            if (item.type === 'image') {
-              msg.image = item.content || item.image || item.image_url;
-            } else if (item.type === 'sticker') {
-              msg.sticker_url = item.content || item.sticker_url || item.image_url;
-              msg.text = ''; // Stickers don't have text
-            } else if (item.type === 'order') {
-              msg.order_id = item.order_id;
-            } else if (item.type === 'refund') {
-              msg.refund_id = item.refund_id;
-            }
-
-            transformedMessages.push({
-              ...item,
-              msg,
-            });
+        // DO NOT group by message_id - each message should be displayed separately
+        const transformedMessages: any[] = messagesArray.map((item: any) => {
+          // If msg already exists and is valid, use it
+          if (item.msg && typeof item.msg === 'object') {
+            return item;
           }
-          // If multiple messages with same ID, it's a product (item type)
-          else {
-            const imageMsg = items.find(i => i.type === 'image');
-            const textMsg = items.find(i => i.type === 'chat');
-            const baseItem = items[0];
 
-            // Create product message
+          // SPECIAL CASE: Lazada/Tiktok product messages come as single message with type="product"
+          // and already have product_image, product_price, product_url fields
+          if (item.type === 'product') {
             const msg: any = {
               type: 'product',
-              text: textMsg?.content || '',
-              product_image: imageMsg?.content || '',
-              product_url: imageMsg?.content || '',
-              product_id: baseItem.raw_content?.item_id?.toString() || '',
+              text: item.content || '',
+              product_image: item.product_image || '',
+              product_price: item.product_price || '',
+              product_url: item.product_url || '',
+              product_id: item.product_id || '',
             };
 
-            console.log('🛍️ [useChatMessages] Product message created:', {
-              message_id: msgId,
+            console.log('🛍️ [useChatMessages] Lazada/Tiktok product message:', {
+              message_id: item.message_id || item.id,
               product_name: msg.text,
               product_image: msg.product_image,
-              has_image: !!imageMsg,
-              has_text: !!textMsg,
+              product_price: msg.product_price,
+              has_image: !!msg.product_image,
             });
 
-            transformedMessages.push({
-              ...baseItem,
+            return {
+              ...item,
               msg,
-            });
+            };
           }
+
+          // Transform flat structure to nested structure
+          // Detect sticker: backend sends sticker as type="image" but with sticker_url field or message_type="sticker"
+          const isSticker = (item as any).sticker_url || (item as any).message_type === 'sticker';
+
+          const msg: any = {
+            type: item.type === 'chat' ? 'text' : isSticker ? 'sticker' : item.type,
+            text: item.content || item.msg || item.msg_shopee || '',
+          };
+
+          // Add type-specific fields
+          if (isSticker) {
+            // Sticker: use sticker_url or content
+            msg.sticker_url = item.content || (item as any).sticker_url || (item as any).image_url;
+            msg.text = ''; // Stickers don't have text
+          } else if (item.type === 'image') {
+            // Regular image
+            msg.image = item.content || (item as any).image || (item as any).image_url;
+          } else if (item.type === 'sticker') {
+            // Fallback for old sticker format (should not happen with current backend)
+            msg.sticker_url = item.content || (item as any).sticker_url || (item as any).image_url;
+            msg.text = ''; // Stickers don't have text
+          } else if (item.type === 'order') {
+            msg.order_id = (item as any).order_id;
+          } else if (item.type === 'refund') {
+            msg.refund_id = (item as any).refund_id;
+          }
+
+          return {
+            ...item,
+            msg,
+          };
         });
 
         // Sort by timestamp (oldest first for chat display)

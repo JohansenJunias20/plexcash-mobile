@@ -140,15 +140,22 @@ class LoadingTimeEstimator {
    */
   calculateProgress(startTime: number, estimate: LoadingEstimate): LoadingProgress {
     const elapsedMs = Date.now() - startTime;
-    const elapsedSeconds = Math.round(elapsedMs / 1000);
+    // Use decimal seconds for smoother progress updates
+    const elapsedSeconds = parseFloat((elapsedMs / 1000).toFixed(1));
     const estimatedTotalSeconds = estimate.estimatedSeconds;
-    const estimatedRemainingSeconds = Math.max(0, estimatedTotalSeconds - elapsedSeconds);
-    const progressPercentage = Math.min(95, Math.round((elapsedSeconds / estimatedTotalSeconds) * 100));
+
+    // Calculate remaining seconds with decimal precision
+    const remainingSeconds = Math.max(0, estimatedTotalSeconds - elapsedSeconds);
+    const estimatedRemainingSeconds = Math.ceil(remainingSeconds);
+
+    // Calculate progress percentage with smooth updates (cap at 95%)
+    const rawPercentage = (elapsedSeconds / estimatedTotalSeconds) * 100;
+    const progressPercentage = Math.min(95, Math.round(rawPercentage));
 
     let status: LoadingProgress['status'] = 'loading';
     if (elapsedSeconds < 1) {
       status = 'starting';
-    } else if (progressPercentage >= 80) {
+    } else if (progressPercentage >= 90) {
       status = 'almost-done';
     } else if (progressPercentage >= 95) {
       status = 'finishing';

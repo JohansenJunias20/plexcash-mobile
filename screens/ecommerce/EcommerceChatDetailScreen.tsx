@@ -49,6 +49,10 @@ export default function EcommerceChatDetailScreen() {
   const { messages, loading, error, sendMessage, sendImage, sendProduct, refresh } =
     useChatMessages(msgId, idEcommerce, buyer?.id);
 
+  // Track if this is initial load to prevent auto-scroll loop
+  const isInitialLoadRef = useRef(true);
+  const previousMessageCountRef = useRef(0);
+
   // Order list state
   const [showOrderList, setShowOrderList] = useState(false);
   const [orderListData, setOrderListData] = useState<IOrder[]>([]);
@@ -106,12 +110,26 @@ export default function EcommerceChatDetailScreen() {
     refresh();
   }, [msgId, idEcommerce]);
 
-  // Auto-scroll to bottom when messages change
+  // Auto-scroll to bottom ONLY when:
+  // 1. Initial load (first time opening chat)
+  // 2. New message received (message count increased)
+  // NOT when user manually scrolls up
   useEffect(() => {
     if (messages.length > 0 && flatListRef.current) {
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
+      // Check if this is initial load or new message
+      const isNewMessage = messages.length > previousMessageCountRef.current;
+
+      if (isInitialLoadRef.current || isNewMessage) {
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: !isInitialLoadRef.current });
+        }, 100);
+
+        // Mark initial load as complete
+        isInitialLoadRef.current = false;
+      }
+
+      // Update previous message count
+      previousMessageCountRef.current = messages.length;
     }
   }, [messages]);
 
@@ -454,11 +472,6 @@ export default function EcommerceChatDetailScreen() {
           contentContainerStyle={
             messages.length === 0 ? styles.emptyList : styles.messagesList
           }
-          onContentSizeChange={() => {
-            if (messages.length > 0) {
-              flatListRef.current?.scrollToEnd({ animated: false });
-            }
-          }}
           keyboardDismissMode="interactive"
           keyboardShouldPersistTaps="handled"
         />

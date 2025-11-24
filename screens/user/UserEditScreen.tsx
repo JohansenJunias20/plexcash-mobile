@@ -317,7 +317,7 @@ export default function UserEditScreen({ route, navigation }: Props): JSX.Elemen
         });
         if (res?.status) {
           Alert.alert('Success', 'User berhasil diundang');
-          navigation.goBack();
+          navigation.navigate('UserList');
         } else {
           Alert.alert('Error', res?.reason || 'Gagal mengundang user');
         }
@@ -333,7 +333,7 @@ export default function UserEditScreen({ route, navigation }: Props): JSX.Elemen
         });
         if (res?.status) {
           Alert.alert('Success', 'Permissions updated');
-          navigation.goBack();
+          navigation.navigate('UserList');
         } else {
           Alert.alert('Error', res?.reason || 'Failed to update permissions');
         }
@@ -365,7 +365,7 @@ export default function UserEditScreen({ route, navigation }: Props): JSX.Elemen
       });
       if (res?.status) {
         Alert.alert('Deleted', 'User berhasil dihapus');
-        navigation.goBack();
+        navigation.navigate('UserList');
       } else {
         Alert.alert('Error', res?.reason || 'Gagal menghapus user');
       }

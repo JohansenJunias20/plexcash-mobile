@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,11 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { API_BASE_URL } from '../services/api';
 import { getTokenAuth } from '../services/token';
+import {
+  loadingTimeEstimator,
+  LoadingEstimate,
+  LoadingProgress,
+} from '../services/ecommerce/loadingTimeEstimator';
 
 export interface BarangItem {
   id: number;
@@ -24,6 +29,9 @@ export interface BarangItem {
   stok?: number;
   hargajual?: number;
   hpp?: number;
+  // Wholesale pricing fields
+  harga_grosir?: number;
+  qty_grosir?: number;
 }
 
 interface SearchBarangModalProps {
@@ -49,15 +57,126 @@ const SearchBarangModal: React.FC<SearchBarangModalProps> = ({
   const [selectedItems, setSelectedItems] = useState<BarangItem[]>([]);
   const [searchBy, setSearchBy] = useState<'nama' | 'sku'>('nama');
 
+  // Loading time estimation state
+  const [loadingEstimate, setLoadingEstimate] = useState<LoadingEstimate | null>(null);
+  const [loadingProgress, setLoadingProgress] = useState<LoadingProgress | null>(null);
+  const loadingStartTimeRef = useRef<number>(0);
+  const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Initialize loading time estimator
+  useEffect(() => {
+    loadingTimeEstimator.initialize();
+  }, []);
+
   useEffect(() => {
     if (visible) {
       // Reset state when modal opens
       setQuery('');
-      setItems([]);
       setSelectedItems([]);
       setSearchBy('nama');
+
+      // Auto-load all items when modal opens
+      loadAllItems();
+    } else {
+      // Clear progress tracking when modal closes
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+        progressIntervalRef.current = null;
+      }
+      setLoadingProgress(null);
+      setLoadingEstimate(null);
     }
   }, [visible]);
+
+  // Load all items when modal opens (auto-load)
+  const loadAllItems = async () => {
+    try {
+      setLoading(true);
+
+      // Get initial estimate and start tracking
+      const estimate = loadingTimeEstimator.getEstimate();
+      setLoadingEstimate(estimate);
+      loadingStartTimeRef.current = Date.now();
+
+      console.log('📦 [SearchBarang] Auto-loading all items...');
+      console.log('⏱️ [SearchBarang] Estimated loading time:', {
+        seconds: estimate.estimatedSeconds,
+        range: `${estimate.estimatedRange.min}-${estimate.estimatedRange.max}s`,
+        confidence: estimate.confidence,
+      });
+
+      // Start progress tracking
+      progressIntervalRef.current = setInterval(() => {
+        const progress = loadingTimeEstimator.calculateProgress(
+          loadingStartTimeRef.current,
+          estimate
+        );
+        setLoadingProgress(progress);
+      }, 500);
+
+      const token = await getTokenAuth();
+
+      if (!token) {
+        Alert.alert('Error', 'Session expired. Please login again.');
+        return;
+      }
+
+      // Load all items (limit to 200 for performance)
+      const qs = new URLSearchParams();
+      qs.set('start', '0');
+      qs.set('end', '200');
+      qs.set('nama', ''); // Empty search = get all
+      qs.set('sku', '');
+
+      const url = `${API_BASE_URL}/get/masterbarang/search?${qs.toString()}`;
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const data = await res.json();
+
+      // Calculate actual loading time
+      const loadingDuration = Date.now() - loadingStartTimeRef.current;
+
+      if (data.status) {
+        console.log('✅ [SearchBarang] Items loaded:', data.data.length);
+        console.log('⏱️ [SearchBarang] Actual loading time:', (loadingDuration / 1000).toFixed(1), 'seconds');
+
+        // Record loading time for future estimates
+        await loadingTimeEstimator.recordLoadingTime(data.data.length, loadingDuration);
+
+        // Filter out excluded items
+        const filteredItems = data.data
+          .filter((item: any) => !excludeIds.includes(item.id))
+          .map((item: any) => ({
+            id: item.id,
+            nama: item.nama,
+            sku: item.sku,
+            kategori: item.kategori,
+            merk: item.merk,
+            satuan: item.satuan,
+            stok: Number(item.stok) || 0,
+            hargajual: Number(item.hargajual) || 0,
+            hpp: Number(item.hpp) || 0,
+          }));
+
+        setItems(filteredItems);
+      } else {
+        console.warn('Load all items error:', data.reason);
+        setItems([]);
+      }
+    } catch (error) {
+      console.error('Load all items error:', error);
+      Alert.alert('Error', 'Failed to load items');
+    } finally {
+      setLoading(false);
+      // Clear progress tracking
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+        progressIntervalRef.current = null;
+      }
+    }
+  };
 
   const searchItems = async (searchQuery: string = query) => {
     if (!searchQuery.trim()) {
@@ -67,8 +186,30 @@ const SearchBarangModal: React.FC<SearchBarangModalProps> = ({
 
     try {
       setLoading(true);
+
+      // Get initial estimate and start tracking
+      const estimate = loadingTimeEstimator.getEstimate();
+      setLoadingEstimate(estimate);
+      loadingStartTimeRef.current = Date.now();
+
+      console.log('📦 [SearchBarang] Searching items...');
+      console.log('⏱️ [SearchBarang] Estimated loading time:', {
+        seconds: estimate.estimatedSeconds,
+        range: `${estimate.estimatedRange.min}-${estimate.estimatedRange.max}s`,
+        confidence: estimate.confidence,
+      });
+
+      // Start progress tracking
+      progressIntervalRef.current = setInterval(() => {
+        const progress = loadingTimeEstimator.calculateProgress(
+          loadingStartTimeRef.current,
+          estimate
+        );
+        setLoadingProgress(progress);
+      }, 500);
+
       const token = await getTokenAuth();
-      
+
       if (!token) {
         Alert.alert('Error', 'Session expired. Please login again.');
         return;
@@ -77,7 +218,7 @@ const SearchBarangModal: React.FC<SearchBarangModalProps> = ({
       const qs = new URLSearchParams();
       qs.set('start', '0');
       qs.set('end', '50'); // Limit to 50 results for performance
-      
+
       if (searchBy === 'sku') {
         qs.set('sku', searchQuery);
         qs.set('nama', '');
@@ -93,7 +234,16 @@ const SearchBarangModal: React.FC<SearchBarangModalProps> = ({
 
       const data = await res.json();
 
+      // Calculate actual loading time
+      const loadingDuration = Date.now() - loadingStartTimeRef.current;
+
       if (data.status) {
+        console.log('✅ [SearchBarang] Items found:', data.data.length);
+        console.log('⏱️ [SearchBarang] Actual loading time:', (loadingDuration / 1000).toFixed(1), 'seconds');
+
+        // Record loading time for future estimates
+        await loadingTimeEstimator.recordLoadingTime(data.data.length, loadingDuration);
+
         // Filter out excluded items
         const filteredItems = data.data
           .filter((item: any) => !excludeIds.includes(item.id))
@@ -108,7 +258,7 @@ const SearchBarangModal: React.FC<SearchBarangModalProps> = ({
             hargajual: Number(item.hargajual) || 0,
             hpp: Number(item.hpp) || 0,
           }));
-        
+
         setItems(filteredItems);
       } else {
         console.warn('Search error:', data.reason);
@@ -119,6 +269,11 @@ const SearchBarangModal: React.FC<SearchBarangModalProps> = ({
       Alert.alert('Error', 'Failed to search items');
     } finally {
       setLoading(false);
+      // Clear progress tracking
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+        progressIntervalRef.current = null;
+      }
     }
   };
 
@@ -263,16 +418,59 @@ const SearchBarangModal: React.FC<SearchBarangModalProps> = ({
             {loading ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color="#f59e0b" />
-                <Text style={styles.loadingText}>Mencari...</Text>
+                <Text style={styles.loadingTitle}>Mencari barang...</Text>
+
+                {loadingProgress && (
+                  <View style={styles.progressContainer}>
+                    {/* Progress Bar */}
+                    <View style={styles.progressBarContainer}>
+                      <View
+                        style={[
+                          styles.progressBar,
+                          { width: `${loadingProgress.progressPercentage}%` }
+                        ]}
+                      />
+                    </View>
+
+                    {/* Progress Info */}
+                    <View style={styles.progressInfo}>
+                      <Text style={styles.progressText}>
+                        {loadingProgress.progressPercentage}%
+                      </Text>
+                      <Text style={styles.progressText}>
+                        {loadingProgress.elapsedSeconds}s / ~{loadingProgress.estimatedTotalSeconds}s
+                      </Text>
+                    </View>
+
+                    {/* Status Message */}
+                    <Text style={styles.statusText}>
+                      {loadingProgress.status === 'starting' && '🚀 Memulai pencarian...'}
+                      {loadingProgress.status === 'loading' && '⏳ Mencari data...'}
+                      {loadingProgress.status === 'almost-done' && '⚡ Hampir selesai...'}
+                      {loadingProgress.status === 'finishing' && '✨ Menyelesaikan...'}
+                    </Text>
+
+                    {loadingEstimate && (
+                      <Text style={styles.estimateText}>
+                        Estimasi: {loadingEstimate.estimatedRange.min}-{loadingEstimate.estimatedRange.max} detik ({loadingEstimate.confidence === 'high' ? '🎯 Akurat' : loadingEstimate.confidence === 'medium' ? '📊 Cukup Akurat' : '📈 Perkiraan'})
+                      </Text>
+                    )}
+                  </View>
+                )}
               </View>
             ) : items.length === 0 ? (
               <View style={styles.emptyContainer}>
-                <Ionicons name="search-outline" size={48} color="#D1D5DB" />
+                <Ionicons name="cube-outline" size={48} color="#D1D5DB" />
                 <Text style={styles.emptyText}>
                   {query.trim() === ''
-                    ? 'Masukkan kata kunci untuk mencari'
+                    ? 'Tidak ada barang tersedia'
                     : 'Tidak ada barang ditemukan'}
                 </Text>
+                {query.trim() === '' && (
+                  <Text style={styles.emptySubtext}>
+                    Silakan tambahkan barang di Master Barang terlebih dahulu
+                  </Text>
+                )}
               </View>
             ) : (
               <FlatList
@@ -405,6 +603,51 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6B7280',
   },
+  loadingTitle: {
+    marginTop: 16,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+  },
+  progressContainer: {
+    width: '100%',
+    marginTop: 24,
+    paddingHorizontal: 16,
+  },
+  progressBarContainer: {
+    height: 8,
+    backgroundColor: '#e5e7eb',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressBar: {
+    height: '100%',
+    backgroundColor: '#f59e0b',
+    borderRadius: 4,
+  },
+  progressInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  progressText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#666',
+  },
+  statusText: {
+    marginTop: 12,
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#f59e0b',
+    textAlign: 'center',
+  },
+  estimateText: {
+    marginTop: 8,
+    fontSize: 12,
+    color: '#999',
+    textAlign: 'center',
+  },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -415,6 +658,12 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 14,
     color: '#6B7280',
+    textAlign: 'center',
+  },
+  emptySubtext: {
+    marginTop: 8,
+    fontSize: 12,
+    color: '#D1D5DB',
     textAlign: 'center',
   },
   listContent: {

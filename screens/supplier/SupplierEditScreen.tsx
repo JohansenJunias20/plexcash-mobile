@@ -68,13 +68,13 @@ export default function SupplierEditScreen({ route, navigation }: Props): JSX.El
           method: 'POST',
           body: JSON.stringify({ data: [{ nama: model.nama, notelp: model.notelp, nokantor: model.nokantor, email: model.email }] })
         });
-        if (res?.status) { Alert.alert('Success', 'Supplier created'); navigation.goBack(); }
+        if (res?.status) { Alert.alert('Success', 'Supplier created'); navigation.navigate('SupplierList'); }
       } else {
         const res = await ApiService.authenticatedRequest('/supplier', {
           method: 'PATCH',
           body: JSON.stringify({ id: { key: 'id', value: id }, data: [{ nama: model.nama, notelp: model.notelp, nokantor: model.nokantor, email: model.email }] })
         });
-        if (res?.status) { Alert.alert('Success', 'Supplier updated'); navigation.goBack(); }
+        if (res?.status) { Alert.alert('Success', 'Supplier updated'); navigation.navigate('SupplierList'); }
       }
     } catch (e) {
       console.error('Save error', e);
@@ -97,7 +97,7 @@ export default function SupplierEditScreen({ route, navigation }: Props): JSX.El
         method: 'DELETE',
         body: JSON.stringify({ data: [{ id }] })
       });
-      if (res?.status) { Alert.alert('Deleted', 'Supplier deleted'); navigation.goBack(); }
+      if (res?.status) { Alert.alert('Deleted', 'Supplier deleted'); navigation.navigate('SupplierList'); }
     } catch (e) { console.error('Delete error', e); }
   };
 

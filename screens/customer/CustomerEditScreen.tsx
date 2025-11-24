@@ -52,7 +52,7 @@ export default function CustomerEditScreen({ route, navigation }: Props): JSX.El
         method: 'POST',
         body: JSON.stringify({ data: [{ nama: model.nama, notelp: model.notelp, alamat: model.alamat }] })
       });
-      if (res?.status) { Alert.alert('Success', 'Customer created'); navigation.goBack(); }
+      if (res?.status) { Alert.alert('Success', 'Customer created'); navigation.navigate('CustomerList'); }
     } catch (e) { console.error('Save error', e); }
     finally { setLoading(false); }
   };

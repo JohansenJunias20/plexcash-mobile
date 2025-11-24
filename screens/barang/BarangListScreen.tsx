@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, FlatList, StyleSheet, TextInput, TouchableOpacity, RefreshControl, ActivityIndicator, Alert, Modal, Pressable } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, DrawerActions } from '@react-navigation/native';
 import { AppStackParamList } from '../../navigation/RootNavigator';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { API_BASE_URL } from '../../services/api';
@@ -178,6 +179,11 @@ export default function BarangListScreen(): JSX.Element {
     }
   };
 
+  const formatCurrency = (value: number | null | undefined): string => {
+    if (value == null || value === 0) return 'Rp 0';
+    return `Rp ${value.toLocaleString('id-ID')}`;
+  };
+
   const renderItem = ({ item }: { item: Item }) => (
     <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('BarangEdit', { id: item.id })}>
       <View style={{ flex: 1 }}>
@@ -185,9 +191,10 @@ export default function BarangListScreen(): JSX.Element {
         <Text style={styles.subtitle}>{item.sku} • {item.merk}</Text>
         <View style={styles.row}>
           <Text style={styles.badge}>Stok: {item.stok}</Text>
-          {item.hpp > 0 && <Text style={styles.badgeHpp}>HPP: {item.hpp.toLocaleString('id-ID')}</Text>}
-          <Text style={styles.badge}>HJ1: {item.hargajual.toLocaleString('id-ID')}</Text>
-          <Text style={styles.badge}>HJ2: {item.hargajual2.toLocaleString('id-ID')}</Text>
+          <Text style={styles.badgeHpp}>HPP: {formatCurrency(item.hpp)}</Text>
+          <Text style={styles.badgeDpp}>DPP: {formatCurrency(item.dpp)}</Text>
+          <Text style={styles.badge}>HJ1: {formatCurrency(item.hargajual)}</Text>
+          <Text style={styles.badge}>HJ2: {formatCurrency(item.hargajual2)}</Text>
         </View>
       </View>
       <TouchableOpacity style={styles.kebab} onPress={() => handleActionSheet(item)}>
@@ -208,7 +215,19 @@ export default function BarangListScreen(): JSX.Element {
   );
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
+      {/* Header with Hamburger Menu */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.hamburgerButton}
+          onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
+        >
+          <Ionicons name="menu" size={28} color="#f59e0b" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Barang</Text>
+        <View style={styles.headerRight} />
+      </View>
+
       <View style={styles.searchBar}>
         <Ionicons name="search" size={18} color="#9CA3AF" />
         <TextInput
@@ -282,12 +301,16 @@ export default function BarangListScreen(): JSX.Element {
         productId={selectedItem?.id || null}
         onClose={() => setShowOnlineModal(false)}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f9fafb' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: 'white', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
+  hamburgerButton: { padding: 5 },
+  headerTitle: { fontSize: 18, fontWeight: '600', color: '#111827', flex: 1, textAlign: 'center' },
+  headerRight: { width: 38 },
   searchBar: { flexDirection: 'row', alignItems: 'center', gap: 8 as any, padding: 12, backgroundColor: 'white' },
   input: { flex: 1, paddingHorizontal: 8, height: 40 },
   toggle: { marginHorizontal: 8, color: '#6B7280', fontWeight: '600' },
@@ -296,6 +319,7 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 12, color: '#6B7280', marginTop: 2 },
   row: { flexDirection: 'row', gap: 8 as any, marginTop: 6, flexWrap: 'wrap' },
   badge: { backgroundColor: '#eef2ff', color: '#3730a3', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, fontSize: 12 },
+  badgeDpp: { backgroundColor: '#dbeafe', color: '#1e40af', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, fontSize: 12, fontWeight: '600' },
   badgeHpp: { backgroundColor: '#fef3c7', color: '#92400e', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, fontSize: 12, fontWeight: '600' },
   kebab: { paddingHorizontal: 8, justifyContent: 'center' },
   loadMore: { alignSelf: 'center', paddingVertical: 8, paddingHorizontal: 12 },

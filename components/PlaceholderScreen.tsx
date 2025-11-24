@@ -1,7 +1,9 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation, DrawerActions } from '@react-navigation/native';
 
 interface PlaceholderScreenProps {
   title: string;
@@ -9,17 +11,32 @@ interface PlaceholderScreenProps {
   icon?: keyof typeof Ionicons.glyphMap;
 }
 
-const PlaceholderScreen: React.FC<PlaceholderScreenProps> = ({ 
-  title, 
+const PlaceholderScreen: React.FC<PlaceholderScreenProps> = ({
+  title,
   subtitle = 'This feature is under development',
   icon = 'construct-outline'
 }) => {
+  const navigation = useNavigation();
+
   return (
-    <LinearGradient 
-      colors={['#fbbf24', '#f59e0b', '#d97706']} 
+    <LinearGradient
+      colors={['#fbbf24', '#f59e0b', '#d97706']}
       style={styles.container}
     >
-      <View style={styles.content}>
+      <SafeAreaView style={styles.safeArea}>
+        {/* Header with Hamburger Menu */}
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.hamburgerButton}
+            onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
+          >
+            <Ionicons name="menu" size={28} color="white" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>{title}</Text>
+          <View style={styles.headerRight} />
+        </View>
+
+        <View style={styles.content}>
         <View style={styles.iconContainer}>
           <Ionicons name={icon} size={80} color="rgba(255,255,255,0.9)" />
         </View>
@@ -38,6 +55,7 @@ const PlaceholderScreen: React.FC<PlaceholderScreenProps> = ({
           </Text>
         </View>
       </View>
+      </SafeAreaView>
     </LinearGradient>
   );
 };
@@ -46,6 +64,19 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  safeArea: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  hamburgerButton: { padding: 5 },
+  headerTitle: { fontSize: 18, fontWeight: '600', color: 'white', flex: 1, textAlign: 'center' },
+  headerRight: { width: 38 },
   content: {
     flex: 1,
     justifyContent: 'center',

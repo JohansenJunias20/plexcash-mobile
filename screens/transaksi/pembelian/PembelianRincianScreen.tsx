@@ -9,8 +9,9 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
+import { useRoute, useNavigation, RouteProp, DrawerActions } from '@react-navigation/native';
 import { API_BASE_URL } from '../../../services/api';
 import { getTokenAuth } from '../../../services/token';
 import SearchSupplierModal, { SupplierItem } from '../../../components/pembelian/SearchSupplierModal';
@@ -473,311 +474,339 @@ export default function PembelianRincianScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <ScrollView style={styles.scrollView}>
-        {/* Header Info Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Informasi Pembelian</Text>
+    <SafeAreaView style={styles.safeContainer}>
+      {/* Header with Hamburger Menu */}
+      <View style={styles.topHeader}>
+        <TouchableOpacity
+          style={styles.hamburgerButton}
+          onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
+        >
+          <Ionicons name="menu" size={28} color="#f59e0b" />
+        </TouchableOpacity>
+        <Text style={styles.topHeaderTitle}>Rincian Pembelian</Text>
+        <View style={styles.headerRight} />
+      </View>
 
-          {/* ID */}
-          <View style={styles.formRow}>
-            <Text style={styles.label}>ID</Text>
-            <Text style={styles.valueText}>#{data.id}</Text>
-          </View>
+      <ScrollView style={styles.container}>
+      {/* Header Info Card */}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Informasi Pembelian</Text>
 
-          {/* Tanggal */}
-          <View style={styles.formRow}>
-            <Text style={styles.label}>Tanggal</Text>
-            <Text style={styles.valueText}>{formatDate(data.tanggal)}</Text>
-          </View>
+        {/* ID */}
+        <View style={styles.infoRow}>
+          <Text style={styles.infoLabel}>ID Pembelian:</Text>
+          <Text style={styles.infoValue}>#{data.id}</Text>
+        </View>
 
-          {/* Tanggal Invoice */}
-          <View style={styles.formRow}>
-            <Text style={styles.label}>Tanggal Invoice</Text>
+        {/* Tanggal */}
+        <View style={styles.infoRow}>
+          <Text style={styles.infoLabel}>Tanggal:</Text>
+          <Text style={styles.infoValue}>{formatDate(data.tanggal)}</Text>
+        </View>
+
+        {/* Tanggal Invoice - Editable */}
+        <View style={styles.formGroup}>
+          <Text style={styles.formLabel}>Tanggal Invoice</Text>
+          <TextInput
+            style={styles.input}
+            value={data.tanggal_invoice}
+            onChangeText={(val) => setData({ ...data, tanggal_invoice: val })}
+            placeholder="YYYY-MM-DDTHH:mm"
+          />
+        </View>
+
+        {/* ID Supplier - Editable with Modal */}
+        <View style={styles.formGroup}>
+          <Text style={styles.formLabel}>ID Supplier</Text>
+          <View style={styles.inputWithButton}>
             <TextInput
-              style={styles.input}
-              value={data.tanggal_invoice}
-              onChangeText={(val) => setData({ ...data, tanggal_invoice: val })}
-              placeholder="YYYY-MM-DDTHH:mm"
+              style={[styles.input, styles.inputFlex]}
+              value={String(data.id_supplier)}
+              editable={false}
             />
-          </View>
-
-          {/* ID Supplier */}
-          <View style={styles.formRow}>
-            <Text style={styles.label}>ID Supplier</Text>
-            <View style={styles.inputWithButton}>
-              <TextInput
-                style={[styles.input, styles.inputSmall]}
-                value={String(data.id_supplier)}
-                editable={false}
-              />
-              <TouchableOpacity
-                style={styles.searchButton}
-                onPress={() => setShowSupplierModal(true)}
-              >
-                <Ionicons name="search" size={18} color="white" />
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Keterangan */}
-          <View style={styles.formRow}>
-            <Text style={styles.label}>Keterangan</Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              value={data.keterangan}
-              onChangeText={(val) => setData({ ...data, keterangan: val })}
-              placeholder="Keterangan"
-              multiline
-              numberOfLines={2}
-            />
-          </View>
-
-          {/* Biaya Tambahan */}
-          <View style={styles.formRow}>
-            <Text style={styles.label}>Biaya Tambahan</Text>
-            <TextInput
-              style={styles.input}
-              value={data.biaya_tambahan}
-              onChangeText={(val) => {
-                if (/^\d*\.?\d*$/.test(val)) {
-                  setData({ ...data, biaya_tambahan: val });
-                }
-              }}
-              keyboardType="numeric"
-              placeholder="0"
-            />
-          </View>
-
-          {/* Bayar Kontan */}
-          <View style={styles.formRow}>
-            <Text style={styles.label}>Bayar Kontan</Text>
-            <TextInput
-              style={styles.input}
-              value={data.bayarKontan}
-              onChangeText={(val) => {
-                if (/^\d*\.?\d*$/.test(val)) {
-                  setData({ ...data, bayarKontan: val });
-                }
-              }}
-              keyboardType="numeric"
-              placeholder="0"
-            />
-          </View>
-
-          {/* Kode BA */}
-          <View style={styles.formRow}>
-            <Text style={styles.label}>Kode BA</Text>
-            <View style={styles.inputWithButton}>
-              <TextInput
-                style={[styles.input, styles.inputSmall]}
-                value={data.kodeBA}
-                editable={false}
-              />
-              <TouchableOpacity
-                style={styles.searchButton}
-                onPress={() => setShowBaganAkunModal(true)}
-              >
-                <Ionicons name="search" size={18} color="white" />
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Warehouse */}
-          <View style={styles.formRow}>
-            <Text style={styles.label}>Warehouse</Text>
-            <View style={styles.pickerContainer}>
-              <Text style={styles.pickerText}>
-                {warehouses.find((w) => w.id === selectedWarehouse)?.name || 'Main Stock (Default)'}
-              </Text>
-            </View>
-          </View>
-
-          {/* PPN */}
-          <View style={styles.formRow}>
-            <Text style={styles.label}>Show PPN</Text>
-            <View style={styles.checkboxContainer}>
-              <TouchableOpacity
-                style={[styles.checkbox, data.useppn && styles.checkboxChecked]}
-                disabled
-              >
-                {data.useppn && <Ionicons name="checkmark" size={16} color="white" />}
-              </TouchableOpacity>
-              <Text style={styles.checkboxLabel}>
-                {data.useppn ? `PPN ${data.ppn}%` : 'Tidak menggunakan PPN'}
-              </Text>
-            </View>
+            <TouchableOpacity
+              style={styles.searchButton}
+              onPress={() => setShowSupplierModal(true)}
+            >
+              <Ionicons name="search" size={18} color="white" />
+            </TouchableOpacity>
           </View>
         </View>
 
-        {/* Item Details Section */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
+        {/* Keterangan - Editable */}
+        <View style={styles.formGroup}>
+          <Text style={styles.formLabel}>Keterangan</Text>
+          <TextInput
+            style={[styles.input, styles.textArea]}
+            value={data.keterangan}
+            onChangeText={(val) => setData({ ...data, keterangan: val })}
+            placeholder="Keterangan"
+            multiline
+            numberOfLines={2}
+          />
+        </View>
+
+        {/* Biaya Tambahan - Editable */}
+        <View style={styles.formGroup}>
+          <Text style={styles.formLabel}>Biaya Tambahan</Text>
+          <TextInput
+            style={styles.input}
+            value={data.biaya_tambahan}
+            onChangeText={(val) => {
+              if (/^\d*\.?\d*$/.test(val)) {
+                setData({ ...data, biaya_tambahan: val });
+              }
+            }}
+            keyboardType="numeric"
+            placeholder="0"
+          />
+        </View>
+
+        {/* Bayar Kontan - Editable */}
+        <View style={styles.formGroup}>
+          <Text style={styles.formLabel}>Bayar Kontan</Text>
+          <TextInput
+            style={styles.input}
+            value={data.bayarKontan}
+            onChangeText={(val) => {
+              if (/^\d*\.?\d*$/.test(val)) {
+                setData({ ...data, bayarKontan: val });
+              }
+            }}
+            keyboardType="numeric"
+            placeholder="0"
+          />
+        </View>
+
+        {/* Kode BA - Editable with Modal */}
+        <View style={styles.formGroup}>
+          <Text style={styles.formLabel}>Kode BA</Text>
+          <View style={styles.inputWithButton}>
+            <TextInput
+              style={[styles.input, styles.inputFlex]}
+              value={data.kodeBA}
+              editable={false}
+            />
             <TouchableOpacity
-              style={styles.sectionHeaderLeft}
-              onPress={() => setItemDetailsExpanded(!itemDetailsExpanded)}
+              style={styles.searchButton}
+              onPress={() => setShowBaganAkunModal(true)}
             >
-              <Text style={styles.sectionTitle}>Rincian Barang</Text>
-              <Ionicons
-                name={itemDetailsExpanded ? 'chevron-up' : 'chevron-down'}
-                size={20}
-                color="#6B7280"
-              />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.syncButton} onPress={handleSyncStock}>
-              <Ionicons name="sync" size={18} color="#3B82F6" />
+              <Ionicons name="search" size={18} color="white" />
             </TouchableOpacity>
           </View>
+        </View>
 
-          {itemDetailsExpanded && (
-            <>
-              {itemDetails.map((item, index) => (
-                <View key={index} style={styles.itemCard}>
-                  <View style={styles.itemHeader}>
+        {/* Warehouse */}
+        <View style={styles.infoRow}>
+          <Text style={styles.infoLabel}>Warehouse:</Text>
+          <Text style={styles.infoValue}>
+            {warehouses.find((w) => w.id === selectedWarehouse)?.name || 'Main Stock'}
+          </Text>
+        </View>
+
+        {/* PPN */}
+        <View style={styles.infoRow}>
+          <Text style={styles.infoLabel}>PPN:</Text>
+          <Text style={styles.infoValue}>
+            {data.useppn ? `${data.ppn}%` : 'Tidak menggunakan PPN'}
+          </Text>
+        </View>
+      </View>
+
+      {/* Item Details Card */}
+      <View style={styles.card}>
+        <View style={styles.cardHeader}>
+          <TouchableOpacity
+            style={styles.cardHeaderLeft}
+            onPress={() => setItemDetailsExpanded(!itemDetailsExpanded)}
+          >
+            <Text style={styles.cardTitle}>Rincian Barang ({itemDetails.length})</Text>
+            <Ionicons
+              name={itemDetailsExpanded ? 'chevron-up' : 'chevron-down'}
+              size={24}
+              color="#6b7280"
+              style={{ marginLeft: 8 }}
+            />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.syncButton} onPress={handleSyncStock}>
+            <Ionicons name="sync" size={20} color="#3b82f6" />
+          </TouchableOpacity>
+        </View>
+
+        {itemDetailsExpanded && (
+          <>
+            {itemDetails.map((item, index) => (
+              <View key={index} style={styles.itemCard}>
+                <View style={styles.itemHeader}>
+                  <View style={styles.itemHeaderLeft}>
+                    <Text style={styles.itemName}>{item.nama}</Text>
                     <Text style={styles.itemId}>#{item.id}</Text>
-                    <View style={styles.itemActions}>
-                      <TouchableOpacity
-                        style={styles.itemActionButton}
-                        onPress={() => handleEditItem(index)}
-                      >
-                        <Ionicons name="create-outline" size={18} color="#3B82F6" />
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.itemActionButton}
-                        onPress={() => handleDeleteItem(index)}
-                      >
-                        <Ionicons name="trash-outline" size={18} color="#DC2626" />
-                      </TouchableOpacity>
-                    </View>
                   </View>
-
-                  <Text style={styles.itemName}>{item.nama}</Text>
-
-                  <View style={styles.itemDetails}>
-                    <View style={styles.itemDetailRow}>
-                      <Text style={styles.itemDetailLabel}>Qty:</Text>
-                      <Text style={styles.itemDetailValue}>{item.qty}</Text>
-                    </View>
-                    <View style={styles.itemDetailRow}>
-                      <Text style={styles.itemDetailLabel}>Qty Print:</Text>
-                      <Text style={styles.itemDetailValue}>{item.qty_print}</Text>
-                    </View>
-                    <View style={styles.itemDetailRow}>
-                      <Text style={styles.itemDetailLabel}>
-                        {data.useppn ? 'DPP:' : 'Price List:'}
-                      </Text>
-                      <Text style={styles.itemDetailValue}>
-                        Rp {formatCurrency(data.useppn ? item.hargabeli_exppn : item.price_list)}
-                      </Text>
-                    </View>
-                    <View style={styles.itemDetailRow}>
-                      <Text style={styles.itemDetailLabel}>Harga Beli:</Text>
-                      <Text style={[styles.itemDetailValue, styles.itemDetailValueBold]}>
-                        Rp {formatCurrency(item.hargabeli)}
-                      </Text>
-                    </View>
+                  <View style={styles.itemActions}>
+                    <TouchableOpacity
+                      style={styles.itemActionButton}
+                      onPress={() => handleEditItem(index)}
+                    >
+                      <Ionicons name="create-outline" size={20} color="#3b82f6" />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.itemActionButton}
+                      onPress={() => handleDeleteItem(index)}
+                    >
+                      <Ionicons name="trash-outline" size={20} color="#ef4444" />
+                    </TouchableOpacity>
                   </View>
                 </View>
-              ))}
 
-              {/* Add Item Buttons */}
-              <View style={styles.addItemButtons}>
-                <TouchableOpacity
-                  style={[styles.addButton, styles.addButtonPrimary]}
-                  onPress={() => setShowBarangModal(true)}
-                >
-                  <Ionicons name="add-circle-outline" size={20} color="#DC2626" />
-                  <Text style={styles.addButtonTextPrimary}>Master Barang</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.addButton, styles.addButtonSecondary]}
-                  onPress={() => setShowTambahBarangModal(true)}
-                >
-                  <Ionicons name="add-circle-outline" size={20} color="#3B82F6" />
-                  <Text style={styles.addButtonTextSecondary}>Barang Baru</Text>
-                </TouchableOpacity>
+                {item.merk && (
+                  <Text style={styles.itemMerk}>{item.merk}</Text>
+                )}
+                {item.kategori && (
+                  <Text style={styles.itemKategori}>{item.kategori}</Text>
+                )}
+
+                <View style={styles.itemDetails}>
+                  <View style={styles.itemDetailRow}>
+                    <Text style={styles.itemDetailLabel}>Qty:</Text>
+                    <Text style={styles.itemDetailValue}>{item.qty}</Text>
+                  </View>
+                  <View style={styles.itemDetailRow}>
+                    <Text style={styles.itemDetailLabel}>Qty Print:</Text>
+                    <Text style={styles.itemDetailValue}>{item.qty_print}</Text>
+                  </View>
+                  <View style={styles.itemDetailRow}>
+                    <Text style={styles.itemDetailLabel}>
+                      {data.useppn ? 'DPP:' : 'Price List:'}
+                    </Text>
+                    <Text style={styles.itemDetailValue}>
+                      Rp {formatCurrency(data.useppn ? item.hargabeli_exppn : item.price_list)}
+                    </Text>
+                  </View>
+                  <View style={styles.itemDetailRow}>
+                    <Text style={styles.itemDetailLabel}>Harga Beli:</Text>
+                    <Text style={[styles.itemDetailValue, styles.itemSubtotal]}>
+                      Rp {formatCurrency(item.hargabeli)}
+                    </Text>
+                  </View>
+                </View>
               </View>
+            ))}
 
-              {/* Total */}
-              <View style={styles.totalRow}>
-                <Text style={styles.totalLabel}>Total:</Text>
-                <Text style={styles.totalValue}>Rp {formatCurrency(calculateItemTotal())}</Text>
-              </View>
-            </>
-          )}
-        </View>
+            {/* Add Item Buttons */}
+            <View style={styles.addItemButtons}>
+              <TouchableOpacity
+                style={[styles.addButton, styles.addButtonPrimary]}
+                onPress={() => setShowBarangModal(true)}
+              >
+                <Ionicons name="add-circle-outline" size={20} color="#fff" />
+                <Text style={styles.addButtonTextPrimary}>Master Barang</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.addButton, styles.addButtonSecondary]}
+                onPress={() => setShowTambahBarangModal(true)}
+              >
+                <Ionicons name="add-circle-outline" size={20} color="#fff" />
+                <Text style={styles.addButtonTextSecondary}>Barang Baru</Text>
+              </TouchableOpacity>
+            </View>
 
-        {/* Payment Details Section */}
-        <View style={styles.section}>
+            {/* Total */}
+            <View style={styles.totalRow}>
+              <Text style={styles.totalLabel}>Total:</Text>
+              <Text style={styles.totalValue}>Rp {formatCurrency(calculateItemTotal())}</Text>
+            </View>
+          </>
+        )}
+      </View>
+
+      {/* Payment Details Card */}
+      {paymentDetails.length > 0 && (
+        <View style={styles.card}>
           <TouchableOpacity
-            style={styles.sectionHeaderLeft}
+            style={styles.cardHeader}
             onPress={() => setPaymentDetailsExpanded(!paymentDetailsExpanded)}
           >
-            <Text style={styles.sectionTitle}>Rincian Pembayaran</Text>
+            <Text style={styles.cardTitle}>
+              Rincian Pembayaran ({paymentDetails.length})
+            </Text>
             <Ionicons
               name={paymentDetailsExpanded ? 'chevron-up' : 'chevron-down'}
-              size={20}
-              color="#6B7280"
+              size={24}
+              color="#6b7280"
             />
           </TouchableOpacity>
 
           {paymentDetailsExpanded && (
             <>
-              {paymentDetails.length === 0 ? (
-                <View style={styles.emptyPayment}>
-                  <Text style={styles.emptyPaymentText}>Belum ada pembayaran</Text>
-                </View>
-              ) : (
-                <>
-                  {paymentDetails.map((payment, index) => (
-                    <View key={index} style={styles.paymentCard}>
-                      <View style={styles.paymentRow}>
-                        <Text style={styles.paymentLabel}>ID:</Text>
-                        <Text style={styles.paymentValue}>{payment.id}</Text>
-                      </View>
-                      <View style={styles.paymentRow}>
-                        <Text style={styles.paymentLabel}>Tanggal:</Text>
-                        <Text style={styles.paymentValue}>{formatDate(payment.tanggal)}</Text>
-                      </View>
-                      {payment.keterangan && (
-                        <View style={styles.paymentRow}>
-                          <Text style={styles.paymentLabel}>Keterangan:</Text>
-                          <Text style={styles.paymentValue}>{payment.keterangan}</Text>
-                        </View>
-                      )}
-                      <View style={styles.paymentRow}>
-                        <Text style={styles.paymentLabel}>Bayar:</Text>
-                        <Text style={[styles.paymentValue, styles.paymentValueBold]}>
-                          Rp {formatCurrency(payment.saldo)}
-                        </Text>
-                      </View>
-                      <View style={styles.paymentRow}>
-                        <Text style={styles.paymentLabel}>Kode BA:</Text>
-                        <Text style={styles.paymentValue}>{payment.kodeBA}</Text>
-                      </View>
-                    </View>
-                  ))}
-
-                  {/* Total Payment */}
-                  <View style={styles.totalRow}>
-                    <Text style={styles.totalLabel}>Total Bayar:</Text>
-                    <Text style={styles.totalValue}>Rp {formatCurrency(calculatePaymentTotal())}</Text>
+              {paymentDetails.map((payment, index) => (
+                <View key={index} style={styles.paymentCard}>
+                  <View style={styles.paymentHeader}>
+                    <Text style={styles.paymentId}>{payment.id}</Text>
+                    <Text style={styles.paymentDate}>{formatDate(payment.tanggal)}</Text>
                   </View>
-                </>
-              )}
+                  {payment.keterangan && (
+                    <Text style={styles.paymentKeterangan}>{payment.keterangan}</Text>
+                  )}
+                  <View style={styles.paymentDetailRow}>
+                    <Text style={styles.paymentDetailLabel}>Bayar:</Text>
+                    <Text style={styles.paymentDetailValue}>
+                      Rp {formatCurrency(payment.saldo)}
+                    </Text>
+                  </View>
+                  <View style={styles.paymentDetailRow}>
+                    <Text style={styles.paymentDetailLabel}>Kode BA:</Text>
+                    <Text style={styles.paymentDetailValue}>{payment.kodeBA}</Text>
+                  </View>
+                </View>
+              ))}
+
+              {/* Total Payment */}
+              <View style={styles.totalRow}>
+                <Text style={styles.totalLabel}>Total Bayar:</Text>
+                <Text style={styles.totalValue}>Rp {formatCurrency(calculatePaymentTotal())}</Text>
+              </View>
             </>
           )}
         </View>
-      </ScrollView>
+      )}
 
-      {/* Bottom Action Bar */}
-      <View style={styles.bottomBar}>
+      {/* Summary Card */}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Ringkasan</Text>
+
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>Total Pembelian:</Text>
+          <Text style={styles.summaryValue}>Rp {formatCurrency(calculateItemTotal())}</Text>
+        </View>
+
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>Total Bayar:</Text>
+          <Text style={styles.summaryValue}>
+            Rp {formatCurrency(calculatePaymentTotal())}
+          </Text>
+        </View>
+
+        <View style={styles.divider} />
+
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabelBold}>Sisa:</Text>
+          <Text style={[
+            styles.summaryValueBold,
+            (calculateItemTotal() - calculatePaymentTotal()) > 0 ? styles.sisaPositive : styles.sisaZero
+          ]}>
+            Rp {formatCurrency(calculateItemTotal() - calculatePaymentTotal())}
+          </Text>
+        </View>
+      </View>
+
+      {/* Action Buttons */}
+      <View style={styles.actionButtonsContainer}>
         <TouchableOpacity
           style={[styles.actionButton, styles.printButton]}
           onPress={handlePrintBarcode}
         >
-          <Ionicons name="print-outline" size={20} color="white" />
-          <Text style={styles.actionButtonText}>Print</Text>
+          <Ionicons name="print-outline" size={20} color="#fff" />
+          <Text style={styles.actionButtonText}>Print Barcode</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[
@@ -788,118 +817,162 @@ export default function PembelianRincianScreen() {
           onPress={handleSave}
           disabled={isSaveDisabled()}
         >
-          <Ionicons name="checkmark-circle-outline" size={20} color="white" />
-          <Text style={styles.actionButtonText}>
-            {saving ? 'Menyimpan...' : 'Simpan'}
-          </Text>
+          {saving ? (
+            <ActivityIndicator color="#fff" size="small" />
+          ) : (
+            <>
+              <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
+              <Text style={styles.actionButtonText}>Simpan</Text>
+            </>
+          )}
         </TouchableOpacity>
       </View>
 
-      {/* Modals */}
-      <SearchSupplierModal
-        visible={showSupplierModal}
-        onClose={() => setShowSupplierModal(false)}
-        onSelect={handleSupplierSelect}
-      />
-      <SearchBaganAkunModal
-        visible={showBaganAkunModal}
-        onClose={() => setShowBaganAkunModal(false)}
-        onSelect={handleBaganAkunSelect}
-        shows={['111']}
-      />
-      <SearchBarangModal
-        visible={showBarangModal}
-        onClose={() => setShowBarangModal(false)}
-        onSelect={handleBarangSelect}
-        multiSelect={true}
-        excludeIds={itemDetails.map((item) => parseInt(item.id))}
-      />
-      <TambahBarangModal
-        visible={showTambahBarangModal}
-        onClose={() => setShowTambahBarangModal(false)}
-        onDone={handleTambahBarangDone}
-      />
-      <EditItemModal
-        visible={showEditItemModal}
-        onClose={() => setShowEditItemModal(false)}
-        onSave={handleSaveEditItem}
-        item={editingItem}
-        usePPN={data.useppn}
-        ppnRate={data.ppn}
-      />
-    </View>
+      <View style={styles.bottomSpacer} />
+    </ScrollView>
+
+    {/* Modals */}
+    <SearchSupplierModal
+      visible={showSupplierModal}
+      onClose={() => setShowSupplierModal(false)}
+      onSelect={handleSupplierSelect}
+    />
+    <SearchBaganAkunModal
+      visible={showBaganAkunModal}
+      onClose={() => setShowBaganAkunModal(false)}
+      onSelect={handleBaganAkunSelect}
+      shows={['111']}
+    />
+    <SearchBarangModal
+      visible={showBarangModal}
+      onClose={() => setShowBarangModal(false)}
+      onSelect={handleBarangSelect}
+      multiSelect={true}
+      excludeIds={itemDetails.map((item) => parseInt(item.id))}
+    />
+    <TambahBarangModal
+      visible={showTambahBarangModal}
+      onClose={() => setShowTambahBarangModal(false)}
+      onDone={handleTambahBarangDone}
+    />
+    <EditItemModal
+      visible={showEditItemModal}
+      onClose={() => setShowEditItemModal(false)}
+      onSave={handleSaveEditItem}
+      item={editingItem}
+      usePPN={data.useppn}
+      ppnRate={data.ppn}
+    />
+  </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeContainer: {
+    flex: 1,
+    backgroundColor: '#f3f4f6',
+  },
+  topHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: 'white',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb'
+  },
+  hamburgerButton: { padding: 5 },
+  topHeaderTitle: { fontSize: 18, fontWeight: '600', color: '#111827', flex: 1, textAlign: 'center' },
+  headerRight: { width: 38 },
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#f3f4f6',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#f3f4f6',
   },
   loadingText: {
     marginTop: 12,
     fontSize: 14,
-    color: '#6B7280',
+    color: '#6b7280',
   },
-  scrollView: {
-    flex: 1,
-  },
-  section: {
-    backgroundColor: 'white',
-    marginBottom: 12,
+  // Card styles (matching PenjualanRincianScreen)
+  card: {
+    backgroundColor: '#fff',
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderRadius: 12,
     padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 16,
-  },
-  sectionHeader: {
+  cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 16,
   },
-  sectionHeaderLeft: {
+  cardHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    flex: 1,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1f2937',
   },
   syncButton: {
     padding: 8,
-    backgroundColor: '#EFF6FF',
-    borderRadius: 6,
+    backgroundColor: '#eff6ff',
+    borderRadius: 8,
   },
-  formRow: {
-    marginBottom: 16,
+  // Info row styles (read-only display)
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
   },
-  label: {
+  infoLabel: {
+    fontSize: 14,
+    color: '#6b7280',
+    flex: 1,
+  },
+  infoValue: {
+    fontSize: 14,
+    color: '#1f2937',
+    fontWeight: '600',
+    flex: 1,
+    textAlign: 'right',
+  },
+  // Form group styles (editable fields)
+  formGroup: {
+    marginBottom: 12,
+  },
+  formLabel: {
     fontSize: 14,
     fontWeight: '600',
     color: '#374151',
-    marginBottom: 8,
-  },
-  valueText: {
-    fontSize: 15,
-    color: '#111827',
-    paddingVertical: 8,
+    marginBottom: 6,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: '#d1d5db',
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 15,
     color: '#111827',
-    backgroundColor: 'white',
+    backgroundColor: '#fff',
   },
   textArea: {
     height: 80,
@@ -909,101 +982,82 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
   },
-  inputSmall: {
+  inputFlex: {
     flex: 1,
   },
   searchButton: {
-    backgroundColor: '#3B82F6',
+    backgroundColor: '#3b82f6',
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  pickerContainer: {
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    backgroundColor: '#F9FAFB',
-  },
-  pickerText: {
-    fontSize: 15,
-    color: '#6B7280',
-  },
-  checkboxContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  checkbox: {
-    width: 20,
-    height: 20,
-    borderWidth: 2,
-    borderColor: '#D1D5DB',
-    borderRadius: 4,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  checkboxChecked: {
-    backgroundColor: '#f59e0b',
-    borderColor: '#f59e0b',
-  },
-  checkboxLabel: {
-    fontSize: 14,
-    color: '#374151',
-  },
+  // Item card styles (matching PenjualanRincianScreen)
   itemCard: {
-    backgroundColor: '#F9FAFB',
-    borderRadius: 8,
+    backgroundColor: '#f9fafb',
     padding: 12,
+    borderRadius: 8,
     marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
   },
   itemHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: 8,
   },
+  itemHeaderLeft: {
+    flex: 1,
+  },
+  itemName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1f2937',
+    marginBottom: 2,
+  },
   itemId: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#6B7280',
+    fontSize: 12,
+    color: '#9ca3af',
+  },
+  itemMerk: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginBottom: 2,
+  },
+  itemKategori: {
+    fontSize: 12,
+    color: '#9ca3af',
+    marginBottom: 8,
   },
   itemActions: {
     flexDirection: 'row',
     gap: 8,
   },
   itemActionButton: {
-    padding: 6,
-  },
-  itemName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 8,
+    padding: 4,
   },
   itemDetails: {
-    gap: 4,
+    marginTop: 8,
   },
   itemDetailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    paddingVertical: 4,
   },
   itemDetailLabel: {
-    fontSize: 13,
-    color: '#6B7280',
+    fontSize: 14,
+    color: '#6b7280',
   },
   itemDetailValue: {
-    fontSize: 13,
-    color: '#111827',
+    fontSize: 14,
+    color: '#1f2937',
+    fontWeight: '500',
   },
-  itemDetailValueBold: {
+  itemSubtotal: {
     fontWeight: '700',
+    color: '#3b82f6',
   },
+  // Add item buttons
   addItemButtons: {
     flexDirection: 'row',
     gap: 8,
@@ -1014,84 +1068,127 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: 6,
-    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 8,
+    gap: 8,
   },
   addButtonPrimary: {
-    backgroundColor: '#FEE2E2',
+    backgroundColor: '#dc2626',
   },
   addButtonTextPrimary: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
-    color: '#DC2626',
+    color: '#fff',
   },
   addButtonSecondary: {
-    backgroundColor: '#EFF6FF',
+    backgroundColor: '#3b82f6',
   },
   addButtonTextSecondary: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
-    color: '#3B82F6',
+    color: '#fff',
   },
+  // Total row
   totalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingTop: 12,
     marginTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopWidth: 2,
+    borderTopColor: '#e5e7eb',
   },
   totalLabel: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#374151',
+    color: '#1f2937',
   },
   totalValue: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#111827',
+    color: '#3b82f6',
   },
+  // Payment card styles (matching PenjualanRincianScreen)
   paymentCard: {
-    backgroundColor: '#F9FAFB',
-    borderRadius: 8,
+    backgroundColor: '#f9fafb',
     padding: 12,
+    borderRadius: 8,
     marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
   },
-  paymentRow: {
+  paymentHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 6,
-  },
-  paymentLabel: {
-    fontSize: 13,
-    color: '#6B7280',
-  },
-  paymentValue: {
-    fontSize: 13,
-    color: '#111827',
-  },
-  paymentValueBold: {
-    fontWeight: '700',
-    color: '#059669',
-  },
-  emptyPayment: {
-    padding: 20,
     alignItems: 'center',
+    marginBottom: 8,
   },
-  emptyPaymentText: {
+  paymentId: {
     fontSize: 14,
-    color: '#9CA3AF',
+    fontWeight: '600',
+    color: '#3b82f6',
   },
-  bottomBar: {
+  paymentDate: {
+    fontSize: 12,
+    color: '#6b7280',
+  },
+  paymentKeterangan: {
+    fontSize: 13,
+    color: '#6b7280',
+    marginBottom: 8,
+  },
+  paymentDetailRow: {
     flexDirection: 'row',
-    backgroundColor: 'white',
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+  },
+  paymentDetailLabel: {
+    fontSize: 14,
+    color: '#6b7280',
+  },
+  paymentDetailValue: {
+    fontSize: 14,
+    color: '#1f2937',
+    fontWeight: '500',
+  },
+  // Summary styles (matching PenjualanRincianScreen)
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+  },
+  summaryLabel: {
+    fontSize: 14,
+    color: '#6b7280',
+  },
+  summaryValue: {
+    fontSize: 14,
+    color: '#1f2937',
+    fontWeight: '500',
+  },
+  summaryLabelBold: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1f2937',
+  },
+  summaryValueBold: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  sisaPositive: {
+    color: '#ef4444',
+  },
+  sisaZero: {
+    color: '#10b981',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#e5e7eb',
+    marginVertical: 8,
+  },
+  // Action buttons container
+  actionButtonsContainer: {
+    flexDirection: 'row',
     gap: 12,
+    marginHorizontal: 16,
+    marginTop: 16,
   },
   actionButton: {
     flex: 1,
@@ -1103,17 +1200,20 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   printButton: {
-    backgroundColor: '#3B82F6',
+    backgroundColor: '#3b82f6',
   },
   saveButton: {
-    backgroundColor: '#059669',
+    backgroundColor: '#10b981',
   },
   saveButtonDisabled: {
-    backgroundColor: '#9CA3AF',
+    backgroundColor: '#9ca3af',
   },
   actionButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: 'white',
+    color: '#fff',
+  },
+  bottomSpacer: {
+    height: 24,
   },
 });

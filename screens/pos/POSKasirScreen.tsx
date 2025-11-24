@@ -119,6 +119,9 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
   const [manualItemPrice, setManualItemPrice] = useState('');
   const [manualItemQty, setManualItemQty] = useState('1');
 
+  // Reset/New Sale confirmation modal
+  const [showResetConfirmModal, setShowResetConfirmModal] = useState(false);
+
   // Store settings
   const [storeSettings, setStoreSettings] = useState({
     name: 'PlexSeller',
@@ -809,7 +812,15 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
     setKembalian(0);
     setKeterangan('');
     setSelectedCustomer({ id: 1, nama: 'Umum' });
+    setSearchQuery('');
+    setProducts([]);
+    setShowProductList(false);
     searchInputRef.current?.focus();
+  };
+
+  const handleResetConfirm = () => {
+    setShowResetConfirmModal(false);
+    resetTransaction();
   };
 
   const printReceipt = async (invoiceId: number, payment: number) => {
@@ -987,75 +998,33 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
           </TouchableOpacity>
         </View>
 
-        {/* Product List - Enhanced for Landscape */}
+        {/* Product List - Grid Layout for Landscape */}
         <View style={styles.landscapeProductListContainer}>
           {showProductList && products.length > 0 ? (
             <FlatList
               data={products}
               keyExtractor={(item) => `${item.is_bundling ? 'b' : 'p'}-${item.id}`}
+              numColumns={5}
+              key="grid-5-columns"
+              columnWrapperStyle={styles.gridRow}
               renderItem={({ item }) => (
                 <TouchableOpacity
-                  style={styles.landscapeProductItem}
+                  style={styles.gridProductCard}
                   onPress={() => addToCart(item)}
                 >
-                  <View style={styles.landscapeProductInfo}>
-                    <View style={styles.landscapeProductHeader}>
-                      <Text style={styles.landscapeProductName} numberOfLines={2}>{item.nama}</Text>
-                      {item.is_bundling && (
-                        <View style={styles.bundlingBadge}>
-                          <Text style={styles.bundlingBadgeText}>Bundling</Text>
-                        </View>
-                      )}
-                    </View>
-                    <View style={styles.landscapeProductDetails}>
-                      <View style={styles.landscapeProductDetailRow}>
-                        <Text style={styles.landscapeProductLabel}>SKU:</Text>
-                        <Text style={styles.landscapeProductValue}>{item.sku}</Text>
-                      </View>
-                      {item.barcode && (
-                        <View style={styles.landscapeProductDetailRow}>
-                          <Text style={styles.landscapeProductLabel}>Barcode:</Text>
-                          <Text style={styles.landscapeProductValue}>{item.barcode}</Text>
-                        </View>
-                      )}
-                      <View style={styles.landscapeProductDetailRow}>
-                        <Text style={styles.landscapeProductLabel}>Stock:</Text>
-                        <Text style={[styles.landscapeProductValue, { color: item.stok > 0 ? '#10B981' : '#EF4444' }]}>
-                          {item.stok} {item.satuan}
-                        </Text>
-                      </View>
-                      {item.merk && (
-                        <View style={styles.landscapeProductDetailRow}>
-                          <Text style={styles.landscapeProductLabel}>Brand:</Text>
-                          <Text style={styles.landscapeProductValue}>{item.merk}</Text>
-                        </View>
-                      )}
-                      {item.kategori && (
-                        <View style={styles.landscapeProductDetailRow}>
-                          <Text style={styles.landscapeProductLabel}>Category:</Text>
-                          <Text style={styles.landscapeProductValue}>{item.kategori}</Text>
-                        </View>
-                      )}
-                      {item.harga_grosir && item.qty_grosir && (
-                        <View style={styles.landscapeProductDetailRow}>
-                          <Text style={styles.landscapeProductLabel}>Wholesale:</Text>
-                          <Text style={styles.landscapeProductValue}>
-                            Rp {item.harga_grosir.toLocaleString('id-ID')} (min {item.qty_grosir})
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                  </View>
-                  <View style={styles.landscapeProductPriceContainer}>
-                    <Text style={styles.landscapeProductPrice}>
-                      Rp {(item.hargajual || 0).toLocaleString('id-ID')}
+                  <View style={styles.gridProductInitial}>
+                    <Text style={styles.gridProductInitialText}>
+                      {item.nama.substring(0, 2).toUpperCase()}
                     </Text>
-                    {item.hargabeli && (
-                      <Text style={styles.landscapeProductCost}>
-                        Cost: Rp {item.hargabeli.toLocaleString('id-ID')}
-                      </Text>
-                    )}
                   </View>
+                  <Text style={styles.gridProductName} numberOfLines={2}>
+                    {item.nama}
+                  </Text>
+                  {item.is_bundling && (
+                    <View style={styles.gridBundlingBadge}>
+                      <Text style={styles.gridBundlingBadgeText}>Bundling</Text>
+                    </View>
+                  )}
                 </TouchableOpacity>
               )}
             />
@@ -1409,9 +1378,14 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
           <Ionicons name="arrow-back" size={24} color="white" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>POS Kasir {orientation.isLandscape && orientation.isTablet && '(Tablet Mode)'}</Text>
-        <TouchableOpacity onPress={() => setShowPrinterModal(true)} style={styles.printerButton}>
-          <Ionicons name="print" size={24} color="white" />
-        </TouchableOpacity>
+        <View style={styles.headerRightButtons}>
+          <TouchableOpacity onPress={() => setShowPrinterModal(true)} style={styles.headerButton}>
+            <Ionicons name="print" size={24} color="white" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setShowResetConfirmModal(true)} style={styles.headerButton}>
+            <Ionicons name="add" size={24} color="white" />
+          </TouchableOpacity>
+        </View>
       </LinearGradient>
 
       {/* Conditionally render layout based on orientation */}
@@ -1912,6 +1886,35 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
           </View>
         </View>
       </Modal>
+
+      {/* Reset Confirmation Modal */}
+      <Modal visible={showResetConfirmModal} transparent animationType="fade">
+        <View style={styles.confirmModalOverlay}>
+          <View style={styles.confirmModalContent}>
+            <View style={styles.confirmModalHeader}>
+              <Ionicons name="warning-outline" size={48} color="#f59e0b" />
+            </View>
+            <Text style={styles.confirmModalTitle}>Buat Nota Baru?</Text>
+            <Text style={styles.confirmModalMessage}>
+              Apakah Anda yakin ingin membuat nota baru? Semua data transaksi saat ini akan dihapus.
+            </Text>
+            <View style={styles.confirmModalButtons}>
+              <TouchableOpacity
+                style={[styles.confirmModalButton, styles.confirmModalButtonCancel]}
+                onPress={() => setShowResetConfirmModal(false)}
+              >
+                <Text style={styles.confirmModalButtonTextCancel}>Batal</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.confirmModalButton, styles.confirmModalButtonConfirm]}
+                onPress={handleResetConfirm}
+              >
+                <Text style={styles.confirmModalButtonTextConfirm}>Ya, Reset</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -1938,6 +1941,13 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   printerButton: {
+    padding: 8,
+  },
+  headerRightButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  headerButton: {
     padding: 8,
   },
   content: {
@@ -3007,6 +3017,121 @@ const styles = StyleSheet.create({
   landscapeCheckoutButtonText: {
     fontSize: 18,
     fontWeight: 'bold',
+    color: 'white',
+  },
+  // Grid Layout Styles
+  gridRow: {
+    gap: 12,
+    paddingHorizontal: 12,
+    marginBottom: 12,
+  },
+  gridProductCard: {
+    flex: 1,
+    maxWidth: '18%', // 5 columns with gaps
+    aspectRatio: 1,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 12,
+    padding: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  gridProductInitial: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    backgroundColor: '#E5E7EB',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  gridProductInitialText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#6B7280',
+  },
+  gridProductName: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#111827',
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  gridBundlingBadge: {
+    backgroundColor: '#DBEAFE',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginTop: 4,
+  },
+  gridBundlingBadgeText: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: '#1E40AF',
+  },
+  // Reset Confirmation Modal Styles
+  confirmModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  confirmModalContent: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 24,
+    width: '85%',
+    maxWidth: 400,
+    alignItems: 'center',
+  },
+  confirmModalHeader: {
+    marginBottom: 16,
+  },
+  confirmModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  confirmModalMessage: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 20,
+  },
+  confirmModalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  confirmModalButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  confirmModalButtonCancel: {
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+  },
+  confirmModalButtonConfirm: {
+    backgroundColor: '#f59e0b',
+  },
+  confirmModalButtonTextCancel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  confirmModalButtonTextConfirm: {
+    fontSize: 16,
+    fontWeight: '600',
     color: 'white',
   },
 });

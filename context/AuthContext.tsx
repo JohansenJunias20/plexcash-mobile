@@ -7,6 +7,11 @@ import MainScreen from '../components/MainScreen';
 import LoginScreen from '../components/LoginScreen';
 import { logger, logAuth, logStateChange, logError } from '../utils/logger';
 
+// Global reference to signOut function for use outside React components
+let globalSignOut: (() => Promise<void>) | null = null;
+
+export const getGlobalSignOut = () => globalSignOut;
+
 interface AuthUser {
   email: string;
   name?: string;
@@ -79,10 +84,32 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const isAuth = await AsyncStorage.getItem('isAuthenticated');
 
         if (authToken && userEmail && isAuth === 'true') {
-          setUser({ email: userEmail, authMethod: 'qr-code' });
-          setIsAuthenticated(true);
-          setIsLoading(false);
-          return;
+          console.log('🔍 [AUTH] Found QR-code auth token, validating...');
+
+          // Validate the token by making a test API call
+          try {
+            const validationResult = await ApiService.checkAuthStatus();
+            console.log('🔍 [AUTH] Token validation result:', validationResult);
+
+            if (validationResult.status === true) {
+              console.log('✅ [AUTH] QR-code token is valid');
+              setUser({ email: userEmail, authMethod: 'qr-code' });
+              setIsAuthenticated(true);
+              setIsLoading(false);
+              return;
+            } else {
+              console.log('❌ [AUTH] QR-code token is invalid/expired, clearing auth');
+              await AsyncStorage.removeItem('authToken');
+              await AsyncStorage.removeItem('userEmail');
+              await AsyncStorage.removeItem('isAuthenticated');
+            }
+          } catch (error) {
+            console.error('❌ [AUTH] Token validation failed:', error);
+            // Clear invalid token
+            await AsyncStorage.removeItem('authToken');
+            await AsyncStorage.removeItem('userEmail');
+            await AsyncStorage.removeItem('isAuthenticated');
+          }
         }
       } catch (error) {
         console.error('Error checking existing auth:', error);
@@ -264,6 +291,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signOut = async () => {
     try {
+      console.log('🚪 [AUTH] Signing out user...');
+
       if ((user as any)?.authMethod !== 'qr-code' && (user as any)?.authMethod !== 'device') {
         await auth.signOut();
       }
@@ -278,11 +307,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       setUser(null);
       setIsAuthenticated(false);
+      console.log('✅ [AUTH] User signed out successfully');
     } catch (error) {
-      console.error('Sign out error:', error);
+      console.error('❌ [AUTH] Sign out error:', error);
       throw error;
     }
   };
+
+  // Set global reference for use outside React components (e.g., API error handler)
+  useEffect(() => {
+    globalSignOut = signOut;
+    console.log('🔗 [AUTH] Global signOut reference set');
+
+    return () => {
+      globalSignOut = null;
+      console.log('🔗 [AUTH] Global signOut reference cleared');
+    };
+  }, []);
 
   const value: AuthContextValue = {
     user,

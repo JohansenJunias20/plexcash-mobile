@@ -20,6 +20,7 @@ import ScanOutScreen from '../screens/scanout/ScanOutScreen';
 import UserListScreen from '../screens/user/UserListScreen';
 import UserEditScreen from '../screens/user/UserEditScreen';
 import BundlingListScreen from '../screens/bundling/BundlingListScreen';
+import BundlingEditScreen from '../screens/bundling/BundlingEditScreen';
 import StokOpnameScreen from '../screens/stokopname/StokOpnameScreen';
 import Settingscreen from '../screens/Settingscreen';
 
@@ -46,6 +47,7 @@ import PembelianDPBeliScreen from '../screens/transaksi/pembelian/PembelianDPBel
 // TRANSAKSI Section - Penjualan
 import PenjualanTambahScreen from '../screens/transaksi/penjualan/PenjualanTambahScreen';
 import PenjualanSearchScreen from '../screens/transaksi/penjualan/PenjualanSearchScreen';
+import PenjualanRincianScreen from '../screens/transaksi/penjualan/PenjualanRincianScreen';
 import PenjualanPelunasanScreen from '../screens/transaksi/penjualan/PenjualanPelunasanScreen';
 import PenjualanReturScreen from '../screens/transaksi/penjualan/PenjualanReturScreen';
 
@@ -67,7 +69,9 @@ import BookingOrdersScreen from '../screens/ecommerce/BookingOrdersScreen';
 import IntegrationScreen from '../screens/ecommerce/IntegrationScreen';
 import EcommerceToolsProductScreen from '../screens/ecommerce/tools/EcommerceToolsProductScreen';
 import NaikkanProdukScreen from '../screens/ecommerce/NaikkanProdukScreen';
+import BoostProdukScreen from '../screens/ecommerce/BoostProdukScreen';
 import ProsesOtomatisScreen from '../screens/ecommerce/ProsesOtomatisScreen';
+import ProsesOtomatisConfigScreen from '../screens/ecommerce/ProsesOtomatisConfigScreen';
 
 // LAPORAN Section
 import NeracaScreen from '../screens/laporan/NeracaScreen';
@@ -165,7 +169,7 @@ const DrawerNavigatorContent = () => {
         name="PembelianRincian"
         component={PembelianRincianScreen}
         options={{
-          drawerItemStyle: { display: 'none' } // Hide from drawer menu
+          drawerItemStyle: { display: 'none' }
         }}
       />
       <Drawer.Screen name="PembelianPelunasan" component={PembelianPelunasanScreen} />
@@ -175,6 +179,13 @@ const DrawerNavigatorContent = () => {
       {/* TRANSAKSI Section - Penjualan */}
       <Drawer.Screen name="PenjualanTambah" component={PenjualanTambahScreen} />
       <Drawer.Screen name="PenjualanSearch" component={PenjualanSearchScreen} />
+      <Drawer.Screen
+        name="PenjualanRincian"
+        component={PenjualanRincianScreen}
+        options={{
+          drawerItemStyle: { display: 'none' }
+        }}
+      />
       <Drawer.Screen name="PenjualanPelunasan" component={PenjualanPelunasanScreen} />
       <Drawer.Screen name="PenjualanRetur" component={PenjualanReturScreen} />
 
@@ -212,7 +223,17 @@ const DrawerNavigatorContent = () => {
       <Drawer.Screen name="Integration" component={IntegrationScreen} />
       <Drawer.Screen name="EcommerceToolsProduct" component={EcommerceToolsProductScreen} />
       <Drawer.Screen name="NaikkanProduk" component={NaikkanProdukScreen} />
+      <Drawer.Screen
+        name="BoostProduk"
+        component={BoostProdukScreen}
+        options={{ drawerItemStyle: { display: 'none' } }}
+      />
       <Drawer.Screen name="ProsesOtomatis" component={ProsesOtomatisScreen} />
+      <Drawer.Screen
+        name="ProsesOtomatisConfig"
+        component={ProsesOtomatisConfigScreen}
+        options={{ drawerItemStyle: { display: 'none' } }}
+      />
 
       {/* LAPORAN Section */}
       <Drawer.Screen name="Neraca" component={NeracaScreen} />

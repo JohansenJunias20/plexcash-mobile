@@ -7,8 +7,12 @@ import Settings from './Settings';
 import { useNavigation, DrawerActions } from '@react-navigation/native';
 import ApiService from '../services/api';
 import { useDeveloperMode } from '../context/DeveloperModeContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AVAILABLE_MENUS, DEFAULT_QUICK_ACTIONS, MAX_QUICK_ACTIONS, MenuItem } from '../constants/availableMenus';
 
-const MainScreen = (): JSX.Element => {
+const STORAGE_KEY = '@quick_actions_config';
+
+const MainScreen = (): React.JSX.Element => {
   const { user } = useAuth();
   const [showSettings, setShowSettings] = useState(false);
   const [currentDatabase, setCurrentDatabase] = useState<string>('');
@@ -19,10 +23,65 @@ const MainScreen = (): JSX.Element => {
   const navigation = useNavigation<any>();
   const { isDeveloperMode, toggleDeveloperMode } = useDeveloperMode();
 
+  // Quick Actions customization states
+  const [quickActions, setQuickActions] = useState<MenuItem[]>([]);
+  const [showCustomizeModal, setShowCustomizeModal] = useState(false);
+  const [availableMenus, setAvailableMenus] = useState<MenuItem[]>([]);
+  const [selectedMenuIds, setSelectedMenuIds] = useState<Set<string>>(new Set());
+
   const isAdmin = (user as any)?.email === 'johansen.junias17@gmail.com';
 
   const handleOpenSettings = () => setShowSettings(true);
   const handleCloseSettings = () => setShowSettings(false);
+
+  // Load Quick Actions configuration from AsyncStorage
+  useEffect(() => {
+    const loadQuickActions = async () => {
+      try {
+        const saved = await AsyncStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          const savedIds: string[] = JSON.parse(saved);
+          const loadedActions = savedIds
+            .map(id => AVAILABLE_MENUS.find(menu => menu.id === id))
+            .filter((menu): menu is MenuItem => menu !== undefined);
+          setQuickActions(loadedActions);
+          setSelectedMenuIds(new Set(savedIds));
+        } else {
+          // Load default Quick Actions
+          const defaultActions = DEFAULT_QUICK_ACTIONS
+            .map(id => AVAILABLE_MENUS.find(menu => menu.id === id))
+            .filter((menu): menu is MenuItem => menu !== undefined);
+          setQuickActions(defaultActions);
+          setSelectedMenuIds(new Set(DEFAULT_QUICK_ACTIONS));
+        }
+        setAvailableMenus(AVAILABLE_MENUS);
+      } catch (error) {
+        console.error('Error loading quick actions:', error);
+        // Fallback to defaults
+        const defaultActions = DEFAULT_QUICK_ACTIONS
+          .map(id => AVAILABLE_MENUS.find(menu => menu.id === id))
+          .filter((menu): menu is MenuItem => menu !== undefined);
+        setQuickActions(defaultActions);
+        setSelectedMenuIds(new Set(DEFAULT_QUICK_ACTIONS));
+        setAvailableMenus(AVAILABLE_MENUS);
+      }
+    };
+
+    loadQuickActions();
+  }, []);
+
+  // Save Quick Actions configuration to AsyncStorage
+  const saveQuickActions = async (actions: MenuItem[]) => {
+    try {
+      const ids = actions.map(action => action.id);
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(ids));
+      setQuickActions(actions);
+      setSelectedMenuIds(new Set(ids));
+    } catch (error) {
+      console.error('Error saving quick actions:', error);
+      Alert.alert('Error', 'Failed to save Quick Actions configuration');
+    }
+  };
 
   // Fetch database information on mount
   useEffect(() => {
@@ -90,6 +149,85 @@ const MainScreen = (): JSX.Element => {
     }
   };
 
+  // Quick Actions handlers
+  const handleToggleMenu = (menuId: string) => {
+    const isSelected = selectedMenuIds.has(menuId);
+
+    if (isSelected) {
+      // Remove from selection
+      if (selectedMenuIds.size > 1) {
+        const newSelected = new Set(selectedMenuIds);
+        newSelected.delete(menuId);
+        setSelectedMenuIds(newSelected);
+
+        // Also remove from quickActions array
+        const newActions = quickActions.filter(item => item.id !== menuId);
+        setQuickActions(newActions);
+      } else {
+        Alert.alert('Warning', 'You must have at least 1 Quick Action');
+      }
+    } else {
+      // Add to selection
+      if (selectedMenuIds.size >= MAX_QUICK_ACTIONS) {
+        Alert.alert('Limit Reached', `You can only have up to ${MAX_QUICK_ACTIONS} Quick Actions`);
+        return;
+      }
+
+      const newSelected = new Set(selectedMenuIds);
+      newSelected.add(menuId);
+      setSelectedMenuIds(newSelected);
+
+      // Also add to quickActions array
+      const menuToAdd = AVAILABLE_MENUS.find(menu => menu.id === menuId);
+      if (menuToAdd) {
+        setQuickActions([...quickActions, menuToAdd]);
+      }
+    }
+  };
+
+  const handleMoveUp = (index: number) => {
+    if (index > 0) {
+      const newActions = [...quickActions];
+      [newActions[index - 1], newActions[index]] = [newActions[index], newActions[index - 1]];
+      setQuickActions(newActions);
+    }
+  };
+
+  const handleMoveDown = (index: number) => {
+    if (index < quickActions.length - 1) {
+      const newActions = [...quickActions];
+      [newActions[index], newActions[index + 1]] = [newActions[index + 1], newActions[index]];
+      setQuickActions(newActions);
+    }
+  };
+
+  const handleSaveCustomization = () => {
+    saveQuickActions(quickActions);
+    setShowCustomizeModal(false);
+    Alert.alert('Success', 'Quick Actions updated successfully');
+  };
+
+  const handleResetToDefault = () => {
+    Alert.alert(
+      'Reset to Default',
+      'Are you sure you want to reset Quick Actions to default?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset',
+          style: 'destructive',
+          onPress: () => {
+            const defaultActions = DEFAULT_QUICK_ACTIONS
+              .map(id => AVAILABLE_MENUS.find(menu => menu.id === id))
+              .filter((menu): menu is MenuItem => menu !== undefined);
+            saveQuickActions(defaultActions);
+            setShowCustomizeModal(false);
+          },
+        },
+      ]
+    );
+  };
+
   if (showSettings) {
     return <Settings onClose={handleCloseSettings} />;
   }
@@ -117,55 +255,28 @@ const MainScreen = (): JSX.Element => {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.dashboard}>
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Quick Actions</Text>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Quick Actions</Text>
+              <TouchableOpacity
+                style={styles.customizeButton}
+                onPress={() => setShowCustomizeModal(true)}
+              >
+                <Ionicons name="settings-outline" size={20} color="white" />
+                <Text style={styles.customizeButtonText}>Customize</Text>
+              </TouchableOpacity>
+            </View>
             <View style={styles.actionGrid}>
-              <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('POSKasir')}>
-                <Ionicons name="cash-outline" size={32} color="white" />
-                <Text style={styles.actionTitle}>POS Kasir</Text>
-                <Text style={styles.actionSubtitle}>Point of Sale</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('BarangList')}>
-                <Ionicons name="cube-outline" size={32} color="white" />
-                <Text style={styles.actionTitle}>Barang</Text>
-                <Text style={styles.actionSubtitle}>Kelola Items</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('OrdersList')}>
-                <Ionicons name="cart-outline" size={32} color="white" />
-                <Text style={styles.actionTitle}>Pesanan</Text>
-                <Text style={styles.actionSubtitle}>Ecommerce Orders</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('ScanOut')}>
-                <Ionicons name="scan-outline" size={32} color="white" />
-                <Text style={styles.actionTitle}>Scan Out</Text>
-                <Text style={styles.actionSubtitle}>Scan Shipping Labels</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('UserList')}>
-                <Ionicons name="people-outline" size={32} color="white" />
-                <Text style={styles.actionTitle}>User</Text>
-                <Text style={styles.actionSubtitle}>Manage Users</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('BundlingList')}>
-                <Ionicons name="albums-outline" size={32} color="white" />
-                <Text style={styles.actionTitle}>Bundling</Text>
-                <Text style={styles.actionSubtitle}>Paket Produk</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('StokOpname')}>
-                <Ionicons name="clipboard-outline" size={32} color="white" />
-                <Text style={styles.actionTitle}>Stok Opname</Text>
-                <Text style={styles.actionSubtitle}>Stock Taking</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('Settingscreen')}>
-                <Ionicons name="cog-outline" size={32} color="white" />
-                <Text style={styles.actionTitle}>Setting</Text>
-                <Text style={styles.actionSubtitle}>App Configuration</Text>
-              </TouchableOpacity>
+              {quickActions.map((item) => (
+                <TouchableOpacity
+                  key={item.id}
+                  style={styles.actionCard}
+                  onPress={() => navigation.navigate(item.route as any)}
+                >
+                  <Ionicons name={item.icon} size={32} color="white" />
+                  <Text style={styles.actionTitle}>{item.label}</Text>
+                  <Text style={styles.actionSubtitle}>{item.subtitle}</Text>
+                </TouchableOpacity>
+              ))}
             </View>
           </View>
 
@@ -291,6 +402,135 @@ const MainScreen = (): JSX.Element => {
         </Modal>
       )}
 
+      {/* Customize Quick Actions Modal */}
+      <Modal
+        visible={showCustomizeModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowCustomizeModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.customizeModalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Customize Quick Actions</Text>
+              <TouchableOpacity onPress={() => setShowCustomizeModal(false)}>
+                <Ionicons name="close" size={24} color="#374151" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.menuList}>
+              {/* Current Quick Actions with Reorder */}
+              <View style={styles.menuCategory}>
+                <Text style={styles.menuCategoryTitle}>
+                  CURRENT QUICK ACTIONS ({quickActions.length}/{MAX_QUICK_ACTIONS})
+                </Text>
+                <Text style={styles.menuListHint}>
+                  Use ↑↓ buttons to reorder
+                </Text>
+                {quickActions.map((item, index) => (
+                  <View key={item.id} style={[styles.menuItem, styles.menuItemSelected]}>
+                    <View style={styles.menuItemLeft}>
+                      <Ionicons name={item.icon} size={24} color="#f59e0b" />
+                      <View style={styles.menuItemText}>
+                        <Text style={[styles.menuItemLabel, styles.menuItemLabelSelected]}>
+                          {item.label}
+                        </Text>
+                        <Text style={styles.menuItemSubtitle}>{item.subtitle}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.reorderButtons}>
+                      <TouchableOpacity
+                        onPress={() => handleMoveUp(index)}
+                        disabled={index === 0}
+                        style={[styles.reorderButton, index === 0 && styles.reorderButtonDisabled]}
+                      >
+                        <Ionicons
+                          name="chevron-up"
+                          size={20}
+                          color={index === 0 ? '#D1D5DB' : '#f59e0b'}
+                        />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => handleMoveDown(index)}
+                        disabled={index === quickActions.length - 1}
+                        style={[styles.reorderButton, index === quickActions.length - 1 && styles.reorderButtonDisabled]}
+                      >
+                        <Ionicons
+                          name="chevron-down"
+                          size={20}
+                          color={index === quickActions.length - 1 ? '#D1D5DB' : '#f59e0b'}
+                        />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => handleToggleMenu(item.id)}
+                        style={styles.removeButton}
+                      >
+                        <Ionicons name="close-circle" size={20} color="#dc2626" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
+              </View>
+
+              {/* Available Menus */}
+              <View style={styles.menuCategory}>
+                <Text style={styles.menuCategoryTitle}>AVAILABLE MENUS</Text>
+                <Text style={styles.menuListHint}>
+                  Tap to add to Quick Actions
+                </Text>
+              </View>
+
+              {/* Group menus by category */}
+              {['POS', 'MASTER', 'TRANSAKSI', 'ECOMMERCE', 'LAPORAN', 'SETTING'].map(category => {
+                const categoryMenus = availableMenus.filter(
+                  menu => menu.category === category && !selectedMenuIds.has(menu.id)
+                );
+                if (categoryMenus.length === 0) return null;
+
+                return (
+                  <View key={category} style={styles.menuCategory}>
+                    <Text style={styles.menuCategorySubtitle}>{category}</Text>
+                    {categoryMenus.map(menu => (
+                      <TouchableOpacity
+                        key={menu.id}
+                        style={styles.menuItem}
+                        onPress={() => handleToggleMenu(menu.id)}
+                      >
+                        <View style={styles.menuItemLeft}>
+                          <Ionicons name={menu.icon} size={24} color="#6B7280" />
+                          <View style={styles.menuItemText}>
+                            <Text style={styles.menuItemLabel}>{menu.label}</Text>
+                            <Text style={styles.menuItemSubtitle}>{menu.subtitle}</Text>
+                          </View>
+                        </View>
+                        <Ionicons name="add-circle-outline" size={24} color="#6B7280" />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                );
+              })}
+            </ScrollView>
+
+            <View style={styles.customizeModalFooter}>
+              <TouchableOpacity
+                style={styles.resetButton}
+                onPress={handleResetToDefault}
+              >
+                <Ionicons name="refresh-outline" size={20} color="#dc2626" />
+                <Text style={styles.resetButtonText}>Reset</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.saveButton}
+                onPress={handleSaveCustomization}
+              >
+                <Ionicons name="checkmark-outline" size={20} color="white" />
+                <Text style={styles.saveButtonText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* Developer Mode Toggle Button - Long press (1s) or double-tap to toggle */}
       <TouchableOpacity
         style={[
@@ -347,7 +587,10 @@ const styles = StyleSheet.create({
   content: { flex: 1 },
   dashboard: { padding: 20 },
   section: { marginBottom: 30 },
-  sectionTitle: { color: 'white', fontSize: 20, fontWeight: 'bold', marginBottom: 15 },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
+  sectionTitle: { color: 'white', fontSize: 20, fontWeight: 'bold' },
+  customizeButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, gap: 6 },
+  customizeButtonText: { color: 'white', fontSize: 14, fontWeight: '600' },
   actionGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   actionCard: { width: '48%', backgroundColor: 'rgba(255,255,255,0.15)', padding: 20, borderRadius: 16, alignItems: 'center', marginBottom: 15 },
   actionTitle: { color: 'white', fontSize: 16, fontWeight: '600', marginTop: 10 },
@@ -410,6 +653,141 @@ const styles = StyleSheet.create({
     backgroundColor: '#10B981',
     borderWidth: 2,
     borderColor: 'white',
+  },
+  // Customize Modal Styles
+  customizeModalContent: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '90%',
+    width: '100%',
+    marginTop: 'auto',
+  },
+  menuList: {
+    maxHeight: 500,
+    paddingHorizontal: 20,
+  },
+  menuListHint: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  menuCategory: {
+    marginBottom: 20,
+  },
+  menuCategoryTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#374151',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  menuCategorySubtitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginBottom: 8,
+    marginTop: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: '#F9FAFB',
+    marginBottom: 8,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  menuItemSelected: {
+    backgroundColor: '#FEF3C7',
+    borderColor: '#f59e0b',
+  },
+  menuItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  menuItemText: {
+    flex: 1,
+  },
+  menuItemLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  menuItemLabelSelected: {
+    color: '#92400E',
+  },
+  menuItemSubtitle: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  reorderButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  reorderButton: {
+    padding: 4,
+    borderRadius: 6,
+    backgroundColor: '#FEF3C7',
+  },
+  reorderButtonDisabled: {
+    backgroundColor: '#F3F4F6',
+  },
+  removeButton: {
+    padding: 4,
+    borderRadius: 6,
+    backgroundColor: '#FEE2E2',
+    marginLeft: 4,
+  },
+  customizeModalFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    gap: 12,
+  },
+  resetButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FEE2E2',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    gap: 8,
+    flex: 1,
+  },
+  resetButtonText: {
+    color: '#dc2626',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  saveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f59e0b',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    gap: 8,
+    flex: 2,
+  },
+  saveButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

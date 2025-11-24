@@ -86,7 +86,7 @@ export default function BarangEditScreen(): JSX.Element {
         const json = await res.json();
         if (!json.status) throw new Error(json.reason || 'Update failed');
         Alert.alert('Success', 'Saved');
-        navigation.goBack();
+        navigation.navigate('BarangList');
       } else {
         const res = await fetch(`${API_BASE_URL}/masterbarang`, {
           method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -99,7 +99,7 @@ export default function BarangEditScreen(): JSX.Element {
         const json = await res.json();
         if (!json.status) throw new Error(json.reason || 'Create failed');
         Alert.alert('Success', 'Created');
-        navigation.goBack();
+        navigation.navigate('BarangList');
       }
     } catch (e: any) {
       Alert.alert('Error', e.message || 'Save failed');

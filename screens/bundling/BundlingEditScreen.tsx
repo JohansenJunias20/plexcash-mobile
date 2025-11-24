@@ -220,7 +220,7 @@ export default function BundlingEditScreen(): JSX.Element {
           [
             {
               text: 'OK',
-              onPress: () => navigation.goBack(),
+              onPress: () => navigation.navigate('BundlingList'),
             },
           ]
         );
