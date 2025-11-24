@@ -87,15 +87,7 @@ export default function OrdersListScreen() {
     try {
       const start = unix(dateStart); const end = unix(dateEnd);
       const shop = selectedShopId || 0;
-
-      // Map frontend status to backend mode parameter
-      // SEMUA -> normal (fetch all)
-      // Other statuses -> send status directly to backend for filtering
-      const mode = status === 'SEMUA' ? 'normal' : status.replace(/ /g, '_');
-
-      console.log('[OrdersListScreen] Fetching orders with status:', status, 'mode:', mode);
-
-      const res = await ApiService.authenticatedRequest(`/get/ecommerce/order/date/${start}/${end}?id_ecommerce=${shop}&mode=${mode}&timestamp=${Math.floor(Date.now()/1000)}`);
+      const res = await ApiService.authenticatedRequest(`/get/ecommerce/order/date/${start}/${end}?id_ecommerce=${shop}&mode=cepat&timestamp=${Math.floor(Date.now()/1000)}`);
       if (res?.status && Array.isArray(res.data)) {
         const mapped: OrderCard[] = res.data.map((rd: any) => {
           const isBookingOrder = rd.from === 'SHOPEE' && rd.booking_sn ? true : false;
@@ -135,9 +127,6 @@ export default function OrdersListScreen() {
             isBookingOrder,
           };
         });
-
-        console.log('[OrdersListScreen] Total orders fetched:', mapped.length);
-        console.log('[OrdersListScreen] Status filter:', status);
 
         setAllItems(mapped);
         const initial = mapped.slice(0, PAGE_SIZE);
@@ -652,30 +641,17 @@ export default function OrdersListScreen() {
       </View>
 
       {/* Orders */}
-      {loading && visibleItems.length === 0 ? (
-        // Show full-screen loading indicator when fetching initial data
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#007AFF" />
-          <Text style={styles.loadingText}>Loading orders...</Text>
-          {status === 'SEMUA' && (
-            <Text style={styles.loadingSubtext}>
-              Fetching all orders may take a moment
-            </Text>
-          )}
-        </View>
-      ) : (
-        <FlatList
-          data={filtered}
-          keyExtractor={(it) => `${it.id}-${it.id_ecommerce}`}
-          renderItem={renderItem}
-          onEndReached={loadMore}
-          onEndReachedThreshold={0.5}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          ListFooterComponent={
-            <View style={{ paddingVertical: 12 }}>{loading && <ActivityIndicator />}</View>
-          }
-        />
-      )}
+      <FlatList
+        data={filtered}
+        keyExtractor={(it) => `${it.id}-${it.id_ecommerce}`}
+        renderItem={renderItem}
+        onEndReached={loadMore}
+        onEndReachedThreshold={0.5}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        ListFooterComponent={
+          <View style={{ paddingVertical: 12 }}>{loading && <ActivityIndicator />}</View>
+        }
+      />
 
       {/* Shop quick toggles */}
       {!selectionMode && (
@@ -972,24 +948,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  loadingSubtext: {
-    marginTop: 8,
-    fontSize: 14,
-    color: '#6B7280',
-    textAlign: 'center',
   },
 });
 
