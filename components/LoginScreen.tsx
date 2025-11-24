@@ -32,9 +32,15 @@ const LoginScreen = (): JSX.Element => {
         // 3. Mobile signs in with custom token
         // 4. Mobile gets ID token
         // 5. Mobile exchanges ID token with backend
-        // All done! Just show success message
+        // All done! AuthContext will handle navigation automatically
 
-        Alert.alert('Success', `Login successful!\n\nWelcome ${result.email}`, [{ text: 'OK' }]);
+        // ✅ DO NOT show Alert here - it blocks navigation!
+        // The AuthContext's onAuthStateChanged listener will:
+        // 1. Set isAuthenticated = true
+        // 2. RootNavigator will automatically switch to MainScreen
+        // Showing an Alert here creates a race condition that prevents navigation
+
+        console.log('✅ Login successful! Waiting for AuthContext to navigate to MainScreen...');
       } else if (result.cancelled) {
         // User cancelled, no need to show error
         console.log('Google Sign-In cancelled by user');

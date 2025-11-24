@@ -427,7 +427,7 @@ class ApiService {
       }
 
       console.log('Calling /auth/login/token endpoint...');
-      const response = await fetch(`${API_BASE_URL}/auth/login/token`, {
+      const response = await fetch(`${API_BASE_URL}/auth/login/token?source=login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

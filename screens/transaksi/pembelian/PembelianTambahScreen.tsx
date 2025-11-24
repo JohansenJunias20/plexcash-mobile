@@ -34,6 +34,7 @@ interface ItemDetail {
 interface Warehouse {
   id: string;
   name: string;
+  type: string;
 }
 
 export default function PembelianTambahScreen() {
@@ -100,9 +101,11 @@ export default function PembelianTambahScreen() {
       const warehouseData = await warehouseRes.json();
 
       if (warehouseData.status && warehouseData.data) {
-        setWarehouses(warehouseData.data);
-        if (warehouseData.data.length > 0) {
-          setSelectedWarehouse(warehouseData.data[0].id);
+        // Filter out SHOPEE_BOOKING_PENDING warehouses from purchase form
+        const filteredWarehouses = warehouseData.data.filter((wh: Warehouse) => wh.type !== 'SHOPEE_BOOKING_PENDING');
+        setWarehouses(filteredWarehouses);
+        if (filteredWarehouses.length > 0) {
+          setSelectedWarehouse(filteredWarehouses[0].id);
         }
       }
 

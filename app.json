@@ -20,9 +20,7 @@
         "NSBluetoothAlwaysUsageDescription": "This app uses Bluetooth to connect to thermal printers for printing receipts.",
         "ITSAppUsesNonExemptEncryption": false
       },
-      "runtimeVersion": {
-        "policy": "appVersion"
-      }
+      "runtimeVersion": "1.0.8"
     },
     "android": {
       "versionCode": 8,
@@ -43,9 +41,7 @@
         "android.permission.BLUETOOTH_ADMIN",
         "android.permission.BLUETOOTH_CONNECT"
       ],
-      "runtimeVersion": {
-        "policy": "appVersion"
-      }
+      "runtimeVersion": "1.0.8"
     },
     "plugins": [
       [
@@ -93,8 +89,6 @@
       "checkAutomatically": "ON_LOAD",
       "enabled": true
     },
-    "runtimeVersion": {
-      "policy": "appVersion"
-    }
+    "runtimeVersion": "1.0.8"
   }
 }
