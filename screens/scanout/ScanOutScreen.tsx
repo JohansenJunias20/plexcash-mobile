@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert, ActivityIndicator, Linking } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert, ActivityIndicator, Linking, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Camera, useCameraDevice, useCodeScanner } from 'react-native-vision-camera';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,6 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useNavigation, DrawerActions } from '@react-navigation/native';
 import ApiService from '../../services/api';
+import { Audio } from 'expo-av';
 
 interface ScannedOrder {
   orderNumber: string;
@@ -23,6 +24,9 @@ export default function ScanOutScreen(): JSX.Element {
   const [currentScan, setCurrentScan] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
   const [pendingScans, setPendingScans] = useState<Set<string>>(new Set()); // Track pending backend requests
+  const [manualInput, setManualInput] = useState('');
+  const [isCameraActive, setIsCameraActive] = useState(true);
+  const inputRef = useRef<TextInput>(null);
   const device = useCameraDevice('back');
 
   const codeScanner = useCodeScanner({
@@ -36,7 +40,33 @@ export default function ScanOutScreen(): JSX.Element {
 
   useEffect(() => {
     checkPermission();
+    // Cleanup sounds on unmount
+    return () => {
+      // Audio sounds are managed individually in playSound with unloadAsync
+    };
   }, []);
+
+  const playSound = async (type: 'success' | 'warning' | 'error') => {
+    try {
+      const { sound } = await Audio.Sound.createAsync(
+        type === 'success' 
+          ? require('../../assets/sounds/success.mp3') 
+          : type === 'warning' 
+            ? require('../../assets/sounds/warning.mp3') 
+            : require('../../assets/sounds/error.mp3')
+      );
+      await sound.playAsync();
+      
+      // Unload sound after playing (approximate duration)
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          sound.unloadAsync();
+        }
+      });
+    } catch (error) {
+      console.log('Error playing sound:', error);
+    }
+  };
 
   const checkPermission = async () => {
     const status = await Camera.getCameraPermissionStatus();
@@ -68,8 +98,16 @@ export default function ScanOutScreen(): JSX.Element {
     return false; // This is likely a resi (tracking number)
   };
 
+  const handleManualSubmit = () => {
+    const trimmedInput = manualInput.trim();
+    if (trimmedInput) {
+      handleBarcodeScanned({ data: trimmedInput });
+      setManualInput(''); // Clear input after submission
+    }
+  };
+
   const handleBarcodeScanned = async ({ data }: { data: string }) => {
-    if (!scanning || processing) return;
+    if (processing) return;
 
     // Check if this resi is already being processed (prevent duplicate scans)
     if (pendingScans.has(data)) {
@@ -85,6 +123,7 @@ export default function ScanOutScreen(): JSX.Element {
     if (isOrderNumber(data)) {
       // Trigger HEAVY error vibration (stronger and more noticeable)
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      await playSound('error');
 
       // Add to list as error for visual feedback
       const errorOrder: ScannedOrder = {
@@ -133,6 +172,7 @@ export default function ScanOutScreen(): JSX.Element {
       if (response?.status) {
         // Trigger SHORT success vibration (light and quick)
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        await playSound('success');
 
         // Success - resi scanned and saved
         const newOrder: ScannedOrder = {
@@ -153,19 +193,35 @@ export default function ScanOutScreen(): JSX.Element {
         // Trigger HEAVY error vibration (stronger and more noticeable)
         await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
+        const reason = response?.reason;
+        let alertTitle = '✗ Scan Gagal';
+        let alertMessage = response?.data?.message || response?.reason || 'Resi sudah pernah di-scan sebelumnya';
+
+        if (reason === 'ORDER_CANCELLED') {
+          alertTitle = '🚨 PESANAN DIBATALKAN';
+          alertMessage = response?.message || 'Pesanan ini telah dibatalkan. JANGAN DIKIRIM!';
+          await playSound('error');
+        } else if (reason === 'ALREADY_IN_TRANSIT') {
+          alertTitle = '⚠️ SUDAH TERKIRIM';
+          alertMessage = response?.message || 'Pesanan ini sudah dalam perjalanan/terkirim.';
+          await playSound('warning');
+        } else {
+          await playSound('error');
+        }
+
         // Error - resi already exists or validation failed
         const errorOrder: ScannedOrder = {
           orderNumber: data,
           timestamp: new Date(),
           status: 'error',
-          message: response?.reason || 'Unknown error',
+          message: alertTitle.replace('🚨 ', '').replace('⚠️ ', '').replace('✗ ', ''),
         };
 
         setScannedOrders(prev => [errorOrder, ...prev]);
 
         Alert.alert(
-          '✗ Scan Gagal',
-          response?.data?.message || response?.reason || 'Resi sudah pernah di-scan sebelumnya',
+          alertTitle,
+          alertMessage,
           [
             {
               text: 'OK',
@@ -191,6 +247,7 @@ export default function ScanOutScreen(): JSX.Element {
 
       // Trigger HEAVY error vibration (stronger and more noticeable)
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      await playSound('error');
 
       const errorOrder: ScannedOrder = {
         orderNumber: data,
@@ -324,6 +381,16 @@ export default function ScanOutScreen(): JSX.Element {
           <Ionicons name="menu" size={28} color="#f59e0b" />
         </TouchableOpacity>
         <Text style={styles.topHeaderTitle}>Scan Out</Text>
+        <TouchableOpacity
+          style={styles.cameraToggleButton}
+          onPress={() => setIsCameraActive(!isCameraActive)}
+        >
+          <Ionicons 
+            name={isCameraActive ? "videocam" : "videocam-off"} 
+            size={24} 
+            color={isCameraActive ? "#10B981" : "#EF4444"} 
+          />
+        </TouchableOpacity>
         <View style={styles.headerRight} />
       </View>
 
@@ -333,9 +400,21 @@ export default function ScanOutScreen(): JSX.Element {
           <Camera
             style={styles.camera}
             device={device}
-            isActive={scanning}
+            isActive={isCameraActive && scanning}
             codeScanner={codeScanner}
           >
+            {!isCameraActive && (
+              <View style={styles.cameraDisabledOverlay}>
+                <Ionicons name="videocam-off" size={64} color="rgba(255,255,255,0.5)" />
+                <Text style={styles.cameraDisabledText}>Kamera Dinonaktifkan</Text>
+                <TouchableOpacity 
+                  style={styles.enableCameraButton}
+                  onPress={() => setIsCameraActive(true)}
+                >
+                  <Text style={styles.enableCameraButtonText}>Aktifkan Kamera</Text>
+                </TouchableOpacity>
+              </View>
+            )}
             <View style={styles.overlay}>
             <View style={styles.scanArea}>
               <View style={[styles.corner, styles.topLeft]} />
@@ -354,6 +433,41 @@ export default function ScanOutScreen(): JSX.Element {
             )}
           </View>
         </Camera>
+      </View>
+
+      {/* Manual Input Section for Bluetooth Scanner */}
+      <View style={styles.manualInputContainer}>
+        <View style={styles.inputWrapper}>
+          <Ionicons name="barcode-outline" size={24} color="#6B7280" style={styles.inputIcon} />
+          <TextInput
+            ref={inputRef}
+            style={styles.manualInput}
+            value={manualInput}
+            onChangeText={setManualInput}
+            onSubmitEditing={handleManualSubmit}
+            placeholder="Scan with Bluetooth scanner or type manually"
+            placeholderTextColor="#9CA3AF"
+            returnKeyType="done"
+            autoCapitalize="none"
+            autoCorrect={false}
+            blurOnSubmit={false}
+          />
+          {manualInput.length > 0 && (
+            <TouchableOpacity
+              style={styles.clearInputButton}
+              onPress={() => setManualInput('')}
+            >
+              <Ionicons name="close-circle" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
+          )}
+        </View>
+        <TouchableOpacity
+          style={[styles.submitButton, !manualInput.trim() && styles.submitButtonDisabled]}
+          onPress={handleManualSubmit}
+          disabled={!manualInput.trim() || processing}
+        >
+          <Ionicons name="checkmark" size={20} color="white" />
+        </TouchableOpacity>
       </View>
 
       {/* Scanned Orders List */}
@@ -419,7 +533,8 @@ const styles = StyleSheet.create({
     borderBottomColor: '#e5e7eb'
   },
   hamburgerButton: { padding: 5 },
-  topHeaderTitle: { fontSize: 18, fontWeight: '600', color: '#111827', flex: 1, textAlign: 'center' },
+  topHeaderTitle: { fontSize: 18, fontWeight: '600', color: '#111827', flex: 1, textAlign: 'center', marginLeft: 38 },
+  cameraToggleButton: { padding: 5, marginRight: 8 },
   headerRight: { width: 38 },
   container: {
     flex: 1,
@@ -662,6 +777,71 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6B7280',
     fontWeight: '500',
+  },
+  manualInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: 'white',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    gap: 8,
+  },
+  inputWrapper: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    paddingHorizontal: 12,
+  },
+  inputIcon: {
+    marginRight: 8,
+  },
+  manualInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#111827',
+    paddingVertical: 12,
+  },
+  clearInputButton: {
+    padding: 4,
+  },
+  submitButton: {
+    backgroundColor: '#10B981',
+    borderRadius: 8,
+    padding: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  submitButtonDisabled: {
+    backgroundColor: '#D1D5DB',
+  },
+  cameraDisabledOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  cameraDisabledText: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 16,
+    marginTop: 12,
+    marginBottom: 20,
+  },
+  enableCameraButton: {
+    backgroundColor: '#10B981',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  enableCameraButtonText: {
+    color: 'white',
+    fontWeight: '600',
   },
 });
 

@@ -7,13 +7,19 @@ import ApiService from '../services/api';
 import Settings from './Settings';
 import GoogleAuthService from '../services/googleAuth';
 import { useDeveloperMode } from '../context/DeveloperModeContext';
+// PIN Login disabled for Google Play Store compliance
+// import PINLogin from './PINLogin';
 
 const LoginScreen = (): JSX.Element => {
   const [isLoading, setIsLoading] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  // PIN Login disabled for Google Play Store compliance
+  // Google Play requires reviewers to access all features without needing credentials from another device/platform
+  // const [showPINLogin, setShowPINLogin] = useState(false);
   const { isDeveloperMode, toggleDeveloperMode } = useDeveloperMode();
 
   const handleQRCodeLogin = () => setShowSettings(true);
+  // const handlePINLogin = () => setShowPINLogin(true);
 
   const handleGoogleLogin = async () => {
     setIsLoading(true);
@@ -86,10 +92,16 @@ const LoginScreen = (): JSX.Element => {
   };
 
   const handleCloseSettings = () => setShowSettings(false);
+  // const handleClosePINLogin = () => setShowPINLogin(false);
 
   if (showSettings) {
     return <Settings onClose={handleCloseSettings} />;
   }
+
+  // PIN Login disabled for Google Play Store compliance
+  // if (showPINLogin) {
+  //   return <PINLogin onCancel={handleClosePINLogin} />;
+  // }
 
   return (
     <View style={styles.container}>
@@ -157,6 +169,27 @@ const LoginScreen = (): JSX.Element => {
                       </View>
                     </View>
                   </TouchableOpacity>
+
+                  {/* PIN Login Button - DISABLED FOR GOOGLE PLAY STORE COMPLIANCE
+                      Google Play requires reviewers to access all features without needing
+                      credentials from another device/platform (web app). The PIN login flow
+                      requires users to generate a PIN from the web app first, which violates
+                      this policy. The feature remains in the codebase for potential future use
+                      in direct distribution or enterprise builds.
+                  */}
+                  {/* <TouchableOpacity
+                    style={styles.pinButton}
+                    onPress={handlePINLogin}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.buttonContent}>
+                      <Ionicons name="keypad" size={28} color="white" style={styles.buttonIcon} />
+                      <View style={styles.buttonTextContainer}>
+                        <Text style={styles.primaryButtonText}>Login with PIN Code</Text>
+                        <Text style={styles.buttonSubtext}>Enter PIN from web app</Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity> */}
 
                   {/* Google Login Button */}
                   <TouchableOpacity
@@ -340,6 +373,18 @@ const styles = StyleSheet.create({
     padding: 20,
     marginBottom: 16,
     shadowColor: '#6366F1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6
+  } as any,
+  pinButton: {
+    width: '100%',
+    backgroundColor: '#10b981',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: '#10b981',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,

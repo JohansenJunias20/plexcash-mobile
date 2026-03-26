@@ -425,6 +425,41 @@ class GoogleAuthService {
       logGoogleAuth('⚠️ IMPORTANT: onAuthStateChanged listener should fire now...');
       logGoogleAuth('Waiting for AuthContext to update authentication state...');
 
+      // FALLBACK MECHANISM: If onAuthStateChanged doesn't fire within 3 seconds,
+      // manually store the token to ensure the user can proceed
+      // This handles edge cases where the listener might not fire immediately
+      const fallbackTimeout = setTimeout(async () => {
+        logGoogleAuth('⚠️ FALLBACK: onAuthStateChanged did not fire within 3 seconds');
+        console.log('⚠️ [GOOGLE-AUTH-FALLBACK] Manually storing tokens as fallback');
+
+        try {
+          // Manually store tokens (same as what onAuthStateChanged would do)
+          await ApiService.storeDeviceTokens({
+            authToken: idToken,
+            token: idToken,
+            deviceId: deviceId,
+            user: { email },
+            authMethod: 'firebase'
+          });
+
+          logGoogleAuth('✅ FALLBACK: Tokens stored manually');
+          console.log('✅ [GOOGLE-AUTH-FALLBACK] Tokens stored successfully');
+        } catch (error) {
+          logError('FALLBACK: Failed to store tokens manually', {
+            context: 'GOOGLE-AUTH-FALLBACK',
+            data: error
+          });
+          console.error('❌ [GOOGLE-AUTH-FALLBACK] Failed to store tokens:', error);
+        }
+      }, 3000);
+
+      // Clear the fallback timeout if we return successfully
+      // (The listener should have fired by then)
+      setTimeout(() => {
+        clearTimeout(fallbackTimeout);
+        logGoogleAuth('Fallback timeout cleared - assuming listener fired successfully');
+      }, 3500);
+
       // Note: Token storage is handled by AuthContext's onAuthStateChanged listener
       // which fires automatically after signInWithCustomToken() completes.
       // This ensures the token is stored BEFORE isAuthenticated is set to true,

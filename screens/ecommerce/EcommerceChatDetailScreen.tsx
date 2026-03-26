@@ -7,7 +7,9 @@ import {
   Text,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
+import ApiService from '../../services/api';
 import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import moment from 'moment';
 import { useChatMessages } from './chat/hooks/useChatMessages';
@@ -285,6 +287,101 @@ export default function EcommerceChatDetailScreen() {
     setSelectedOrder(null);
   };
 
+  // Handle accept order
+  const handleAcceptOrder = (order: IOrder) => {
+    // Show ActionSheet/Alert to choose between Pickup and Dropoff
+    Alert.alert(
+      'Terima Pesanan',
+      'Pilih metode pengiriman:',
+      [
+        {
+          text: 'Pickup',
+          onPress: () => processAcceptOrder(order, 'pickup'),
+        },
+        {
+          text: 'Dropoff',
+          onPress: () => processAcceptOrder(order, 'dropoff'),
+        },
+        {
+          text: 'Batal',
+          style: 'cancel',
+        },
+      ]
+    );
+  };
+
+  const processAcceptOrder = async (order: IOrder, method_ship: 'pickup' | 'dropoff') => {
+    try {
+      setLoadingOrders(true);
+
+      const isBookingOrder = order.platform === 'SHOPEE' && order.booking_sn ? true : false;
+
+      let response;
+      if (isBookingOrder) {
+        // Build payload for booking order
+        const bookingBody = [{
+          id_ecommerce: order.id_ecommerce || idEcommerce,
+          order_id: String(order.booking_sn),
+          method_ship
+        }];
+
+        response = await ApiService.authenticatedRequest("/ecommerce/shopee/ship_booking", {
+          method: "POST",
+          body: JSON.stringify(bookingBody)
+        });
+      } else {
+        // Build payload for standard order
+        const itemIds = order.items ? order.items.map((i: any) => i.itemId_blibli).filter(Boolean) : undefined;
+        // In mobile, we don't have item_pack_id easily accessible from IOrder, 
+        // but the backend accepts it as optional
+
+        const standardBody = [{
+          id_ecommerce: order.id_ecommerce || idEcommerce,
+          order_id: order.id,
+          package_id: order.package_id,
+          method_ship,
+          item_id_blibli: itemIds,
+        }];
+
+        response = await ApiService.authenticatedRequest("/ecommerce/order/accept", {
+          method: "POST",
+          body: JSON.stringify(standardBody)
+        });
+      }
+
+      console.log('📦 [ChatDetail] Accept Order Response:', response);
+
+      if (response && response.status) {
+        const dataResult = response.data;
+        // The endpoint usually returns an array of results matching the input array
+        const res = Array.isArray(dataResult) ? dataResult[0] : dataResult;
+
+        if (res?.status === "rejected") {
+          Alert.alert("Gagal Terima Pesanan", res.reason || "Terjadi kesalahan");
+        } else if (res?.value || res?.status === "fulfilled") {
+          Alert.alert("Sukses", "Pesanan berhasil diterima");
+          // Refresh orders list
+          handleFetchOrders();
+        } else if (res && res.value === false) {
+          Alert.alert("Gagal", "Gagal proses, silahkan coba lagi beberapa saat");
+        } else {
+          // Maybe the structure is directly { status: true, data: ... } with no array
+          Alert.alert("Sukses", "Pesanan berhasil diterima");
+          handleFetchOrders();
+        }
+      } else {
+        Alert.alert("Gagal", response?.reason || response?.message || "Terjadi kesalahan pada server");
+      }
+    } catch (error: any) {
+      console.error('❌ [ChatDetail] Error accepting order:', error);
+      Alert.alert("Error", error?.message || "Terjadi kesalahan. Silahkan coba lagi.");
+    } finally {
+      if (!cancelOrderFetch) {
+        setLoadingOrders(false);
+      }
+    }
+  };
+
   // ============================================
   // PRODUCT LIST FUNCTIONS
   // ============================================
@@ -484,6 +581,7 @@ export default function EcommerceChatDetailScreen() {
           loadingProgress={loadingProgress}
           onClose={() => setShowOrderList(false)}
           onOrderPress={handleOrderPress}
+          onAcceptOrder={handleAcceptOrder}
           onCancelLoading={handleCancelOrderLoading}
         />
 

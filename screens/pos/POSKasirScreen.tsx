@@ -21,9 +21,40 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Camera, useCameraDevice, useCodeScanner } from 'react-native-vision-camera';
 import { API_BASE_URL } from '../../services/api';
 import { getTokenAuth } from '../../services/token';
-import BluetoothPrinterService, { BluetoothDevice, ReceiptData } from '../../services/BluetoothPrinterService';
+import {
+  BluetoothDevice,
+  ReceiptData,
+  BluetoothPrinterServiceFactory,
+  BleLibraryType,
+  PrinterLibraryType,
+  LANPrinter,
+  LANPrinterDiscovery,
+  LANPrinterService,
+  ProtocolType,
+} from '../../services/BluetoothPrinterService';
+import LANPrinterSettings from '../../components/LANPrinterSettings';
 import { useAuth } from '../../context/AuthContext';
 import { useOrientation } from '../../hooks/useOrientation';
+
+interface BundlingDetail {
+  id: number;
+  id_masterbarang: number;
+  qty_required: number;
+  nama: string;
+  sku: string;
+  satuan?: string;
+  merk?: string;
+}
+
+interface BundlingVariant {
+  id: number;
+  nama: string;
+  sku: string;
+  hargajual: number;
+  stok: number;
+  satuan?: string;
+  items: BundlingDetail[];
+}
 
 interface Product {
   id: number;
@@ -39,6 +70,7 @@ interface Product {
   harga_grosir?: number;
   qty_grosir?: number;
   is_bundling?: boolean; // Flag to identify bundling items
+  bundling_variants?: BundlingVariant[]; // Bundling variants that contain this masterbarang
 }
 
 interface CartItem extends Product {
@@ -54,6 +86,12 @@ interface CartItem extends Product {
 interface Customer {
   id: number;
   nama: string;
+}
+
+interface Employee {
+  id: number;
+  nama: string;
+  pin_hash?: string | null;
 }
 
 interface BaganAkun {
@@ -81,6 +119,9 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [scannedBarcode, setScannedBarcode] = useState<string>('');
+  const [scannerMode, setScannerMode] = useState<'camera' | 'external'>('camera'); // Scanner mode toggle
+  const [externalScannerInput, setExternalScannerInput] = useState('');
+  const externalScannerRef = useRef<TextInput>(null);
   const device = useCameraDevice('back');
 
   const codeScanner = useCodeScanner({
@@ -108,6 +149,10 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
   const [paperSize, setPaperSize] = useState<'58mm' | '80mm'>('80mm');
   const [receiptLanguage, setReceiptLanguage] = useState<'id' | 'en'>('id');
   const [scanningPrinters, setScanningPrinters] = useState(false);
+  const [bleLibrary, setBleLibrary] = useState<BleLibraryType>('bt-classic');
+  const [printerType, setPrinterType] = useState<'bluetooth' | 'lan'>('bluetooth');
+  const [selectedLANPrinter, setSelectedLANPrinter] = useState<LANPrinter | null>(null);
+  const [isTestPrinting, setIsTestPrinting] = useState(false);
   const [isPkpActive, setIsPkpActive] = useState(false);
   const [ppnRate, setPpnRate] = useState(11);
   const [saving, setSaving] = useState(false);
@@ -122,6 +167,12 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
   // Reset/New Sale confirmation modal
   const [showResetConfirmModal, setShowResetConfirmModal] = useState(false);
 
+  // Variant selection modal
+  const [showVariantModal, setShowVariantModal] = useState(false);
+  const [selectedProductForVariant, setSelectedProductForVariant] = useState<Product | null>(null);
+  const [selectedVariantIndex, setSelectedVariantIndex] = useState<number>(0); // 0 = masterbarang, 1+ = bundling variants
+  const [variantQty, setVariantQty] = useState<number>(1);
+
   // Store settings
   const [storeSettings, setStoreSettings] = useState({
     name: 'PlexSeller',
@@ -130,16 +181,51 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
     phone: '',
   });
 
+  // Employee authentication states
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  const [showEmployeeModal, setShowEmployeeModal] = useState(false);
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [pinInput, setPinInput] = useState('');
+  const [pinEmployee, setPinEmployee] = useState<Employee | null>(null);
+  const [pinError, setPinError] = useState('');
+
+  // Product view mode state (grid/list)
+  const [productViewMode, setProductViewMode] = useState<'grid' | 'list'>('grid');
+
   useEffect(() => {
     loadCustomers();
+    loadEmployees();
     loadSettings();
     loadBaganAkun();
     requestCameraPermission();
     loadSavedBaganAkun();
     loadSavedPrinter();
+    loadSavedViewMode();
     // Focus on search input when screen loads
     setTimeout(() => searchInputRef.current?.focus(), 300);
   }, []);
+
+  // Auto-focus external scanner input when modal opens in external mode
+  useEffect(() => {
+    if (showBarcodeScanner && scannerMode === 'external') {
+      setTimeout(() => externalScannerRef.current?.focus(), 200);
+    }
+  }, [showBarcodeScanner, scannerMode]);
+
+  // Debounced search effect - wait 600ms after user stops typing
+  useEffect(() => {
+    const debounceTimer = setTimeout(() => {
+      if (searchQuery.trim()) {
+        searchProducts(searchQuery);
+      } else {
+        setProducts([]);
+        setShowProductList(false);
+      }
+    }, 600); // 600ms debounce delay
+
+    return () => clearTimeout(debounceTimer);
+  }, [searchQuery]);
 
   const requestCameraPermission = async () => {
     const status = await Camera.requestCameraPermission();
@@ -191,13 +277,24 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
 
   const loadSavedPrinter = async () => {
     try {
+      const savedPrinterType = await AsyncStorage.getItem('printer_type');
       const savedPrinterAddress = await AsyncStorage.getItem('pos_selected_printer');
+      const savedLANPrinter = await AsyncStorage.getItem('selected_lan_printer');
       const savedPaperSize = await AsyncStorage.getItem('pos_paper_size');
       const savedLanguage = await AsyncStorage.getItem('pos_receipt_language');
 
-      if (savedPrinterAddress) {
+      if (savedPrinterType) {
+        setPrinterType(savedPrinterType as 'bluetooth' | 'lan');
+        console.log('🖨️ [PRINTER] Loaded printer type:', savedPrinterType);
+      }
+
+      if (savedPrinterType === 'lan' && savedLANPrinter) {
+        const lanPrinter = JSON.parse(savedLANPrinter);
+        setSelectedLANPrinter(lanPrinter);
+        console.log('🖨️ [PRINTER] Loaded LAN printer:', lanPrinter);
+      } else if (savedPrinterAddress) {
         setSelectedPrinter(savedPrinterAddress);
-        console.log('🖨️ [PRINTER] Loaded saved printer:', savedPrinterAddress);
+        console.log('🖨️ [PRINTER] Loaded Bluetooth printer:', savedPrinterAddress);
       }
 
       if (savedPaperSize) {
@@ -244,6 +341,53 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
     }
   };
 
+  const saveBleLibrarySelection = async (library: BleLibraryType) => {
+    try {
+      await AsyncStorage.setItem('pos_ble_library', library);
+      setBleLibrary(library);
+
+      // Switch the library
+      await BluetoothPrinterServiceFactory.switchLibrary(library);
+      console.log('📡 [PRINTER] Switched BLE library to:', library);
+
+      // Clear printer selection and list since we switched libraries
+      setPrinters([]);
+      setSelectedPrinter('');
+      await AsyncStorage.removeItem('pos_selected_printer');
+
+      Alert.alert(
+        'Library Switched',
+        `Now using ${library === 'bt-classic' ? 'Bluetooth Classic (Recommended)' : 'BLE PLX (Legacy)'}. Please scan for printers again.`,
+        [{ text: 'OK' }]
+      );
+    } catch (error) {
+      console.error('Error switching BLE library:', error);
+      Alert.alert('Error', 'Failed to switch BLE library');
+    }
+  };
+
+  const loadSavedViewMode = async () => {
+    try {
+      const savedViewMode = await AsyncStorage.getItem('pos_product_view_mode');
+      if (savedViewMode === 'grid' || savedViewMode === 'list') {
+        setProductViewMode(savedViewMode);
+        console.log('📋 [POS] Loaded product view mode:', savedViewMode);
+      }
+    } catch (error) {
+      console.error('Error loading saved view mode:', error);
+    }
+  };
+
+  const saveViewModeSelection = async (mode: 'grid' | 'list') => {
+    try {
+      await AsyncStorage.setItem('pos_product_view_mode', mode);
+      setProductViewMode(mode);
+      console.log('📋 [POS] Saved product view mode:', mode);
+    } catch (error) {
+      console.error('Error saving view mode:', error);
+    }
+  };
+
   const loadSettings = async () => {
     try {
       const token = await getTokenAuth();
@@ -279,6 +423,14 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
 
         console.log('📋 [SETTINGS] Store settings loaded:', { storeName, storeAddress, storeMotto, storePhone });
       }
+
+      // Load BLE library preference
+      const savedBleLibrary = await AsyncStorage.getItem('pos_ble_library');
+      if (savedBleLibrary === 'ble-plx' || savedBleLibrary === 'bt-classic') {
+        setBleLibrary(savedBleLibrary);
+        await BluetoothPrinterServiceFactory.switchLibrary(savedBleLibrary);
+        console.log('📡 [SETTINGS] BLE library loaded:', savedBleLibrary);
+      }
     } catch (error) {
       console.error('Error loading settings:', error);
       Alert.alert('Error', 'Failed to load settings');
@@ -307,6 +459,99 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
     }
   };
 
+  const loadEmployees = async () => {
+    try {
+      const token = await getTokenAuth();
+      if (!token) {
+        console.error('No auth token available');
+        return;
+      }
+
+      console.log('Loading employees from:', `${API_BASE_URL}/get/karyawan`);
+      const response = await fetch(`${API_BASE_URL}/get/karyawan`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      const data = await response.json();
+      console.log('Employee data received:', data);
+
+      if (data.status) {
+        const employeeList = data.data || [];
+        console.log('Setting employees:', employeeList.length, 'employees');
+        setEmployees(employeeList);
+      } else {
+        console.error('Failed to load employees:', data.reason);
+        setEmployees([]); // Set empty array on failure
+      }
+    } catch (error) {
+      console.error('Error loading employees:', error);
+      setEmployees([]); // Set empty array on error
+      Alert.alert('Error', 'Failed to load employees. Please check your connection.');
+    }
+  };
+
+  const handleEmployeeSelect = (employee: Employee) => {
+    // If employee has a PIN, require authentication
+    if (employee.pin_hash) {
+      setPinEmployee(employee);
+      setShowEmployeeModal(false);
+      setShowPinModal(true);
+      setPinInput('');
+      setPinError('');
+    } else {
+      // If no PIN, select employee directly without authentication
+      setSelectedEmployee(employee);
+      setShowEmployeeModal(false);
+      console.log('Employee selected without PIN:', employee.nama);
+    }
+  };
+
+  const validatePin = async () => {
+    if (!pinEmployee) return;
+
+    if (pinInput.length !== 6) {
+      setPinError('PIN must be 6 digits');
+      return;
+    }
+
+    try {
+      const token = await getTokenAuth();
+      if (!token) {
+        Alert.alert('Error', 'Not authenticated');
+        return;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/karyawan/pin/validate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          id_karyawan: pinEmployee.id,
+          pin: pinInput
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.status) {
+        // PIN validated successfully
+        setSelectedEmployee(pinEmployee);
+        setShowPinModal(false);
+        setPinInput('');
+        setPinError('');
+        Alert.alert('Success', `Welcome, ${pinEmployee.nama}!`);
+      } else {
+        setPinError(data.reason || 'Invalid PIN');
+        setPinInput('');
+      }
+    } catch (error) {
+      console.error('Error validating PIN:', error);
+      Alert.alert('Error', 'Failed to validate PIN');
+    }
+  };
+
   const searchProducts = async (query: string) => {
     if (!query.trim()) {
       setProducts([]);
@@ -323,8 +568,8 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
         return;
       }
 
-      // Strategy: Search both masterbarang and bundling, then merge results
-      
+      // Strategy: Search both masterbarang and bundling, then group bundling by masterbarang
+
       // PART 1: Search masterbarang (existing logic)
       const qsSku = new URLSearchParams();
       qsSku.set('start', '0');
@@ -364,7 +609,7 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
       if (dataSku.status && dataSku.data) {
         dataSku.data.forEach((product: Product) => {
           if (!seenIds.has(product.id)) {
-            barangProducts.push({ ...product, is_bundling: false });
+            barangProducts.push({ ...product, is_bundling: false, bundling_variants: [] });
             seenIds.add(product.id);
           }
         });
@@ -373,51 +618,111 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
       if (dataNama.status && dataNama.data) {
         dataNama.data.forEach((product: Product) => {
           if (!seenIds.has(product.id)) {
-            barangProducts.push({ ...product, is_bundling: false });
+            barangProducts.push({ ...product, is_bundling: false, bundling_variants: [] });
             seenIds.add(product.id);
           }
         });
       }
 
-      // PART 2: Search bundling
-      const bundlingResponse = await fetch(`${API_BASE_URL}/get/bundling`, {
+      // PART 2: Search bundling with search parameter
+      const bundlingParams = new URLSearchParams();
+      bundlingParams.set('search', query);
+      bundlingParams.set('page', '1');
+      bundlingParams.set('pageSize', '20');
+
+      const bundlingResponse = await fetch(`${API_BASE_URL}/get/bundling?${bundlingParams.toString()}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
       const bundlingData = await bundlingResponse.json();
-      const bundlingProducts: Product[] = [];
 
       if (bundlingData.status && bundlingData.data) {
-        // Filter bundling by query (search in nama or sku)
-        const filteredBundling = bundlingData.data.filter((bundling: any) => {
-          const searchLower = query.toLowerCase();
-          const namaMatch = bundling.nama?.toLowerCase().includes(searchLower);
-          const skuMatch = bundling.sku?.toLowerCase().includes(searchLower);
-          return namaMatch || skuMatch;
+        // PART 3: Fetch detail for each bundling to get masterbarang composition
+        const bundlingDetailsPromises = bundlingData.data.map(async (bundling: any) => {
+          try {
+            const detailResponse = await fetch(`${API_BASE_URL}/get/bundling?id=${bundling.id}`, {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            const detailData = await detailResponse.json();
+
+            if (detailData.status && detailData.data) {
+              return {
+                id: bundling.id,
+                nama: bundling.nama,
+                sku: bundling.sku,
+                hargajual: detailData.data.harga || bundling.hargajual || 0,
+                stok: detailData.data.stok || 0,
+                satuan: detailData.data.satuan || undefined,
+                items: detailData.data.items || []
+              };
+            }
+            return null;
+          } catch (error) {
+            console.error(`Error fetching bundling detail for id ${bundling.id}:`, error);
+            return null;
+          }
         });
 
-        // Map bundling to Product interface
-        filteredBundling.forEach((bundling: any) => {
-          bundlingProducts.push({
-            id: bundling.id,
-            nama: bundling.nama,
-            sku: bundling.sku,
-            hargajual: bundling.harga || bundling.hargajual || 0,
-            hargabeli: bundling.hpp || 0,
-            stok: bundling.stok || 0,
-            satuan: 'set', // Bundling typically sold as set
-            is_bundling: true,
+        const bundlingDetails = (await Promise.all(bundlingDetailsPromises)).filter(b => b !== null) as BundlingVariant[];
+
+        // PART 4: Group bundling by masterbarang
+        // Create a map of id_masterbarang -> bundling variants
+        const masterbarangToBundling = new Map<number, BundlingVariant[]>();
+
+        bundlingDetails.forEach(bundling => {
+          bundling.items.forEach(item => {
+            if (!masterbarangToBundling.has(item.id_masterbarang)) {
+              masterbarangToBundling.set(item.id_masterbarang, []);
+            }
+            masterbarangToBundling.get(item.id_masterbarang)!.push(bundling);
           });
         });
+
+        // PART 5: Attach bundling variants to masterbarang products
+        barangProducts.forEach(product => {
+          const variants = masterbarangToBundling.get(product.id);
+          if (variants && variants.length > 0) {
+            product.bundling_variants = variants;
+          }
+        });
+
+        // PART 6: Add standalone bundling (bundling that don't match any masterbarang in search results)
+        const bundlingOnlyProducts: Product[] = [];
+        bundlingDetails.forEach(bundling => {
+          // Check if this bundling is already attached to a masterbarang
+          const isAttached = barangProducts.some(p =>
+            p.bundling_variants?.some(v => v.id === bundling.id)
+          );
+
+          if (!isAttached) {
+            // Add as standalone bundling product
+            bundlingOnlyProducts.push({
+              id: bundling.id,
+              nama: bundling.nama,
+              sku: bundling.sku,
+              hargajual: bundling.hargajual,
+              hargabeli: 0,
+              stok: bundling.stok,
+              satuan: bundling.satuan || 'set',
+              is_bundling: true,
+              bundling_variants: []
+            });
+          }
+        });
+
+        console.log(`🔍 [POS] Found ${barangProducts.length} masterbarang, ${bundlingDetails.length} bundling items`);
+        console.log(`🔍 [POS] ${barangProducts.filter(p => p.bundling_variants && p.bundling_variants.length > 0).length} masterbarang have bundling variants`);
+        console.log(`🔍 [POS] ${bundlingOnlyProducts.length} standalone bundling items`);
+
+        // Merge all results
+        const allProducts = [...barangProducts, ...bundlingOnlyProducts];
+        setProducts(allProducts);
+        setShowProductList(allProducts.length > 0);
+      } else {
+        // No bundling found, just show masterbarang
+        setProducts(barangProducts);
+        setShowProductList(barangProducts.length > 0);
       }
-
-      // Merge both results
-      const allProducts = [...barangProducts, ...bundlingProducts];
-
-      console.log(`🔍 [POS] Found ${barangProducts.length} products and ${bundlingProducts.length} bundling items`);
-
-      setProducts(allProducts);
-      setShowProductList(allProducts.length > 0);
 
     } catch (error) {
       console.error('Error searching products:', error);
@@ -473,10 +778,38 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
     setTimeout(() => setScannedBarcode(''), 2000);
   };
 
+  // Handle external scanner input (for physical barcode scanners)
+  const handleExternalScannerSubmit = () => {
+    const code = externalScannerInput.trim();
+    if (!code) return;
+
+    // Process the barcode
+    scanBarcode(code);
+
+    // Clear input and refocus for next scan
+    setExternalScannerInput('');
+    setTimeout(() => externalScannerRef.current?.focus(), 50);
+  };
+
   const addToCart = (product: Product) => {
+    // Check if product has bundling variants
+    if (product.bundling_variants && product.bundling_variants.length > 0 && !product.is_bundling) {
+      // Show variant selection modal
+      setSelectedProductForVariant(product);
+      setSelectedVariantIndex(0); // Default to masterbarang
+      setVariantQty(1);
+      setShowVariantModal(true);
+      return;
+    }
+
+    // Direct add to cart (no variants)
+    addToCartDirect(product, 1);
+  };
+
+  const addToCartDirect = (product: Product, qty: number) => {
     // Check if it's a bundling or regular product
     const isBundling = product.is_bundling === true;
-    
+
     // Find existing item in cart
     const existingIndex = cart.findIndex(item => {
       if (isBundling) {
@@ -491,7 +824,7 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
     if (existingIndex >= 0) {
       // Update quantity
       const newCart = [...cart];
-      const newQty = newCart[existingIndex].qty + 1;
+      const newQty = newCart[existingIndex].qty + qty;
 
       // Check wholesale pricing (only for regular products, not bundling)
       const isWholesale = !isBundling && product.harga_grosir && product.qty_grosir && newQty >= product.qty_grosir;
@@ -504,17 +837,17 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
       setCart(newCart);
     } else {
       // Add new item
-      const isWholesale = !isBundling && product.harga_grosir && product.qty_grosir && 1 >= product.qty_grosir;
+      const isWholesale = !isBundling && product.harga_grosir && product.qty_grosir && qty >= product.qty_grosir;
       const price = isWholesale ? (product.harga_grosir || 0) : (product.hargajual || 0);
 
       const newItem: CartItem = {
         ...product,
-        qty: 1,
-        subtotal: price,
+        qty,
+        subtotal: price * qty,
         is_wholesale: !!isWholesale,
         is_bundling: isBundling,
         // Set appropriate ID field
-        ...(isBundling 
+        ...(isBundling
           ? { id_bundling: product.id, id_barang: undefined }
           : { id_barang: product.id, id_bundling: undefined }
         ),
@@ -528,6 +861,38 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
     setProducts([]);
     setShowProductList(false);
     searchInputRef.current?.focus();
+  };
+
+  const handleVariantSelection = () => {
+    if (!selectedProductForVariant) return;
+
+    let productToAdd: Product;
+
+    if (selectedVariantIndex === 0) {
+      // Add masterbarang
+      productToAdd = selectedProductForVariant;
+    } else {
+      // Add bundling variant
+      const variant = selectedProductForVariant.bundling_variants![selectedVariantIndex - 1];
+      productToAdd = {
+        id: variant.id,
+        nama: variant.nama,
+        sku: variant.sku,
+        hargajual: variant.hargajual,
+        hargabeli: 0,
+        stok: variant.stok,
+        satuan: variant.satuan || 'set',
+        is_bundling: true,
+      };
+    }
+
+    addToCartDirect(productToAdd, variantQty);
+
+    // Close modal and reset
+    setShowVariantModal(false);
+    setSelectedProductForVariant(null);
+    setSelectedVariantIndex(0);
+    setVariantQty(1);
   };
 
   const updateCartItemQty = (index: number, newQty: number) => {
@@ -640,6 +1005,9 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
     const terbayarAmount = parseFloat(terbayar || '0');
     const sisa = total - terbayarAmount;
 
+    // Employee selection is now optional - no validation required
+    // If no employee is selected, id_karyawan will be null in the transaction
+
     // Validate: sisa cannot be negative
     if (sisa < 0) {
       Alert.alert('Error', 'Terbayar tidak boleh lebih dari total');
@@ -717,6 +1085,7 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
             penjualan: {
               tanggal,
               id_customer: selectedCustomer.id,
+              id_karyawan: selectedEmployee?.id || null, // ✅ Add employee ID for accountability
               keterangan,
               bayar: terbayarAmount,
               bayarkontan: terbayarAmount,
@@ -824,25 +1193,21 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
   };
 
   const printReceipt = async (invoiceId: number, payment: number) => {
-    // Check Bluetooth is enabled first
-    try {
-      const enabled = await BluetoothPrinterService.isBluetoothEnabled();
-      if (!enabled) {
-        Alert.alert(
-          'Bluetooth Disabled',
-          'Please turn on Bluetooth in your device settings to print receipts.',
-          [
-            { text: 'OK', style: 'cancel' },
-          ]
-        );
-        return;
-      }
-    } catch (error) {
-      console.error('Bluetooth check error:', error);
+    console.log('🖨️ [POS] Starting print receipt process...');
+
+    // Check if any printer is selected
+    if (printerType === 'bluetooth' && !selectedPrinter) {
+      console.log('⚠️ [POS] No Bluetooth printer selected');
+      Alert.alert('No Printer', 'Please select a Bluetooth printer first', [
+        { text: 'Select Printer', onPress: () => setShowPrinterModal(true) },
+        { text: 'Skip', style: 'cancel' },
+      ]);
+      return;
     }
 
-    if (!selectedPrinter) {
-      Alert.alert('No Printer', 'Please select a printer first', [
+    if (printerType === 'lan' && !selectedLANPrinter) {
+      console.log('⚠️ [POS] No LAN printer selected');
+      Alert.alert('No Printer', 'Please select a LAN printer first', [
         { text: 'Select Printer', onPress: () => setShowPrinterModal(true) },
         { text: 'Skip', style: 'cancel' },
       ]);
@@ -850,12 +1215,35 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
     }
 
     try {
-      const connected = await BluetoothPrinterService.connect(selectedPrinter);
+      // Switch to appropriate printer service
+      if (printerType === 'lan') {
+        await BluetoothPrinterServiceFactory.switchLibrary('lan');
+      } else {
+        await BluetoothPrinterServiceFactory.switchLibrary(bleLibrary);
+      }
+
+      const service = BluetoothPrinterServiceFactory.getInstance();
+
+      // Connect to printer
+      const printerAddress = printerType === 'lan'
+        ? `${selectedLANPrinter!.ip}:${selectedLANPrinter!.port}`
+        : selectedPrinter;
+
+      console.log(`🔗 [POS] Connecting to ${printerType} printer:`, printerAddress);
+      const connected = await service.connect(printerAddress);
+
       if (!connected) {
-        Alert.alert('Error', 'Failed to connect to printer');
+        console.error('❌ [POS] Failed to connect to printer');
+        Alert.alert(
+          'Connection Error',
+          printerType === 'lan'
+            ? 'Failed to connect to LAN printer. Please check the IP address and network connection.'
+            : 'Failed to connect to Bluetooth printer. Please make sure the printer is turned on and in range.'
+        );
         return;
       }
 
+      console.log('✅ [POS] Connected to printer, preparing receipt data...');
       const { subtotal, ppn, total } = calculateTotal();
       const receiptData: ReceiptData = {
         storeName: storeSettings.name,
@@ -872,6 +1260,7 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
           qty: item.qty,
           price: item.subtotal / item.qty,
           total: item.subtotal,
+          satuan: item.satuan || undefined,
         })),
         subtotal,
         tax: isPkpActive ? ppn : undefined,
@@ -880,18 +1269,35 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
         total,
         payment,
         change: payment - total,
+        paperSize,
+        language: receiptLanguage,
       };
 
-      const printed = await BluetoothPrinterService.printReceipt(receiptData, paperSize, receiptLanguage);
+      console.log('🖨️ [POS] Sending receipt to printer...');
+      const printed = await service.printReceipt(receiptData);
+
       if (printed) {
+        console.log('✅ [POS] Receipt printed successfully');
         Alert.alert('Success', 'Receipt printed successfully');
         resetTransaction();
       } else {
-        Alert.alert('Error', 'Failed to print receipt');
+        console.error('❌ [POS] Print failed (returned false)');
+        Alert.alert('Print Failed', 'The printer did not respond correctly. Please check the printer and try again.');
       }
-    } catch (error) {
-      console.error('Print error:', error);
-      Alert.alert('Error', 'Failed to print receipt');
+    } catch (error: any) {
+      console.error('❌ [POS] Print error:', error);
+
+      // Extract meaningful error message
+      const errorMessage = error?.message || String(error);
+      console.error('❌ [POS] Error message:', errorMessage);
+
+      // Show user-friendly error message
+      Alert.alert(
+        'Print Error',
+        `Failed to print receipt: ${errorMessage}\n\nPlease check your printer connection and try again.`
+      );
+    } finally {
+      console.log('🏁 [POS] Print receipt process completed');
     }
   };
 
@@ -900,68 +1306,279 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
       setScanningPrinters(true);
       console.log('🔍 [BLUETOOTH] Starting printer scan...');
 
-      const hasPermission = await BluetoothPrinterService.requestBluetoothPermissions();
-      console.log('🔍 [BLUETOOTH] Permission granted:', hasPermission);
-      if (!hasPermission) {
-        Alert.alert('Permission Denied', 'Bluetooth permissions are required');
-        setScanningPrinters(false);
-        return;
-      }
+      // Get service instance from factory
+      const service = BluetoothPrinterServiceFactory.getInstance();
 
-      const enabled = await BluetoothPrinterService.isBluetoothEnabled();
-      console.log('🔍 [BLUETOOTH] Bluetooth enabled:', enabled);
-      if (!enabled) {
-        const enabledNow = await BluetoothPrinterService.enableBluetooth();
-        console.log('🔍 [BLUETOOTH] Bluetooth enabled now:', enabledNow);
-        if (!enabledNow) {
-          Alert.alert('Bluetooth Disabled', 'Please enable Bluetooth');
-          setScanningPrinters(false);
-          return;
-        }
-      }
+      // Initialize service (handles permissions internally)
+      console.log('🔧 [BLUETOOTH] Initializing service...');
+      await service.initialize();
 
       console.log('🔍 [BLUETOOTH] Scanning for devices...');
-      const devices = await BluetoothPrinterService.scanDevices();
+      const devices = await service.scanDevices();
       console.log('🔍 [BLUETOOTH] Found devices:', devices.length, devices);
 
       setPrinters(devices);
 
       if (devices.length === 0) {
-        Alert.alert('No Devices Found', 'No Bluetooth printers found. Make sure your printer is turned on and in pairing mode.');
+        Alert.alert(
+          'No Devices Found',
+          'No Bluetooth printers found. Make sure your printer is turned on and in pairing mode.\n\nTroubleshooting:\n• Turn on your printer\n• Enable Bluetooth\n• Grant all permissions\n• Try restarting Bluetooth'
+        );
       } else {
         Alert.alert('Success', `Found ${devices.length} Bluetooth device(s)`);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ [BLUETOOTH] Scan error:', error);
-      Alert.alert('Error', `Failed to scan for printers: ${error}`);
+
+      // Extract error message
+      const errorMessage = error?.message || String(error);
+
+      // Provide helpful error messages based on error type
+      if (errorMessage.includes('permission')) {
+        Alert.alert(
+          'Permissions Required',
+          'Bluetooth permissions are required to scan for printers.\n\nPlease:\n1. Go to Settings\n2. Find this app\n3. Grant Bluetooth and Location permissions\n4. Try again',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Open Settings',
+              onPress: () => {
+                // On Android, you can open app settings
+                if (Platform.OS === 'android') {
+                  const { Linking } = require('react-native');
+                  Linking.openSettings();
+                }
+              }
+            }
+          ]
+        );
+      } else if (errorMessage.includes('enabled') || errorMessage.includes('PoweredOff')) {
+        Alert.alert(
+          'Bluetooth Not Enabled',
+          'Please turn on Bluetooth in your device settings and try again.',
+          [{ text: 'OK' }]
+        );
+      } else {
+        Alert.alert(
+          'Scan Failed',
+          `Failed to scan for printers.\n\nError: ${errorMessage}\n\nTry:\n• Restarting Bluetooth\n• Restarting the app\n• Checking permissions`,
+          [{ text: 'OK' }]
+        );
+      }
     } finally {
       setScanningPrinters(false);
     }
   };
 
+  /**
+   * Show user confirmation dialog to ask if print was successful
+   */
+  const showPrintConfirmation = (): Promise<boolean> => {
+    return new Promise((resolve) => {
+      Alert.alert(
+        'Print Confirmation',
+        'Did the test print work successfully?',
+        [
+          {
+            text: 'No, try another method',
+            onPress: () => resolve(false),
+            style: 'cancel',
+          },
+          {
+            text: 'Yes, it printed',
+            onPress: () => resolve(true),
+          },
+        ],
+        { cancelable: false }
+      );
+    });
+  };
+
+  /**
+   * Save successful protocol to printer configuration
+   */
+  const saveProtocolToLANPrinter = async (printer: LANPrinter, protocol: ProtocolType) => {
+    try {
+      const updatedPrinter: LANPrinter = { ...printer, protocol };
+
+      // Update current state
+      setSelectedLANPrinter(updatedPrinter);
+
+      // Save to AsyncStorage
+      await AsyncStorage.setItem('selected_lan_printer', JSON.stringify(updatedPrinter));
+
+      // Also update in saved printers list
+      const savedPrintersJson = await AsyncStorage.getItem('lan_printers');
+      if (savedPrintersJson) {
+        const savedPrinters: LANPrinter[] = JSON.parse(savedPrintersJson);
+        const updatedPrinters = savedPrinters.map(p =>
+          p.id === printer.id ? { ...p, protocol } : p
+        );
+        await AsyncStorage.setItem('lan_printers', JSON.stringify(updatedPrinters));
+      }
+
+      console.log(`✅ [POS] Saved protocol ${protocol} for printer ${printer.ip}`);
+    } catch (error) {
+      console.error('❌ [POS] Error saving protocol:', error);
+    }
+  };
+
+  /**
+   * Try printing with a specific protocol
+   */
+  const tryPrintWithProtocol = async (printer: LANPrinter, protocol: ProtocolType): Promise<boolean> => {
+    console.log(`🖨️ [POS] Trying ${protocol.toUpperCase()} protocol on ${printer.ip}...`);
+
+    await BluetoothPrinterServiceFactory.switchLibrary('lan');
+    const service = BluetoothPrinterServiceFactory.getInstance() as unknown as LANPrinterService;
+
+    // Connect with protocol specified
+    const port = protocol === 'lpd' ? 515 : 9100;
+    const connected = await service.connect(`${printer.ip}:${port}:${protocol}`);
+
+    if (!connected) {
+      throw new Error('Failed to connect to printer');
+    }
+
+    await service.testPrint();
+    return true;
+  };
+
   const testPrint = async () => {
-    if (!selectedPrinter) {
-      Alert.alert('Error', 'Please select a printer first');
+    // Prevent multiple simultaneous print jobs
+    if (isTestPrinting) {
+      console.log('⚠️ [POS] Test print already in progress, ignoring request');
       return;
     }
 
+    console.log('🖨️ [POS] Test print initiated');
+    console.log('🖨️ [POS] Printer type:', printerType);
+    console.log('🖨️ [POS] Selected Bluetooth printer:', selectedPrinter);
+    console.log('🖨️ [POS] Selected LAN printer:', selectedLANPrinter);
+
+    // Check if any printer is selected based on printer type
+    if (printerType === 'bluetooth' && !selectedPrinter) {
+      console.log('⚠️ [POS] No Bluetooth printer selected for test print');
+      Alert.alert('Error', 'Please select a Bluetooth printer first');
+      return;
+    }
+
+    if (printerType === 'lan' && !selectedLANPrinter) {
+      console.log('⚠️ [POS] No LAN printer selected for test print');
+      Alert.alert('Error', 'Please select a LAN printer first');
+      return;
+    }
+
+    // Set loading state
+    setIsTestPrinting(true);
+
+    // Safety timeout - automatically re-enable button after 60 seconds
+    // This is a fallback in case the operation hangs
+    const safetyTimeout = setTimeout(() => {
+      console.log('⚠️ [POS] Safety timeout triggered - re-enabling test print button');
+      setIsTestPrinting(false);
+    }, 60000);
+
     try {
-      const connected = await BluetoothPrinterService.connect(selectedPrinter);
-      if (!connected) {
-        Alert.alert('Error', 'Failed to connect to printer');
+      // Handle LAN printer with protocol fallback
+      if (printerType === 'lan' && selectedLANPrinter) {
+        await testPrintLANWithFallback(selectedLANPrinter);
         return;
       }
 
-      const success = await BluetoothPrinterService.testPrint();
-      if (success) {
-        Alert.alert('Success', 'Test print completed');
-      } else {
-        Alert.alert('Error', 'Test print failed');
-      }
-    } catch (error) {
-      console.error('Test print error:', error);
-      Alert.alert('Error', 'Test print failed');
+      // Handle Bluetooth printer (original logic)
+      await BluetoothPrinterServiceFactory.switchLibrary(bleLibrary);
+
+      const printerAddress = selectedPrinter;
+      console.log(`🔗 [POS] Connecting to Bluetooth printer for test print:`, printerAddress);
+
+      const testPrintPromise = (async () => {
+        const service = BluetoothPrinterServiceFactory.getInstance();
+        const connected = await service.connect(printerAddress);
+        if (!connected) {
+          throw new Error('Failed to connect to printer');
+        }
+
+        console.log('🖨️ [POS] Sending test print...');
+        const success = await service.testPrint();
+
+        if (!success) {
+          throw new Error('Test print failed');
+        }
+
+        return true;
+      })();
+
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Test print timeout after 30 seconds')), 30000)
+      );
+
+      await Promise.race([testPrintPromise, timeoutPromise]);
+
+      console.log('✅ [POS] Test print completed successfully');
+      Alert.alert('Success', 'Test print completed');
+    } catch (error: any) {
+      console.error('❌ [POS] Test print error:', error);
+      const errorMessage = error?.message || String(error);
+      Alert.alert('Test Print Error', `Failed to print: ${errorMessage}`);
+    } finally {
+      // Clear safety timeout and re-enable button
+      clearTimeout(safetyTimeout);
+      setIsTestPrinting(false);
     }
+  };
+
+  /**
+   * Test print for LAN printers with automatic protocol fallback
+   */
+  const testPrintLANWithFallback = async (printer: LANPrinter) => {
+    // Define protocol order - if printer has a saved protocol, try that first
+    const savedProtocol = printer.protocol;
+    const protocolOrder: ProtocolType[] = savedProtocol
+      ? [savedProtocol, savedProtocol === 'raw' ? 'lpd' : 'raw']
+      : ['raw', 'lpd'];
+
+    console.log(`🖨️ [POS] Starting LAN test print with protocol order: ${protocolOrder.join(', ')}`);
+
+    for (const protocol of protocolOrder) {
+      try {
+        console.log(`🖨️ [POS] Attempting ${protocol.toUpperCase()} protocol...`);
+
+        // Try to print with this protocol
+        const printPromise = tryPrintWithProtocol(printer, protocol);
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('timeout')), 30000)
+        );
+
+        await Promise.race([printPromise, timeoutPromise]);
+
+        console.log(`✅ [POS] Print sent via ${protocol.toUpperCase()}`);
+
+        // Ask user if the print was successful
+        const printSuccessful = await showPrintConfirmation();
+
+        if (printSuccessful) {
+          // Save the successful protocol
+          await saveProtocolToLANPrinter(printer, protocol);
+          Alert.alert('Success', 'Printer configured successfully!');
+          return;
+        }
+
+        // User said print didn't work, try next protocol
+        console.log(`⚠️ [POS] User reported ${protocol.toUpperCase()} didn't work, trying next...`);
+
+      } catch (error: any) {
+        console.log(`⚠️ [POS] ${protocol.toUpperCase()} protocol failed:`, error?.message);
+        // Continue to next protocol
+      }
+    }
+
+    // All protocols failed
+    Alert.alert(
+      'Connection Failed',
+      `Could not connect to the printer at ${printer.ip}.\n\nPlease check:\n• Printer is powered on\n• IP address is correct\n• Both devices are on the same network`,
+      [{ text: 'OK' }]
+    );
   };
 
   // Render landscape layout for tablets
@@ -969,6 +1586,26 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
     <View style={styles.landscapeContainer}>
       {/* Left Panel - Product Search and List */}
       <View style={styles.landscapeLeftPanel}>
+        {/* Employee Selection Card */}
+        <TouchableOpacity
+          style={[
+            styles.employeeCard,
+            { backgroundColor: selectedEmployee ? '#10B981' : '#6B7280', marginBottom: 12 }
+          ]}
+          onPress={() => setShowEmployeeModal(true)}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <Ionicons name="person-circle" size={32} color="#FFF" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.employeeCardLabel}>Cashier (Optional)</Text>
+              <Text style={styles.employeeCardName}>
+                {selectedEmployee ? selectedEmployee.nama : 'No Cashier Selected - Tap to Select'}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={24} color="#FFF" />
+          </View>
+        </TouchableOpacity>
+
         {/* Search Bar */}
         <View style={styles.landscapeSearchContainer}>
           <Ionicons name="search" size={20} color="#9CA3AF" style={styles.searchIcon} />
@@ -976,14 +1613,25 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
             ref={searchInputRef}
             style={styles.searchInput}
             placeholder="Search by SKU, Barcode, or Name..."
+            placeholderTextColor="#9CA3AF"
             value={searchQuery}
             onChangeText={(text) => {
               setSearchQuery(text);
-              searchProducts(text);
+              // Search is now debounced via useEffect - no direct call needed
             }}
             autoCapitalize="none"
           />
           {loading && <ActivityIndicator size="small" color="#f59e0b" />}
+          <TouchableOpacity
+            style={styles.viewModeToggle}
+            onPress={() => saveViewModeSelection(productViewMode === 'grid' ? 'list' : 'grid')}
+          >
+            <Ionicons
+              name={productViewMode === 'grid' ? 'list' : 'grid'}
+              size={24}
+              color="#6B7280"
+            />
+          </TouchableOpacity>
           <TouchableOpacity
             style={styles.barcodeButton}
             onPress={() => setShowManualItemModal(true)}
@@ -998,36 +1646,80 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
           </TouchableOpacity>
         </View>
 
-        {/* Product List - Grid Layout for Landscape */}
+        {/* Product List - Grid or List Layout for Landscape */}
         <View style={styles.landscapeProductListContainer}>
           {showProductList && products.length > 0 ? (
-            <FlatList
-              data={products}
-              keyExtractor={(item) => `${item.is_bundling ? 'b' : 'p'}-${item.id}`}
-              numColumns={5}
-              key="grid-5-columns"
-              columnWrapperStyle={styles.gridRow}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.gridProductCard}
-                  onPress={() => addToCart(item)}
-                >
-                  <View style={styles.gridProductInitial}>
-                    <Text style={styles.gridProductInitialText}>
-                      {item.nama.substring(0, 2).toUpperCase()}
-                    </Text>
-                  </View>
-                  <Text style={styles.gridProductName} numberOfLines={2}>
-                    {item.nama}
-                  </Text>
-                  {item.is_bundling && (
-                    <View style={styles.gridBundlingBadge}>
-                      <Text style={styles.gridBundlingBadgeText}>Bundling</Text>
+            productViewMode === 'grid' ? (
+              <FlatList
+                data={products}
+                keyExtractor={(item) => `${item.is_bundling ? 'b' : 'p'}-${item.id}`}
+                numColumns={5}
+                key="grid-5-columns"
+                columnWrapperStyle={styles.gridRow}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={styles.gridProductCard}
+                    onPress={() => addToCart(item)}
+                  >
+                    <View style={styles.gridProductInitial}>
+                      <Text style={styles.gridProductInitialText}>
+                        {item.nama.substring(0, 2).toUpperCase()}
+                      </Text>
                     </View>
-                  )}
-                </TouchableOpacity>
-              )}
-            />
+                    <Text style={styles.gridProductName} numberOfLines={2}>
+                      {item.nama}
+                    </Text>
+                    {item.is_bundling && (
+                      <View style={styles.gridBundlingBadge}>
+                        <Text style={styles.gridBundlingBadgeText}>Bundling</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                )}
+              />
+            ) : (
+              <FlatList
+                data={products}
+                keyExtractor={(item) => `${item.is_bundling ? 'b' : 'p'}-${item.id}`}
+                key="list-view"
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={styles.listProductItem}
+                    onPress={() => addToCart(item)}
+                  >
+                    <View style={styles.listProductInitial}>
+                      <Text style={styles.listProductInitialText}>
+                        {item.nama.substring(0, 2).toUpperCase()}
+                      </Text>
+                    </View>
+                    <View style={styles.listProductInfo}>
+                      <View style={styles.listProductHeader}>
+                        <Text style={styles.listProductName}>{item.nama}</Text>
+                        {item.is_bundling && (
+                          <View style={styles.listBundlingBadge}>
+                            <Text style={styles.listBundlingBadgeText}>Bundling</Text>
+                          </View>
+                        )}
+                        {item.bundling_variants && item.bundling_variants.length > 0 && (
+                          <View style={styles.listVariantBadge}>
+                            <Text style={styles.listVariantBadgeText}>+{item.bundling_variants.length} varian</Text>
+                          </View>
+                        )}
+                      </View>
+                      <View style={styles.listProductDetails}>
+                        <Text style={styles.listProductSku}>SKU: {item.sku}</Text>
+                        <Text style={styles.listProductStock}>Stock: {item.stok} {item.satuan}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.listProductPriceContainer}>
+                      <Text style={styles.listProductPrice}>
+                        Rp {(item.hargajual || 0).toLocaleString('id-ID')}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
+              />
+            )
           ) : (
             <View style={styles.landscapeEmptyProducts}>
               <Ionicons name="search-outline" size={64} color="#D1D5DB" />
@@ -1041,6 +1733,23 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
 
       {/* Right Panel - Cart and Checkout */}
       <View style={styles.landscapeRightPanel}>
+        {/* Employee Info */}
+        <TouchableOpacity
+          style={[styles.landscapeCustomerCard, { backgroundColor: selectedEmployee ? '#10B981' : '#EF4444' }]}
+          onPress={() => setShowEmployeeModal(true)}
+        >
+          <View style={styles.landscapeCustomerInfo}>
+            <Ionicons name="person-circle" size={24} color="#FFF" />
+            <View style={styles.landscapeCustomerTextContainer}>
+              <Text style={[styles.landscapeCustomerLabel, { color: '#FFF' }]}>Cashier</Text>
+              <Text style={[styles.landscapeCustomerName, { color: '#FFF' }]}>
+                {selectedEmployee ? selectedEmployee.nama : 'Select Employee'}
+              </Text>
+            </View>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color="#FFF" />
+        </TouchableOpacity>
+
         {/* Customer Info */}
         <TouchableOpacity
           style={styles.landscapeCustomerCard}
@@ -1189,6 +1898,26 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
   // Render portrait layout (original)
   const renderPortraitLayout = () => (
     <View style={styles.content}>
+        {/* Employee Selection Card */}
+        <TouchableOpacity
+          style={[
+            styles.employeeCard,
+            { backgroundColor: selectedEmployee ? '#10B981' : '#6B7280' }
+          ]}
+          onPress={() => setShowEmployeeModal(true)}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <Ionicons name="person-circle" size={32} color="#FFF" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.employeeCardLabel}>Cashier (Optional)</Text>
+              <Text style={styles.employeeCardName}>
+                {selectedEmployee ? selectedEmployee.nama : 'No Cashier Selected - Tap to Select'}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={24} color="#FFF" />
+          </View>
+        </TouchableOpacity>
+
         {/* Search Bar */}
         <View style={styles.searchContainer}>
           <Ionicons name="search" size={20} color="#9CA3AF" style={styles.searchIcon} />
@@ -1196,10 +1925,11 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
             ref={searchInputRef}
             style={styles.searchInput}
             placeholder="Search by SKU, Barcode, or Name..."
+            placeholderTextColor="#9CA3AF"
             value={searchQuery}
             onChangeText={(text) => {
               setSearchQuery(text);
-              searchProducts(text);
+              // Search is now debounced via useEffect - no direct call needed
             }}
             autoCapitalize="none"
           />
@@ -1235,6 +1965,11 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
                       {item.is_bundling && (
                         <View style={styles.bundlingBadge}>
                           <Text style={styles.bundlingBadgeText}>Bundling</Text>
+                        </View>
+                      )}
+                      {item.bundling_variants && item.bundling_variants.length > 0 && (
+                        <View style={styles.variantBadge}>
+                          <Text style={styles.variantBadgeText}>+{item.bundling_variants.length} varian</Text>
                         </View>
                       )}
                     </View>
@@ -1434,6 +2169,7 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
                   <TextInput
                     style={styles.bayarInput}
                     placeholder="0"
+                    placeholderTextColor="#9CA3AF"
                     keyboardType="numeric"
                     value={bayar}
                     onChangeText={(val) => {
@@ -1469,6 +2205,7 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
                   <TextInput
                     style={styles.terbayarInput}
                     placeholder="0"
+                    placeholderTextColor="#9CA3AF"
                     keyboardType="numeric"
                     value={terbayar}
                     onChangeText={(val) => {
@@ -1504,6 +2241,7 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
               <TextInput
                 style={styles.keteranganInput}
                 placeholder="Notes (optional)"
+                placeholderTextColor="#9CA3AF"
                 value={keterangan}
                 onChangeText={setKeterangan}
                 multiline
@@ -1592,6 +2330,269 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
         </View>
       </Modal>
 
+      {/* Employee Selection Modal */}
+      <Modal visible={showEmployeeModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Employee (Optional)</Text>
+              <TouchableOpacity onPress={() => setShowEmployeeModal(false)}>
+                <Ionicons name="close" size={24} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+            {employees.length === 0 ? (
+              <View style={{ padding: 40, alignItems: 'center' }}>
+                <Ionicons name="people-outline" size={64} color="#D1D5DB" />
+                <Text style={{ marginTop: 16, fontSize: 16, color: '#6B7280', textAlign: 'center' }}>
+                  No employees found
+                </Text>
+                <Text style={{ marginTop: 8, fontSize: 14, color: '#9CA3AF', textAlign: 'center' }}>
+                  Please add employees in the admin panel
+                </Text>
+              </View>
+            ) : (
+              <FlatList
+                data={employees}
+                keyExtractor={(item) => item.id.toString()}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[
+                      styles.customerItem,
+                      selectedEmployee?.id === item.id && { backgroundColor: '#E0F2FE' }
+                    ]}
+                    onPress={() => handleEmployeeSelect(item)}
+                  >
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                      <Text style={styles.customerName}>{item.nama}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        {!item.pin_hash && (
+                          <View style={{ backgroundColor: '#FEF3C7', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 }}>
+                            <Text style={{ color: '#92400E', fontSize: 12 }}>No PIN</Text>
+                          </View>
+                        )}
+                        {item.pin_hash && (
+                          <View style={{ backgroundColor: '#D1FAE5', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 }}>
+                            <Text style={{ color: '#065F46', fontSize: 12 }}>PIN Set</Text>
+                          </View>
+                        )}
+                        {selectedEmployee?.id === item.id && (
+                          <Ionicons name="checkmark-circle" size={24} color="#10B981" />
+                        )}
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                )}
+                contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 20) }}
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* PIN Entry Modal */}
+      <Modal visible={showPinModal} transparent animationType="fade">
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={styles.modalOverlay}
+            onPress={() => {
+              setShowPinModal(false);
+              setPinInput('');
+              setPinError('');
+            }}
+          >
+            <TouchableOpacity activeOpacity={1} onPress={(e) => e.stopPropagation()}>
+              <View style={[styles.modalContent, { maxWidth: 400 }]}>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>Enter PIN</Text>
+                  <TouchableOpacity onPress={() => {
+                    setShowPinModal(false);
+                    setPinInput('');
+                    setPinError('');
+                  }}>
+                    <Ionicons name="close" size={24} color="#6B7280" />
+                  </TouchableOpacity>
+                </View>
+
+                <View style={{ padding: 20 }}>
+                  <Text style={{ fontSize: 16, marginBottom: 10, color: '#374151' }}>
+                    Employee: <Text style={{ fontWeight: 'bold' }}>{pinEmployee?.nama}</Text>
+                  </Text>
+
+                  <TextInput
+                    style={{
+                      borderWidth: 1,
+                      borderColor: pinError ? '#EF4444' : '#D1D5DB',
+                      borderRadius: 8,
+                      padding: 12,
+                      fontSize: 24,
+                      textAlign: 'center',
+                      letterSpacing: 8,
+                      marginBottom: 10,
+                      color: '#111827', // Dark text color for visibility
+                      backgroundColor: '#FFFFFF', // Explicit white background
+                    }}
+                    value={pinInput}
+                    onChangeText={(text) => {
+                      if (/^\d*$/.test(text) && text.length <= 6) {
+                        setPinInput(text);
+                        setPinError('');
+                      }
+                    }}
+                    keyboardType="number-pad"
+                    maxLength={6}
+                    secureTextEntry
+                    placeholder="••••••"
+                    placeholderTextColor="#9CA3AF" // Gray placeholder for visibility
+                    autoFocus
+                    onSubmitEditing={validatePin}
+                  />
+
+                  {pinError ? (
+                    <Text style={{ color: '#EF4444', fontSize: 14, marginBottom: 10 }}>
+                      {pinError}
+                    </Text>
+                  ) : null}
+
+                  <TouchableOpacity
+                    style={{
+                      backgroundColor: pinInput.length === 6 ? '#10B981' : '#D1D5DB',
+                      padding: 15,
+                      borderRadius: 8,
+                      alignItems: 'center'
+                    }}
+                    onPress={validatePin}
+                    disabled={pinInput.length !== 6}
+                  >
+                    <Text style={{ color: '#FFF', fontSize: 16, fontWeight: 'bold' }}>
+                      Validate PIN
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Variant Selection Modal */}
+      <Modal visible={showVariantModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Pilih Varian</Text>
+              <TouchableOpacity onPress={() => setShowVariantModal(false)}>
+                <Ionicons name="close" size={24} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView
+              style={styles.modalBody}
+              contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 20) }}
+            >
+              {selectedProductForVariant && (
+                <>
+                  <Text style={styles.variantProductName}>{selectedProductForVariant.nama}</Text>
+
+                  {/* Variant Options */}
+                  <View style={styles.variantOptionsContainer}>
+                    {/* Masterbarang Option */}
+                    <TouchableOpacity
+                      style={[
+                        styles.variantOption,
+                        selectedVariantIndex === 0 && styles.variantOptionSelected
+                      ]}
+                      onPress={() => setSelectedVariantIndex(0)}
+                    >
+                      <View style={styles.variantRadio}>
+                        {selectedVariantIndex === 0 && <View style={styles.variantRadioInner} />}
+                      </View>
+                      <View style={styles.variantOptionInfo}>
+                        <Text style={styles.variantOptionName}>
+                          {selectedProductForVariant.nama} ({selectedProductForVariant.satuan})
+                        </Text>
+                        <Text style={styles.variantOptionPrice}>
+                          Rp {selectedProductForVariant.hargajual.toLocaleString('id-ID')}
+                        </Text>
+                        <Text style={styles.variantOptionStock}>
+                          Stok: {selectedProductForVariant.stok} {selectedProductForVariant.satuan}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+
+                    {/* Bundling Variants */}
+                    {selectedProductForVariant.bundling_variants?.map((variant, index) => (
+                      <TouchableOpacity
+                        key={variant.id}
+                        style={[
+                          styles.variantOption,
+                          selectedVariantIndex === index + 1 && styles.variantOptionSelected
+                        ]}
+                        onPress={() => setSelectedVariantIndex(index + 1)}
+                      >
+                        <View style={styles.variantRadio}>
+                          {selectedVariantIndex === index + 1 && <View style={styles.variantRadioInner} />}
+                        </View>
+                        <View style={styles.variantOptionInfo}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            <Text style={styles.variantOptionName}>{variant.nama} (bundling)</Text>
+                            <View style={styles.bundlingBadge}>
+                              <Text style={styles.bundlingBadgeText}>Bundling</Text>
+                            </View>
+                          </View>
+                          <Text style={styles.variantOptionPrice}>
+                            Rp {variant.hargajual.toLocaleString('id-ID')}
+                          </Text>
+                          <Text style={styles.variantOptionStock}>
+                            Stok: {variant.stok} {variant.satuan || 'set'}
+                          </Text>
+                          {/* Show composition */}
+                          <Text style={styles.variantComposition}>
+                            Komposisi: {variant.items.map(item =>
+                              `${item.qty_required} ${item.satuan || 'pcs'} ${item.nama}`
+                            ).join(', ')}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  {/* Quantity Selector */}
+                  <View style={styles.variantQtyContainer}>
+                    <Text style={styles.variantQtyLabel}>Jumlah:</Text>
+                    <View style={styles.variantQtyControls}>
+                      <TouchableOpacity
+                        style={styles.variantQtyButton}
+                        onPress={() => setVariantQty(Math.max(1, variantQty - 1))}
+                      >
+                        <Ionicons name="remove" size={20} color="white" />
+                      </TouchableOpacity>
+                      <Text style={styles.variantQtyText}>{variantQty}</Text>
+                      <TouchableOpacity
+                        style={styles.variantQtyButton}
+                        onPress={() => setVariantQty(variantQty + 1)}
+                      >
+                        <Ionicons name="add" size={20} color="white" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {/* Add to Cart Button */}
+                  <TouchableOpacity
+                    style={styles.variantAddButton}
+                    onPress={handleVariantSelection}
+                  >
+                    <Text style={styles.variantAddButtonText}>Tambah ke Keranjang</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
       {/* Printer Modal */}
       <Modal visible={showPrinterModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
@@ -1606,6 +2607,36 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
               style={styles.modalBody}
               contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 20) }}
             >
+              {/* Printer Type Selection */}
+              <View style={styles.printerSection}>
+                <Text style={styles.sectionLabel}>Printer Type</Text>
+                <View style={styles.paperSizeContainer}>
+                  <TouchableOpacity
+                    style={[styles.paperSizeButton, printerType === 'bluetooth' && styles.paperSizeButtonActive]}
+                    onPress={async () => {
+                      setPrinterType('bluetooth');
+                      await AsyncStorage.setItem('printer_type', 'bluetooth');
+                    }}
+                  >
+                    <Text style={[styles.paperSizeText, printerType === 'bluetooth' && styles.paperSizeTextActive]}>
+                      📶 Bluetooth
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.paperSizeButton, printerType === 'lan' && styles.paperSizeButtonActive]}
+                    onPress={async () => {
+                      setPrinterType('lan');
+                      await AsyncStorage.setItem('printer_type', 'lan');
+                    }}
+                  >
+                    <Text style={[styles.paperSizeText, printerType === 'lan' && styles.paperSizeTextActive]}>
+                      🌐 LAN/Network
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Common Settings - Paper Size and Language (for both Bluetooth and LAN) */}
               <View style={styles.printerSection}>
                 <Text style={styles.sectionLabel}>Paper Size</Text>
                 <View style={styles.paperSizeContainer}>
@@ -1648,6 +2679,39 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
                     </Text>
                   </TouchableOpacity>
                 </View>
+              </View>
+
+              {/* Bluetooth-specific settings */}
+              {printerType === 'bluetooth' && (
+                <>
+                  {/* BLE Library Selection */}
+                  <View style={styles.printerSection}>
+                    <Text style={styles.sectionLabel}>Bluetooth Library</Text>
+                <View style={styles.paperSizeContainer}>
+                  <TouchableOpacity
+                    style={[styles.paperSizeButton, bleLibrary === 'bt-classic' && styles.paperSizeButtonActive]}
+                    onPress={() => saveBleLibrarySelection('bt-classic')}
+                  >
+                    <Text style={[styles.paperSizeText, bleLibrary === 'bt-classic' && styles.paperSizeTextActive]}>
+                      ✅ BT Classic
+                    </Text>
+                    <Text style={styles.recommendedBadge}>Recommended</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.paperSizeButton, bleLibrary === 'ble-plx' && styles.paperSizeButtonActive]}
+                    onPress={() => saveBleLibrarySelection('ble-plx')}
+                  >
+                    <Text style={[styles.paperSizeText, bleLibrary === 'ble-plx' && styles.paperSizeTextActive]}>
+                      🔧 BLE PLX
+                    </Text>
+                    <Text style={styles.legacyBadge}>Legacy</Text>
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.helperText}>
+                  {bleLibrary === 'bt-classic'
+                    ? '✅ Better for thermal printers. Uses Bluetooth Classic (SPP).'
+                    : '⚠️ May crash on some devices. Try BT Classic if you experience issues.'}
+                </Text>
               </View>
 
               <View style={styles.printerSection}>
@@ -1703,9 +2767,60 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
               </View>
 
               {selectedPrinter && (
-                <TouchableOpacity style={styles.testPrintButton} onPress={testPrint}>
-                  <Ionicons name="print" size={20} color="white" />
-                  <Text style={styles.testPrintText}>Test Print</Text>
+                <TouchableOpacity
+                  style={[
+                    styles.testPrintButton,
+                    isTestPrinting && styles.testPrintButtonDisabled
+                  ]}
+                  onPress={testPrint}
+                  disabled={isTestPrinting}
+                  activeOpacity={isTestPrinting ? 1 : 0.7}
+                >
+                  {isTestPrinting ? (
+                    <ActivityIndicator size="small" color="white" />
+                  ) : (
+                    <Ionicons name="print" size={20} color="white" />
+                  )}
+                  <Text style={styles.testPrintText}>
+                    {isTestPrinting ? 'Testing...' : 'Test Print'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+                </>
+              )}
+
+              {/* LAN Printer Settings */}
+              {printerType === 'lan' && (
+                <LANPrinterSettings
+                  onPrinterSelected={(printer) => {
+                    console.log('🖨️ [POS] LAN printer selected:', printer);
+                    setSelectedLANPrinter(printer);
+                    AsyncStorage.setItem('selected_lan_printer', JSON.stringify(printer));
+                    console.log('✅ [POS] LAN printer state updated and saved');
+                  }}
+                  selectedPrinterId={selectedLANPrinter?.id}
+                />
+              )}
+
+              {/* Test Print Button for LAN */}
+              {printerType === 'lan' && selectedLANPrinter && (
+                <TouchableOpacity
+                  style={[
+                    styles.testPrintButton,
+                    isTestPrinting && styles.testPrintButtonDisabled
+                  ]}
+                  onPress={testPrint}
+                  disabled={isTestPrinting}
+                  activeOpacity={isTestPrinting ? 1 : 0.7}
+                >
+                  {isTestPrinting ? (
+                    <ActivityIndicator size="small" color="white" />
+                  ) : (
+                    <Ionicons name="print" size={20} color="white" />
+                  )}
+                  <Text style={styles.testPrintText}>
+                    {isTestPrinting ? 'Testing...' : 'Test Print'}
+                  </Text>
                 </TouchableOpacity>
               )}
             </ScrollView>
@@ -1723,38 +2838,135 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
                 <Ionicons name="close" size={28} color="white" />
               </TouchableOpacity>
             </View>
-            {hasPermission === null ? (
-              <View style={styles.scannerPlaceholder}>
-                <ActivityIndicator size="large" color="#f59e0b" />
-                <Text style={styles.scannerPlaceholderText}>Requesting camera permission...</Text>
-              </View>
-            ) : hasPermission === false ? (
-              <View style={styles.scannerPlaceholder}>
-                <Ionicons name="camera" size={64} color="#EF4444" />
-                <Text style={styles.scannerPlaceholderText}>No access to camera</Text>
-                <TouchableOpacity style={styles.permissionButton} onPress={requestCameraPermission}>
-                  <Text style={styles.permissionButtonText}>Grant Permission</Text>
-                </TouchableOpacity>
-              </View>
-            ) : device == null ? (
-              <View style={styles.scannerPlaceholder}>
-                <ActivityIndicator size="large" color="#f59e0b" />
-                <Text style={styles.scannerPlaceholderText}>Loading camera...</Text>
-              </View>
-            ) : (
-              <Camera
-                style={styles.camera}
-                device={device}
-                isActive={showBarcodeScanner}
-                codeScanner={codeScanner}
+
+            {/* Scanner Mode Toggle */}
+            <View style={styles.scannerModeToggle}>
+              <TouchableOpacity
+                style={[
+                  styles.scannerModeButton,
+                  scannerMode === 'camera' && styles.scannerModeButtonActive
+                ]}
+                onPress={() => setScannerMode('camera')}
               >
-                <View style={styles.scannerOverlay}>
-                  <View style={styles.scannerFrame} />
-                  <Text style={styles.scannerInstructions}>
-                    Position barcode within the frame
+                <Ionicons
+                  name="camera"
+                  size={20}
+                  color={scannerMode === 'camera' ? '#FFF' : '#6B7280'}
+                />
+                <Text style={[
+                  styles.scannerModeButtonText,
+                  scannerMode === 'camera' && styles.scannerModeButtonTextActive
+                ]}>
+                  Camera
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.scannerModeButton,
+                  scannerMode === 'external' && styles.scannerModeButtonActive
+                ]}
+                onPress={() => {
+                  setScannerMode('external');
+                  // Auto-focus external scanner input when switching to this mode
+                  setTimeout(() => externalScannerRef.current?.focus(), 100);
+                }}
+              >
+                <Ionicons
+                  name="barcode"
+                  size={20}
+                  color={scannerMode === 'external' ? '#FFF' : '#6B7280'}
+                />
+                <Text style={[
+                  styles.scannerModeButtonText,
+                  scannerMode === 'external' && styles.scannerModeButtonTextActive
+                ]}>
+                  Scanner Device
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Camera Mode */}
+            {scannerMode === 'camera' ? (
+              hasPermission === null ? (
+                <View style={styles.scannerPlaceholder}>
+                  <ActivityIndicator size="large" color="#f59e0b" />
+                  <Text style={styles.scannerPlaceholderText}>Requesting camera permission...</Text>
+                </View>
+              ) : hasPermission === false ? (
+                <View style={styles.scannerPlaceholder}>
+                  <Ionicons name="camera" size={64} color="#EF4444" />
+                  <Text style={styles.scannerPlaceholderText}>No access to camera</Text>
+                  <TouchableOpacity style={styles.permissionButton} onPress={requestCameraPermission}>
+                    <Text style={styles.permissionButtonText}>Grant Permission</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : device == null ? (
+                <View style={styles.scannerPlaceholder}>
+                  <ActivityIndicator size="large" color="#f59e0b" />
+                  <Text style={styles.scannerPlaceholderText}>Loading camera...</Text>
+                </View>
+              ) : (
+                <Camera
+                  style={styles.camera}
+                  device={device}
+                  isActive={showBarcodeScanner && scannerMode === 'camera'}
+                  codeScanner={codeScanner}
+                >
+                  <View style={styles.scannerOverlay}>
+                    <View style={styles.scannerFrame} />
+                    <Text style={styles.scannerInstructions}>
+                      Position barcode within the frame
+                    </Text>
+                  </View>
+                </Camera>
+              )
+            ) : (
+              /* External Scanner Mode */
+              <View style={styles.externalScannerContainer}>
+                <View style={styles.externalScannerContent}>
+                  <Ionicons name="barcode-outline" size={80} color="#f59e0b" />
+                  <Text style={styles.externalScannerTitle}>External Scanner Ready</Text>
+                  <Text style={styles.externalScannerInstructions}>
+                    Point your barcode scanner at the input field below and scan
+                  </Text>
+
+                  <View style={styles.externalScannerInputContainer}>
+                    <TextInput
+                      ref={externalScannerRef}
+                      style={styles.externalScannerInput}
+                      value={externalScannerInput}
+                      onChangeText={(text) => {
+                        // Handle newline/carriage return from scanner
+                        if (text.includes('\n') || text.includes('\r')) {
+                          const sanitized = text.replace(/\r?\n/g, '');
+                          setExternalScannerInput(sanitized);
+                          handleExternalScannerSubmit();
+                        } else {
+                          setExternalScannerInput(text);
+                        }
+                      }}
+                      onSubmitEditing={handleExternalScannerSubmit}
+                      placeholder="Scan barcode here..."
+                      placeholderTextColor="#9CA3AF"
+                      autoFocus
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      returnKeyType="done"
+                    />
+                    <TouchableOpacity
+                      style={styles.externalScannerButton}
+                      onPress={handleExternalScannerSubmit}
+                      disabled={!externalScannerInput.trim()}
+                    >
+                      <Text style={styles.externalScannerButtonText}>Add</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <Text style={styles.externalScannerHint}>
+                    💡 Tip: The input field will stay focused for rapid consecutive scanning
                   </Text>
                 </View>
-              </Camera>
+              </View>
             )}
           </View>
         </View>
@@ -1788,6 +3000,7 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
                   <TextInput
                     style={styles.input}
                     placeholder="Enter item name"
+                    placeholderTextColor="#9CA3AF"
                     value={manualItemName}
                     onChangeText={setManualItemName}
                     autoCapitalize="words"
@@ -1799,6 +3012,7 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
                   <TextInput
                     style={styles.input}
                     placeholder="Enter price"
+                    placeholderTextColor="#9CA3AF"
                     value={manualItemPrice}
                     onChangeText={setManualItemPrice}
                     keyboardType="numeric"
@@ -1810,6 +3024,7 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
                   <TextInput
                     style={styles.input}
                     placeholder="Enter quantity"
+                    placeholderTextColor="#9CA3AF"
                     value={manualItemQty}
                     onChangeText={setManualItemQty}
                     keyboardType="numeric"
@@ -1843,6 +3058,7 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
               <TextInput
                 style={styles.searchInput}
                 placeholder="Search payment method..."
+                placeholderTextColor="#9CA3AF"
                 value={baganAkunSearch}
                 onChangeText={setBaganAkunSearch}
                 autoCapitalize="none"
@@ -1953,6 +3169,32 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
+  employeeCard: {
+    padding: 16,
+    borderRadius: 12,
+    marginHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  employeeCardLabel: {
+    fontSize: 12,
+    color: '#FFF',
+    opacity: 0.9,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  employeeCardName: {
+    fontSize: 16,
+    color: '#FFF',
+    fontWeight: 'bold',
+    marginTop: 2,
+  },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1973,6 +3215,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 12,
     fontSize: 16,
+    color: '#111827', // Dark text for visibility
   },
   productListContainer: {
     maxHeight: 200,
@@ -2136,6 +3379,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     minWidth: 80,
     textAlign: 'right',
+    color: '#111827', // Dark text for visibility
   },
   priceQtyContainer: {
     flexDirection: 'row',
@@ -2298,6 +3542,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 8,
     borderBottomLeftRadius: 8,
     fontSize: 18,
+    color: '#111827', // Dark text for visibility
   },
   equalsButton: {
     backgroundColor: '#3B82F6',
@@ -2320,6 +3565,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 8,
     fontSize: 16,
+    color: '#111827', // Dark text for visibility
   },
   kembalianContainer: {
     flex: 1,
@@ -2362,6 +3608,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     minHeight: 80,
     textAlignVertical: 'top',
+    color: '#111827', // Dark text for visibility
   },
   piutangInfo: {
     flexDirection: 'row',
@@ -2447,6 +3694,23 @@ const styles = StyleSheet.create({
     color: '#f59e0b',
     fontWeight: '600',
   },
+  recommendedBadge: {
+    fontSize: 10,
+    color: '#10B981',
+    marginTop: 2,
+    fontWeight: '600',
+  },
+  legacyBadge: {
+    fontSize: 10,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  helperText: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 8,
+    fontStyle: 'italic',
+  },
   scanButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2509,6 +3773,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     gap: 8,
   },
+  testPrintButtonDisabled: {
+    backgroundColor: '#9CA3AF',
+    opacity: 0.7,
+  },
   testPrintText: {
     fontSize: 16,
     fontWeight: '600',
@@ -2562,6 +3830,96 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
     padding: 12,
     borderRadius: 8,
+  },
+  scannerModeToggle: {
+    flexDirection: 'row',
+    backgroundColor: '#1F2937',
+    padding: 8,
+    gap: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  scannerModeButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    gap: 8,
+  },
+  scannerModeButtonActive: {
+    backgroundColor: '#f59e0b',
+  },
+  scannerModeButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  scannerModeButtonTextActive: {
+    color: '#FFF',
+  },
+  externalScannerContainer: {
+    flex: 1,
+    backgroundColor: '#111827',
+  },
+  externalScannerContent: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  externalScannerTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#FFF',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  externalScannerInstructions: {
+    fontSize: 16,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    marginBottom: 32,
+  },
+  externalScannerInputContainer: {
+    flexDirection: 'row',
+    width: '100%',
+    maxWidth: 400,
+    gap: 12,
+  },
+  externalScannerInput: {
+    flex: 1,
+    backgroundColor: '#1F2937',
+    borderWidth: 2,
+    borderColor: '#f59e0b',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 18,
+    color: '#FFF',
+  },
+  externalScannerButton: {
+    backgroundColor: '#f59e0b',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  externalScannerButtonText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  externalScannerHint: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginTop: 24,
+    fontStyle: 'italic',
   },
   scannerPlaceholder: {
     flex: 1,
@@ -2660,6 +4018,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     borderWidth: 1,
     borderColor: '#E5E7EB',
+    color: '#111827', // Dark text for visibility
   },
   addManualItemButton: {
     backgroundColor: '#10B981',
@@ -3073,6 +4432,94 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1E40AF',
   },
+  // View Mode Toggle Button
+  viewModeToggle: {
+    padding: 8,
+    marginRight: 8,
+  },
+  // List View Styles
+  listProductItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    backgroundColor: 'white',
+  },
+  listProductInitial: {
+    width: 50,
+    height: 50,
+    borderRadius: 8,
+    backgroundColor: '#E5E7EB',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  listProductInitialText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#6B7280',
+  },
+  listProductInfo: {
+    flex: 1,
+    marginRight: 12,
+  },
+  listProductHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 6,
+  },
+  listProductName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+    flexShrink: 1,
+  },
+  listBundlingBadge: {
+    backgroundColor: '#DBEAFE',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
+  },
+  listBundlingBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#1E40AF',
+  },
+  listVariantBadge: {
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
+  },
+  listVariantBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#92400E',
+  },
+  listProductDetails: {
+    gap: 4,
+  },
+  listProductSku: {
+    fontSize: 13,
+    color: '#6B7280',
+  },
+  listProductStock: {
+    fontSize: 13,
+    color: '#10B981',
+  },
+  listProductPriceContainer: {
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+    minWidth: 120,
+  },
+  listProductPrice: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#f59e0b',
+  },
   // Reset Confirmation Modal Styles
   confirmModalOverlay: {
     flex: 1,
@@ -3132,6 +4579,129 @@ const styles = StyleSheet.create({
   confirmModalButtonTextConfirm: {
     fontSize: 16,
     fontWeight: '600',
+    color: 'white',
+  },
+  // Variant Selection Modal Styles
+  variantBadge: {
+    backgroundColor: '#DBEAFE',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  variantBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#1E40AF',
+  },
+  variantProductName: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: 16,
+  },
+  variantOptionsContainer: {
+    gap: 12,
+    marginBottom: 24,
+  },
+  variantOption: {
+    flexDirection: 'row',
+    padding: 12,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+  },
+  variantOptionSelected: {
+    borderColor: '#f59e0b',
+    backgroundColor: '#FEF3C7',
+  },
+  variantRadio: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#D1D5DB',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+    marginTop: 2,
+  },
+  variantRadioInner: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#f59e0b',
+  },
+  variantOptionInfo: {
+    flex: 1,
+  },
+  variantOptionName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  variantOptionPrice: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#f59e0b',
+    marginBottom: 2,
+  },
+  variantOptionStock: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginBottom: 4,
+  },
+  variantComposition: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    fontStyle: 'italic',
+    marginTop: 4,
+  },
+  variantQtyContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+  },
+  variantQtyLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  variantQtyControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  variantQtyButton: {
+    backgroundColor: '#f59e0b',
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  variantQtyText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#111827',
+    minWidth: 40,
+    textAlign: 'center',
+  },
+  variantAddButton: {
+    backgroundColor: '#f59e0b',
+    paddingVertical: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  variantAddButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
     color: 'white',
   },
 });

@@ -27,6 +27,10 @@ export type OrderCard = {
   dibuat?: boolean;
   dikirim?: boolean;
   print?: boolean;
+  print_timestamp?: string;
+  scanned?: boolean;
+  scan_timestamp?: string | null;
+  no_resi?: string;
   items?: any[];
   warehouse?: string;
   isBookingOrder?: boolean;
@@ -38,6 +42,8 @@ type Nav = NativeStackNavigationProp<AppStackParamList, 'OrdersList'>;
 
 const PAGE_SIZE = 30;
 const STATUS_CHIPS = ['SEMUA', 'PESANAN BARU', 'DIPROSES', 'PERJALANAN', 'DIBATALKAN', 'SELESAI'];
+const DIBUAT_CHIPS = ['SEMUA', 'BELUM DIBUAT', 'TELAH DIBUAT'];
+const PRINT_CHIPS = ['SEMUA', 'BELUM CETAK', 'SUDAH CETAK'];
 
 export default function OrdersListScreen() {
   const navigation = useNavigation<Nav>();
@@ -47,14 +53,14 @@ export default function OrdersListScreen() {
   const [shops, setShops] = useState<EcommerceShop[]>([]);
   const [selectedShopId, setSelectedShopId] = useState<number>(0); // 0 = all
   const [status, setStatus] = useState<string>('SEMUA');
+  const [dibuatFilter, setDibuatFilter] = useState<string>('SEMUA');
+  const [printFilter, setPrintFilter] = useState<string>('SEMUA');
   const [query, setQuery] = useState('');
   const [dateStart, setDateStart] = useState<Date>(() => new Date(Date.now() - 5 * 24 * 3600 * 1000)); // Changed from 7 to 5 days
   const [dateEnd, setDateEnd] = useState<Date>(() => new Date());
 
   const [allItems, setAllItems] = useState<OrderCard[]>([]);
-  const [visibleItems, setVisibleItems] = useState<OrderCard[]>([]);
   const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -119,9 +125,13 @@ export default function OrdersListScreen() {
             orderType,
             booking_sn: rd.booking_sn,
             retur: (rd.status || '').toUpperCase().includes('RETUR') || false,
-            dibuat: !!rd.dibuat,
+            dibuat: rd.dibuat === true || rd.dibuat === 1 || rd.dibuat === '1',
             dikirim: !!(rd.ekspedisi || (rd.status || '').toUpperCase().includes('PERJALANAN')),
-            print: !!rd.print,
+            print: rd.print === true || rd.print === 1 || rd.print === '1',
+            print_timestamp: rd.print_timestamp || undefined,
+            scanned: rd.scanned === true || rd.scanned === 1 || rd.scanned === '1',
+            scan_timestamp: rd.scan_timestamp || null,
+            no_resi: rd.no_resi || rd.tracking_number || undefined,
             items: rd.items || [],
             warehouse,
             isBookingOrder,
@@ -129,14 +139,10 @@ export default function OrdersListScreen() {
         });
 
         setAllItems(mapped);
-        const initial = mapped.slice(0, PAGE_SIZE);
-        setVisibleItems(initial);
         setPage(1);
-        setHasMore(mapped.length > PAGE_SIZE);
       } else {
         setAllItems([]);
-        setVisibleItems([]);
-        setHasMore(false);
+        setPage(1);
       }
     } catch (e) {
       console.error('fetchOrders error', e);
@@ -145,7 +151,7 @@ export default function OrdersListScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [dateStart, dateEnd, selectedShopId, shops, status]);
+  }, [dateStart, dateEnd, selectedShopId, shops]);
 
   useEffect(() => { fetchAccess(); fetchShops(); }, [fetchAccess, fetchShops]);
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
@@ -153,25 +159,67 @@ export default function OrdersListScreen() {
   const onRefresh = () => { setRefreshing(true); fetchOrders(); };
 
   const loadMore = () => {
-    if (loading || !hasMore) return;
-    const nextPage = page + 1;
-    const nextSlice = allItems.slice(0, nextPage * PAGE_SIZE);
-    setVisibleItems(nextSlice);
-    setPage(nextPage);
-    setHasMore(allItems.length > nextPage * PAGE_SIZE);
+    if (loading) return;
+    setPage(prev => prev + 1);
   };
 
-  const filtered = useMemo(() => {
+  // Filter all items first, then paginate
+  const filteredAll = useMemo(() => {
+    let result = allItems;
+
+    // Filter by status
+    if (status !== 'SEMUA') {
+      result = result.filter(it => {
+        const itemStatus = (it.status || '').toUpperCase();
+        if (status === 'PESANAN BARU') return itemStatus === 'PESANAN BARU' || itemStatus === 'READY_TO_SHIP';
+        if (status === 'DIPROSES') return itemStatus === 'DIPROSES' || itemStatus === 'PROCESSED';
+        if (status === 'PERJALANAN') return itemStatus === 'PERJALANAN' || itemStatus === 'SHIPPED';
+        if (status === 'DIBATALKAN') return itemStatus === 'DIBATALKAN' || itemStatus === 'CANCELLED';
+        if (status === 'SELESAI') return itemStatus === 'SELESAI' || itemStatus === 'COMPLETED';
+        return itemStatus === status;
+      });
+    }
+
+    // Filter by dibuat status
+    if (dibuatFilter === 'BELUM DIBUAT') {
+      result = result.filter(it => !it.dibuat);
+    } else if (dibuatFilter === 'TELAH DIBUAT') {
+      result = result.filter(it => it.dibuat);
+    }
+
+    // Filter by print status
+    if (printFilter === 'BELUM CETAK') {
+      result = result.filter(it => !it.print);
+    } else if (printFilter === 'SUDAH CETAK') {
+      result = result.filter(it => it.print);
+    }
+
+    // Filter by search query (ID, invoice, shop name, tracking number, courier)
     const q = query.trim().toLowerCase();
-    // Backend already filters by status, so we only need to filter by search query
-    // No need to filter by status again in frontend
-    if (!q) return visibleItems;
-    return visibleItems.filter(it =>
-      it.id.toLowerCase().includes(q) ||
-      (it.invoice || '').toLowerCase().includes(q) ||
-      (it.ecommerce_name || '').toLowerCase().includes(q)
-    );
-  }, [query, visibleItems]);
+    if (q) {
+      result = result.filter(it =>
+        it.id.toLowerCase().includes(q) ||
+        (it.invoice || '').toLowerCase().includes(q) ||
+        (it.ecommerce_name || '').toLowerCase().includes(q) ||
+        (it.no_resi || '').toLowerCase().includes(q) ||
+        (it.ekspedisi || '').toLowerCase().includes(q)
+      );
+    }
+
+    return result;
+  }, [query, allItems, status, dibuatFilter, printFilter]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [status, dibuatFilter, printFilter, query]);
+
+  // Paginate filtered items
+  const filtered = useMemo(() => {
+    return filteredAll.slice(0, page * PAGE_SIZE);
+  }, [filteredAll, page]);
+
+  const hasMore = filtered.length < filteredAll.length;
 
   // Selection handlers
   const toggleSelection = (id: string) => {
@@ -214,6 +262,23 @@ export default function OrdersListScreen() {
   const changePreset = (days: number) => {
     setDateStart(new Date(Date.now() - days * 24 * 3600 * 1000));
     setDateEnd(new Date());
+    setLoading(true);
+  };
+
+  const formatDate = (dateString?: string): string => {
+    if (!dateString) return '';
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('id-ID', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return dateString;
+    }
   };
 
   const renderItem = ({ item }: { item: OrderCard }) => {
@@ -226,7 +291,13 @@ export default function OrdersListScreen() {
           if (selectionMode) {
             toggleSelection(item.id);
           } else {
-            navigation.navigate('OrderDetail', { id: item.id, id_ecommerce: item.id_ecommerce });
+            navigation.navigate('OrderDetail', {
+              id: item.id,
+              id_ecommerce: item.id_ecommerce,
+              scan_timestamp: item.scan_timestamp,
+              print_timestamp: item.print_timestamp,
+              scanned: item.scanned,
+            });
           }
         }}
         onLongPress={() => {
@@ -267,6 +338,13 @@ export default function OrdersListScreen() {
             ID: {item.id} • {item.invoice || 'No Invoice'}
           </Text>
 
+          {/* Date */}
+          {item.date && (
+            <Text style={styles.dateText} numberOfLines={1}>
+              📅 {formatDate(item.date)}
+            </Text>
+          )}
+
           {/* Platform, total, warehouse */}
           <Text style={styles.meta} numberOfLines={1}>
             {item.platform} • Total: {item.total_price || '-'}
@@ -286,7 +364,24 @@ export default function OrdersListScreen() {
             {item.dibuat && <Text style={styles.tagInfo}>DIBUAT</Text>}
             {item.dikirim && <Text style={styles.tagSuccess}>DIKIRIM</Text>}
             {item.print && <Text style={styles.tagPrint}>PRINTED</Text>}
+            {item.scanned && <Text style={styles.tagScanned}>SCANNED</Text>}
           </View>
+
+          {/* Print and Scan Timestamps */}
+          {(item.print_timestamp || item.scan_timestamp) && (
+            <View style={{ marginTop: 4 }}>
+              {item.print_timestamp && (
+                <Text style={styles.timestampText} numberOfLines={1}>
+                  🖨️ Cetak: {formatDate(item.print_timestamp)}
+                </Text>
+              )}
+              {item.scan_timestamp && (
+                <Text style={styles.timestampText} numberOfLines={1}>
+                  📱 Scan: {formatDate(item.scan_timestamp)}
+                </Text>
+              )}
+            </View>
+          )}
         </View>
 
         {/* Kebab menu (only when not in selection mode) */}
@@ -302,7 +397,13 @@ export default function OrdersListScreen() {
   const onOpenActions = (item: OrderCard) => {
     const canCreate = !!access?.actions?.create;
     const buttons: any[] = [
-      { text: 'View Details', onPress: () => navigation.navigate('OrderDetail', { id: item.id, id_ecommerce: item.id_ecommerce }) },
+      { text: 'View Details', onPress: () => navigation.navigate('OrderDetail', {
+        id: item.id,
+        id_ecommerce: item.id_ecommerce,
+        scan_timestamp: item.scan_timestamp,
+        print_timestamp: item.print_timestamp,
+        scanned: item.scanned,
+      }) },
       { text: 'Create Sales', onPress: () => createSales(item), style: canCreate ? 'default' : 'cancel' },
       { text: 'Print Label', onPress: () => printLabel(item), style: canCreate ? 'default' : 'cancel' },
       { text: 'Cancel', style: 'cancel' as const },
@@ -606,7 +707,7 @@ export default function OrdersListScreen() {
       {/* Search */}
       <View style={styles.searchBar}>
         <Ionicons name="search" size={18} color="#9CA3AF" />
-        <TextInput style={styles.input} placeholder="Search id/invoice/shop" value={query} onChangeText={setQuery} />
+        <TextInput style={styles.input} placeholder="Search ID / Resi / Kurir / Shop" value={query} onChangeText={setQuery} />
       </View>
 
       {/* Filters */}
@@ -623,10 +724,6 @@ export default function OrdersListScreen() {
           <Ionicons name="calendar" size={16} color="#111827" />
           <Text style={styles.filterText}>30d</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.filterPill} onPress={() => setSelectedShopId(0)}>
-          <Ionicons name="storefront-outline" size={16} color="#111827" />
-          <Text style={styles.filterText}>All Shops</Text>
-        </TouchableOpacity>
       </View>
 
       {/* Status chips */}
@@ -636,6 +733,44 @@ export default function OrdersListScreen() {
           horizontal
           keyExtractor={(s) => s}
           renderItem={({ item }) => statusChip(item)}
+          showsHorizontalScrollIndicator={false}
+        />
+      </View>
+
+      {/* Dibuat filter chips */}
+      <View style={styles.chipsRow}>
+        <FlatList
+          data={DIBUAT_CHIPS}
+          horizontal
+          keyExtractor={(s) => s}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              key={item}
+              style={[styles.chip, dibuatFilter === item && styles.chipActive]}
+              onPress={() => setDibuatFilter(item)}
+            >
+              <Text style={[styles.chipText, dibuatFilter === item && styles.chipTextActive]}>{item}</Text>
+            </TouchableOpacity>
+          )}
+          showsHorizontalScrollIndicator={false}
+        />
+      </View>
+
+      {/* Print filter chips */}
+      <View style={styles.chipsRow}>
+        <FlatList
+          data={PRINT_CHIPS}
+          horizontal
+          keyExtractor={(s) => s}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              key={item}
+              style={[styles.chip, printFilter === item && styles.chipActive]}
+              onPress={() => setPrintFilter(item)}
+            >
+              <Text style={[styles.chipText, printFilter === item && styles.chipTextActive]}>{item}</Text>
+            </TouchableOpacity>
+          )}
           showsHorizontalScrollIndicator={false}
         />
       </View>
@@ -655,7 +790,7 @@ export default function OrdersListScreen() {
 
       {/* Shop quick toggles */}
       {!selectionMode && (
-        <View style={[styles.shopBar, { paddingBottom: Math.max(insets.bottom, 8) }]}>
+        <View style={[styles.shopBar, { paddingBottom: Math.max(insets.bottom, 12), paddingTop: 12 }]}>
           <FlatList
             data={[{ id: 0, name: 'All', platform: 'ALL' } as EcommerceShop, ...shops]}
             keyExtractor={(s) => String(s.id)}
@@ -829,6 +964,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   subtitle: { fontSize: 12, color: '#6B7280', marginTop: 2 },
+  dateText: { fontSize: 11, color: '#059669', marginTop: 2, fontWeight: '500' },
   meta: { fontSize: 12, color: '#374151', marginTop: 4 },
   ekspedisi: { fontSize: 11, color: '#6B7280', marginTop: 2 },
   statusBadge: {
@@ -891,6 +1027,21 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     marginRight: 6,
     marginBottom: 4,
+  },
+  tagScanned: {
+    backgroundColor: '#FDE68A',
+    color: '#78350F',
+    fontSize: 12,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginRight: 6,
+    marginBottom: 4,
+  },
+  timestampText: {
+    fontSize: 10,
+    color: '#6B7280',
+    marginTop: 2,
   },
   kebab: { paddingHorizontal: 8, justifyContent: 'center' },
   shopBar: {

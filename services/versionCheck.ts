@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from './api';
 import { Platform } from 'react-native';
+import * as Updates from 'expo-updates';
 
 const VERSION_CHECK_KEY = 'last_version_check';
 const SKIP_VERSION_KEY = 'skip_version';
@@ -179,28 +180,107 @@ export const checkForUpdates = async (): Promise<VersionInfo | null> => {
 
 /**
  * Check if app was just updated (OTA)
- * Note: OTA updates are currently disabled
  */
 export const wasJustUpdated = async (): Promise<boolean> => {
-  // OTA updates disabled - expo-updates module not available
-  return false;
+  try {
+    // Check if running in Expo Go (updates not supported)
+    if (!Updates.isEnabled) {
+      console.log('[OTA] Updates not enabled (running in Expo Go or development build)');
+      return false;
+    }
+
+    // Get the current update ID
+    const currentUpdateId = Updates.updateId;
+    if (!currentUpdateId) {
+      console.log('[OTA] No update ID found');
+      return false;
+    }
+
+    // Get the last known update ID
+    const lastUpdateId = await AsyncStorage.getItem(LAST_UPDATE_ID_KEY);
+
+    // If there's no last update ID, save current and return false
+    if (!lastUpdateId) {
+      await AsyncStorage.setItem(LAST_UPDATE_ID_KEY, currentUpdateId);
+      return false;
+    }
+
+    // If update ID changed, app was just updated
+    if (lastUpdateId !== currentUpdateId) {
+      console.log('[OTA] App was just updated!', {
+        lastUpdateId,
+        currentUpdateId,
+      });
+      // Save new update ID
+      await AsyncStorage.setItem(LAST_UPDATE_ID_KEY, currentUpdateId);
+      return true;
+    }
+
+    return false;
+  } catch (error) {
+    console.error('[OTA] Error checking if app was updated:', error);
+    return false;
+  }
 };
 
 /**
  * Check for OTA updates (Over-The-Air) using Expo Updates
- * Note: OTA updates are currently disabled
  */
 export const checkForOTAUpdates = async (): Promise<boolean> => {
-  console.log('[OTA] Updates are disabled - expo-updates module not available');
-  return false;
+  try {
+    // Check if running in Expo Go or development build without updates
+    if (!Updates.isEnabled) {
+      console.log('[OTA] Updates not enabled (running in Expo Go or development build)');
+      return false;
+    }
+
+    console.log('[OTA] Checking for updates...', {
+      channel: Updates.channel,
+      runtimeVersion: Updates.runtimeVersion,
+      updateId: Updates.updateId,
+    });
+
+    // Check for updates
+    const update = await Updates.checkForUpdateAsync();
+
+    if (update.isAvailable) {
+      console.log('[OTA] Update available! Downloading...', {
+        manifest: update.manifest,
+      });
+
+      // Download the update
+      const fetchResult = await Updates.fetchUpdateAsync();
+
+      console.log('[OTA] Update downloaded successfully!', {
+        isNew: fetchResult.isNew,
+      });
+
+      return fetchResult.isNew;
+    } else {
+      console.log('[OTA] No updates available');
+      return false;
+    }
+  } catch (error) {
+    console.error('[OTA] Error checking for updates:', error);
+    return false;
+  }
 };
 
 /**
  * Reload the app with the new OTA update
- * Note: OTA updates are currently disabled
  */
 export const reloadApp = async (): Promise<void> => {
-  console.log('[OTA] Reload not available - expo-updates module not available');
+  try {
+    if (!Updates.isEnabled) {
+      console.log('[OTA] Updates not enabled - cannot reload');
+      return;
+    }
+
+    console.log('[OTA] Reloading app with new update...');
+    await Updates.reloadAsync();
+  } catch (error) {
+    console.error('[OTA] Error reloading app:', error);
+  }
 };
 
 /**

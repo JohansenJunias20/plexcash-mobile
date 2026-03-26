@@ -3,8 +3,10 @@
 
 // Get API base URL from environment variable
 // TEMPORARY FIX: Use computer's IP address for mobile device access
-export const API_BASE_URL = "https://app.plexseller.com";
-// export const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || process.env.API_BASE_URL || 'http://localhost:80';
+// For Android Emulator: use http://10.0.2.2 (maps to host's localhost)
+// For Physical Device: use your computer's IP address (e.g., http://192.168.1.210)
+export const API_BASE_URL = "https://app.plexseller.com"; // PRODUCTION - jangan dipakai saat development
+// export const API_BASE_URL = "http://192.168.1.101:80"; // DEVELOPMENT - local server
 
 // Debug: Log the actual environment variables being used
 console.log('[API] Environment Debug:', {
@@ -52,6 +54,9 @@ type AuthorizeDeviceResponse = {
   user?: { email: string; name?: string };
   token?: string;
   authToken?: string;
+  refreshToken?: string;        // NEW: Refresh token for permanent login
+  expiresIn?: number;           // NEW: Access token expiry in seconds
+  refreshExpiresIn?: number;    // NEW: Refresh token expiry in seconds
   deviceId?: string;
   message?: string;
 };
@@ -203,6 +208,9 @@ class ApiService {
           success: true,
           user: result.user,
           token: result.token,
+          refreshToken: result.refreshToken,        // NEW: Store refresh token
+          expiresIn: result.expiresIn,             // NEW: Store access token expiry
+          refreshExpiresIn: result.refreshExpiresIn, // NEW: Store refresh token expiry
           message: result.message,
           deviceId: result.deviceId,
         };
@@ -222,16 +230,108 @@ class ApiService {
   }
 
   /**
+   * Authorize device using PIN code (NEW - similar to QR authorization)
+   * This calls the /auth/authorize-pin endpoint for persistent authentication
+   */
+  static async authorizePIN(email: string, pinCode: string): Promise<AuthorizeDeviceResponse> {
+    try {
+      console.log('🔐 [AuthPIN] Authorizing device with PIN code for email:', email);
+      console.log('🔐 [AuthPIN] API Base URL:', API_BASE_URL);
+      console.log('🔐 [AuthPIN] Simulate Backend:', SIMULATE_BACKEND);
+
+      const deviceInfo = await this.getDeviceInfo();
+      console.log('🔐 [AuthPIN] Device Info:', deviceInfo);
+
+      const url = `${API_BASE_URL}/auth/authorize-pin`;
+      console.log('🔐 [AuthPIN] Calling URL:', url);
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: email,
+          pinCode: pinCode,
+          deviceInfo: deviceInfo
+        })
+      });
+
+      console.log('🔐 [AuthPIN] Response status:', response.status);
+
+      const resultText = await response.text();
+      console.log('🔐 [AuthPIN] Response text:', resultText);
+
+      let result: any;
+      try {
+        result = JSON.parse(resultText);
+      } catch (parseError) {
+        console.error('🔐 [AuthPIN] JSON parse error:', parseError);
+        result = { success: false, message: resultText };
+      }
+
+      console.log('🔐 [AuthPIN] Parsed result:', result);
+
+      if (response.ok && result.success) {
+        console.log('✅ [AuthPIN] Authorization successful!');
+        return {
+          success: true,
+          user: result.user,
+          token: result.token,
+          refreshToken: result.refreshToken,        // NEW: Store refresh token
+          expiresIn: result.expiresIn,             // NEW: Store access token expiry
+          refreshExpiresIn: result.refreshExpiresIn, // NEW: Store refresh token expiry
+          message: result.message,
+          deviceId: result.deviceId,
+        };
+      } else {
+        console.error('❌ [AuthPIN] Authorization failed:', result.message);
+        return {
+          success: false,
+          message: result.message || 'PIN code authentication failed'
+        };
+      }
+    } catch (error: any) {
+      console.error('❌ [AuthPIN] Network error:', error);
+      console.error('❌ [AuthPIN] Error details:', {
+        message: error?.message,
+        name: error?.name,
+        stack: error?.stack
+      });
+      return {
+        success: false,
+        message: `Network error: ${error?.message || 'Please check your connection and try again.'}`
+      };
+    }
+  }
+
+  /**
    * Store device authentication tokens securely
    */
-  static async storeDeviceTokens(authData: { authToken?: string; token?: string; refreshToken?: string; deviceId?: string; user: { email: string }; authMethod?: 'device' | 'firebase' }) {
+  static async storeDeviceTokens(authData: {
+    authToken?: string;
+    token?: string;
+    refreshToken?: string;
+    expiresIn?: number;           // NEW: Access token expiry in seconds
+    refreshExpiresIn?: number;    // NEW: Refresh token expiry in seconds
+    deviceId?: string;
+    user: { email: string };
+    authMethod?: 'device' | 'firebase'
+  }) {
     try {
       const token = authData.authToken || authData.token || '';
       const authMethod = authData.authMethod || 'device'; // Default to 'device' for backward compatibility
 
+      // Calculate token expiry timestamps
+      const now = Date.now();
+      const tokenExpiry = authData.expiresIn ? now + (authData.expiresIn * 1000) : now + (3600 * 1000); // Default 1 hour
+      const refreshTokenExpiry = authData.refreshExpiresIn ? now + (authData.refreshExpiresIn * 1000) : now + (90 * 24 * 60 * 60 * 1000); // Default 90 days
+
       // Store in AsyncStorage (for device auth system)
       await AsyncStorage.setItem('authToken', token);
       await AsyncStorage.setItem('refreshToken', authData.refreshToken || '');
+      await AsyncStorage.setItem('tokenExpiry', tokenExpiry.toString());           // NEW: Store expiry timestamp
+      await AsyncStorage.setItem('refreshTokenExpiry', refreshTokenExpiry.toString()); // NEW: Store refresh expiry timestamp
       await AsyncStorage.setItem('deviceId', authData.deviceId || await this.getOrCreateDeviceId());
       await AsyncStorage.setItem('userEmail', authData.user.email);
 
@@ -250,6 +350,8 @@ class ApiService {
       await setTokenAuth(token);
 
       console.log(`🔐 [STORE] Tokens stored in both AsyncStorage and SecureStore (authMethod: ${authMethod})`);
+      console.log(`🔐 [STORE] Token expiry: ${new Date(tokenExpiry).toISOString()}`);
+      console.log(`🔐 [STORE] Refresh token expiry: ${new Date(refreshTokenExpiry).toISOString()}`);
     } catch (error) {
       console.error('❌ [STORE] Error storing device tokens:', error);
       throw error;
@@ -337,6 +439,14 @@ class ApiService {
           await AsyncStorage.setItem('authToken', data.authToken);
           const { setTokenAuth } = require('./token');
           await setTokenAuth(data.authToken);
+
+          // NEW: Update token expiry timestamp when token is refreshed
+          if (data.expiresIn) {
+            const newExpiry = Date.now() + (data.expiresIn * 1000);
+            await AsyncStorage.setItem('tokenExpiry', newExpiry.toString());
+            console.log('🔄 [VALIDATE] Token expiry updated:', new Date(newExpiry).toISOString());
+          }
+
           console.log('🔄 [VALIDATE] Auth token refreshed in both storage systems');
         }
 
@@ -433,7 +543,8 @@ class ApiService {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          token: firebaseToken
+          token: firebaseToken,
+          fromMobile: true  // Request long-lived persistent JWT from backend
         })
       });
 
@@ -495,10 +606,46 @@ class ApiService {
 
   /**
    * Make authenticated API calls using device token or Firebase token
+   * @param endpoint - API endpoint to call
+   * @param options - Fetch options
+   * @param retryCount - Internal retry counter (default: 0)
    */
-  static async authenticatedRequest(endpoint: string, options: any = {}) {
+  static async authenticatedRequest(endpoint: string, options: any = {}, retryCount: number = 0) {
     try {
       console.log(`🌐 [AUTH-REQ] Making authenticated request to: ${endpoint}`);
+
+      // Task 3: Check if token is about to expire and refresh proactively
+      const tokenExpiry = await AsyncStorage.getItem('tokenExpiry');
+      const authMethod = await AsyncStorage.getItem('authMethod');
+
+      if (tokenExpiry && (authMethod === 'device' || authMethod === 'pin')) {
+        const expiryTime = parseInt(tokenExpiry);
+        const now = Date.now();
+        const fiveMinutes = 5 * 60 * 1000; // 5 minutes buffer
+
+        // If token expires within 5 minutes, refresh it now
+        if (now >= expiryTime - fiveMinutes) {
+          console.log('⏰ [AUTH-REQ] Token expiring soon, refreshing proactively...');
+          console.log(`⏰ [AUTH-REQ] Token expires at: ${new Date(expiryTime).toISOString()}`);
+          console.log(`⏰ [AUTH-REQ] Current time: ${new Date(now).toISOString()}`);
+
+          try {
+            const refreshResult = await this.validateDeviceAuth();
+            if (refreshResult.success) {
+              console.log('✅ [AUTH-REQ] Token refreshed successfully before API call');
+            } else {
+              console.log('⚠️ [AUTH-REQ] Token refresh failed, continuing with existing token');
+            }
+          } catch (refreshError) {
+            console.error('❌ [AUTH-REQ] Error during token refresh:', refreshError);
+            console.log('⚠️ [AUTH-REQ] Continuing with existing token despite refresh error');
+          }
+        } else {
+          const timeUntilExpiry = expiryTime - now;
+          const minutesUntilExpiry = Math.floor(timeUntilExpiry / 60000);
+          console.log(`⏰ [AUTH-REQ] Token valid for ${minutesUntilExpiry} more minutes`);
+        }
+      }
 
       const authHeader = await this.getAuthHeader();
       console.log(`🌐 [AUTH-REQ] Auth header obtained:`, authHeader ? 'YES' : 'NO');
@@ -514,9 +661,42 @@ class ApiService {
 
       console.log(`🌐 [AUTH-REQ] Response status for ${endpoint}: ${response.status}`);
 
+      // Task 4: Handle 401 errors with token refresh and retry
       if (response.status === 401 || response.status === 403) {
-        console.log(`❌ [AUTH-REQ] UNAUTHORIZED (${response.status}) - CLEARING TOKEN!`);
+        console.log(`❌ [AUTH-REQ] UNAUTHORIZED (${response.status})`);
         console.log(`❌ [AUTH-REQ] Endpoint: ${endpoint}`);
+        console.log(`❌ [AUTH-REQ] Retry count: ${retryCount}`);
+
+        // Only retry once to avoid infinite loops
+        if (retryCount === 0) {
+          const authMethod = await AsyncStorage.getItem('authMethod');
+
+          // Only attempt refresh for device/PIN auth (not Firebase)
+          if (authMethod === 'device' || authMethod === 'pin') {
+            console.log('🔄 [AUTH-REQ] Attempting token refresh after 401 error...');
+
+            try {
+              const refreshResult = await this.validateDeviceAuth();
+
+              if (refreshResult.success) {
+                console.log('✅ [AUTH-REQ] Token refreshed successfully, retrying request...');
+                // Retry the request with the new token
+                return this.authenticatedRequest(endpoint, options, retryCount + 1);
+              } else {
+                console.log('❌ [AUTH-REQ] Token refresh failed:', refreshResult.message);
+              }
+            } catch (refreshError) {
+              console.error('❌ [AUTH-REQ] Error during token refresh:', refreshError);
+            }
+          } else {
+            console.log('❌ [AUTH-REQ] Firebase auth - cannot refresh, clearing token');
+          }
+        } else {
+          console.log('❌ [AUTH-REQ] Already retried once, not retrying again');
+        }
+
+        // If we reach here, refresh failed or not applicable - clear auth
+        console.log(`❌ [AUTH-REQ] CLEARING TOKEN after failed refresh attempt`);
         console.log(`❌ [AUTH-REQ] Stack trace:`);
         console.log(new Error().stack);
 
@@ -640,11 +820,95 @@ class ApiService {
    */
   static async getUserAccess(): Promise<{ status: boolean; access?: any; reason?: string }> {
     try {
-      const response = await this.authenticatedRequest('/get/access');
+      const response = await this.authenticatedRequest('/mobile/user/access');
       return response;
     } catch (error) {
       console.error('Error fetching user access:', error);
       return { status: false, reason: 'Failed to fetch user access' };
+    }
+  }
+
+  // =====================================================
+  // RETUR PENJUALAN PIN MANAGEMENT
+  // =====================================================
+
+  /**
+   * Generate a new PIN for sales return authorization (admin only)
+   */
+  static async generateReturPenjualanPIN(email: string): Promise<{
+    status: boolean;
+    pin?: string;
+    message?: string;
+    reason?: string
+  }> {
+    try {
+      const response = await this.authenticatedRequest('/user/retur-penjualan/pin/generate', {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      });
+      return response;
+    } catch (error) {
+      console.error('Error generating retur penjualan PIN:', error);
+      return { status: false, reason: 'Failed to generate PIN' };
+    }
+  }
+
+  /**
+   * Validate PIN for sales return
+   */
+  static async validateReturPenjualanPIN(pin: string): Promise<{
+    status: boolean;
+    message?: string;
+    reason?: string
+  }> {
+    try {
+      const response = await this.authenticatedRequest('/user/retur-penjualan/pin/validate', {
+        method: 'POST',
+        body: JSON.stringify({ pin }),
+      });
+      return response;
+    } catch (error) {
+      console.error('Error validating retur penjualan PIN:', error);
+      return { status: false, reason: 'Failed to validate PIN' };
+    }
+  }
+
+  /**
+   * Get PIN for a user (admin only)
+   */
+  static async getReturPenjualanPIN(email: string): Promise<{
+    status: boolean;
+    pin?: string;
+    pin_created_at?: string;
+    requires_pin?: boolean;
+    reason?: string
+  }> {
+    try {
+      const response = await this.authenticatedRequest(`/user/retur-penjualan/pin?email=${encodeURIComponent(email)}`);
+      return response;
+    } catch (error) {
+      console.error('Error getting retur penjualan PIN:', error);
+      return { status: false, reason: 'Failed to get PIN' };
+    }
+  }
+
+  /**
+   * Update PIN requirement setting for a user
+   */
+  static async updateReturPenjualanPINRequirement(email: string, requires_pin: boolean): Promise<{
+    status: boolean;
+    message?: string;
+    reason?: string
+  }> {
+    try {
+      const response = await this.authenticatedRequest('/user/retur-penjualan/pin/requirement', {
+        method: 'POST',
+        body: JSON.stringify({ email, requires_pin }),
+      });
+      return response;
+    } catch (error) {
+      console.error('Error updating retur penjualan PIN requirement:', error);
+      return { status: false, reason: 'Failed to update PIN requirement' };
     }
   }
 }

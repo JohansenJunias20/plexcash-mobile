@@ -245,10 +245,14 @@ const StokOpnameScreen = ({ navigation }: any) => {
       return;
     }
 
-    const hasZeroQty = items.find(item => item.qty === '0' || item.qty === '');
-    if (hasZeroQty) {
-      Alert.alert('Error', 'Qty tidak boleh 0');
-      return;
+    // Only validate qty for non-REPLACE modes
+    // In REPLACE mode, qty can be 0 (to set stock to 0)
+    if (stockMode !== 'REPLACE') {
+      const hasZeroQty = items.find(item => item.qty === '0' || item.qty === '');
+      if (hasZeroQty) {
+        Alert.alert('Error', 'Qty tidak boleh 0');
+        return;
+      }
     }
 
     try {
@@ -435,7 +439,12 @@ const StokOpnameScreen = ({ navigation }: any) => {
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView style={styles.content}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        <ScrollView style={styles.content}>
         {/* Info Section */}
         <View style={styles.infoCard}>
           <View style={styles.infoRow}>
@@ -598,6 +607,7 @@ const StokOpnameScreen = ({ navigation }: any) => {
           </TouchableOpacity>
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* Search Barang Modal */}
       <Modal
@@ -657,6 +667,9 @@ const StokOpnameScreen = ({ navigation }: any) => {
                         {barang.merk} • {barang.kategori}
                       </Text>
                       <Text style={styles.searchResultSku}>SKU: {barang.sku || '-'}</Text>
+                      <Text style={styles.searchResultStock}>
+                        Stok Sekarang: {barang.stok !== undefined && barang.stok !== null ? barang.stok : '0'}
+                      </Text>
                     </View>
                     <Ionicons name="add-circle-outline" size={24} color="#f59e0b" />
                   </TouchableOpacity>
@@ -1019,6 +1032,12 @@ const styles = StyleSheet.create({
   searchResultSku: {
     fontSize: 12,
     color: '#9CA3AF',
+  },
+  searchResultStock: {
+    fontSize: 12,
+    color: '#f59e0b',
+    fontWeight: '600',
+    marginTop: 4,
   },
 });
 

@@ -18,12 +18,17 @@
       "infoPlist": {
         "NSCameraUsageDescription": "This app uses the camera to scan product barcodes for quick checkout.",
         "NSBluetoothAlwaysUsageDescription": "This app uses Bluetooth to connect to thermal printers for printing receipts.",
+        "NSLocalNetworkUsageDescription": "This app needs local network access to discover and print to LAN printers.",
+        "NSBonjourServices": [
+          "_ipp._tcp.",
+          "_printer._tcp."
+        ],
         "ITSAppUsesNonExemptEncryption": false
       },
       "runtimeVersion": "1.0.8"
     },
     "android": {
-      "versionCode": 8,
+      "versionCode": 30,
       "adaptiveIcon": {
         "foregroundImage": "./assets/logo.png",
         "backgroundColor": "#f59e0b"
@@ -36,10 +41,18 @@
         "BLUETOOTH_CONNECT",
         "BLUETOOTH_SCAN",
         "ACCESS_FINE_LOCATION",
+        "INTERNET",
+        "ACCESS_WIFI_STATE",
+        "ACCESS_NETWORK_STATE",
+        "CHANGE_WIFI_MULTICAST_STATE",
         "android.permission.CAMERA",
         "android.permission.BLUETOOTH",
         "android.permission.BLUETOOTH_ADMIN",
-        "android.permission.BLUETOOTH_CONNECT"
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_WIFI_STATE",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.CHANGE_WIFI_MULTICAST_STATE"
       ],
       "runtimeVersion": "1.0.8"
     },

@@ -26,6 +26,7 @@ interface IOrderListPanelProps {
   loadingProgress?: LoadingProgress | null;
   onClose: () => void;
   onOrderPress: (order: IOrder) => void;
+  onAcceptOrder?: (order: IOrder) => void;
   onCancelLoading?: () => void;
 }
 
@@ -67,6 +68,7 @@ const OrderListPanel: React.FC<IOrderListPanelProps> = ({
   loadingProgress,
   onClose,
   onOrderPress,
+  onAcceptOrder,
   onCancelLoading,
 }) => {
   if (!visible) return null;
@@ -139,6 +141,21 @@ const OrderListPanel: React.FC<IOrderListPanelProps> = ({
               <Text style={styles.totalLabel}>Total:</Text>
               <Text style={styles.totalPrice}>{formatPrice(total)}</Text>
             </View>
+
+            {/* Action Buttons */}
+            {(orderStatus.toUpperCase() === 'PESANAN BARU' || orderStatus.toUpperCase() === 'READY_TO_SHIP') && onAcceptOrder && (
+              <TouchableOpacity
+                style={styles.acceptButton}
+                onPress={(e) => {
+                  e.stopPropagation(); // Prevent triggering onOrderPress
+                  onAcceptOrder(item);
+                }}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="checkmark-circle" size={16} color="#FFFFFF" />
+                <Text style={styles.acceptButtonText}>Terima Pesanan</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </TouchableOpacity>
@@ -465,6 +482,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#f59e0b',
+  },
+  acceptButton: {
+    marginTop: 8,
+    backgroundColor: '#10B981', // Green for accept
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  acceptButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
   },
 });
 

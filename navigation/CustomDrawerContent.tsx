@@ -299,6 +299,14 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ navigation, s
           active={currentRoute === 'PembelianDPBeli'}
           nested
         />
+        <DrawerItem
+          label="Pre Order"
+          icon="document-text"
+          onPress={() => navigation.navigate('PreOrder')}
+          active={currentRoute === 'PreOrder'}
+          nested
+          badge="NEW"
+        />
       </CollapsibleSection>
 
       {/* Penjualan - Collapsible */}
@@ -439,6 +447,24 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ navigation, s
         onPress={() => navigation.navigate('ProsesOtomatis')}
         active={currentRoute === 'ProsesOtomatis'}
       />
+      <DrawerItem
+        label="Scan Out"
+        icon="scan"
+        onPress={() => navigation.navigate('ScanOut')}
+        active={currentRoute === 'ScanOut'}
+      />
+      <DrawerItem
+        label="Scan In"
+        icon="scan"
+        onPress={() => navigation.navigate('ScanIn')}
+        active={currentRoute === 'ScanIn'}
+      />
+      <DrawerItem
+        label="Cari by Scan"
+        icon="search-circle"
+        onPress={() => navigation.navigate('ScanSearch')}
+        active={currentRoute === 'ScanSearch'}
+      />
 
       {/* LAPORAN Section */}
       <SectionHeader title="LAPORAN" />
@@ -465,6 +491,12 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ navigation, s
         icon="megaphone"
         onPress={() => navigation.navigate('Iklan')}
         active={currentRoute === 'Iklan'}
+      />
+      <DrawerItem
+        label="Perangkat WinForms"
+        icon="desktop-outline"
+        onPress={() => navigation.navigate('PerangkatList')}
+        active={currentRoute === 'PerangkatList'}
       />
 
       {/* SETTING Section */}

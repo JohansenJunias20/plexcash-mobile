@@ -11,11 +11,48 @@ import UpdateModal from './components/UpdateModal';
 import UpdateSuccessModal from './components/UpdateSuccessModal';
 import { useAppUpdate } from './hooks/useAppUpdate';
 import * as AuthSession from "expo-auth-session";
+import { useEffect } from 'react';
+import { Alert } from 'react-native';
+import FlashMessage from 'react-native-flash-message';
 
 // Log app configuration on startup
 console.log('[App] Starting PlexSeller...');
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import DrawerNavigator from './navigation/DrawerNavigator';
+
+// Global error handler for BLE library crashes
+const setupGlobalErrorHandler = () => {
+  const originalHandler = ErrorUtils.getGlobalHandler();
+
+  ErrorUtils.setGlobalHandler((error, isFatal) => {
+    const errorStr = String(error);
+
+    // Handle BLE-specific errors
+    if (errorStr.includes('PromiseImpl.reject') ||
+        errorStr.includes('BlePlxModule') ||
+        errorStr.includes('GATT')) {
+      console.error('❌ [GLOBAL] Caught BLE error:', error);
+
+      // Don't crash the app for BLE errors
+      if (!isFatal) {
+        Alert.alert(
+          'Bluetooth Error',
+          'Failed to connect to printer. Please try again or restart Bluetooth.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+    }
+
+    // Call original handler for other errors
+    if (originalHandler) {
+      originalHandler(error, isFatal);
+    }
+  });
+};
+
+// Setup error handler on app start
+setupGlobalErrorHandler();
 // import { createDrawerNavigator } from '@react-navigation/drawer';
 // import MainScreen from './components/MainScreen';
 
@@ -72,6 +109,9 @@ const AppContent = (): JSX.Element => {
 
       {/* Developer Mode Log Viewer */}
       {isDeveloperMode && <LogViewer visible={true} />}
+
+      {/* Flash Message - Global notification system */}
+      <FlashMessage position="top" />
     </View>
   );
 };

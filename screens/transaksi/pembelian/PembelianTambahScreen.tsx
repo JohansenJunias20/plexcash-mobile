@@ -12,7 +12,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation, DrawerActions } from '@react-navigation/native';
+import { useNavigation, useRoute, DrawerActions } from '@react-navigation/native';
+import moment from 'moment';
 import { API_BASE_URL } from '../../../services/api';
 import { getTokenAuth } from '../../../services/token';
 import SearchSupplierModal, { SupplierItem } from '../../../components/pembelian/SearchSupplierModal';
@@ -38,6 +39,31 @@ interface Warehouse {
   name: string;
   type: string;
 }
+
+interface PreOrderItem {
+  id_masterbarang: number;
+  nama: string;
+  qty: number;
+  harga: number;
+  merk: string;
+  satuan: string;
+}
+
+interface PreOrderData {
+  id?: number;
+  tanggal_po: string;
+  tanggal_perkiraan_sampai: string;
+  id_supplier: number;
+  supplier_nama?: string;
+  notes: string;
+  items: PreOrderItem[];
+  id_pembelian?: number;
+}
+
+// Helper function to format datetime for MySQL
+const formatDateTimeForMySQL = (date: Date | string): string => {
+  return moment(date).format('YYYY-MM-DD HH:mm:ss');
+};
 
 export default function PembelianTambahScreen() {
   // Form state
@@ -72,9 +98,29 @@ export default function PembelianTambahScreen() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  // Pre-order related state
+  const [selectedPreOrders, setSelectedPreOrders] = useState<PreOrderData[]>([]);
+  const [preOrders, setPreOrders] = useState<PreOrderData[]>([]);
+  const [showPreOrderSearch, setShowPreOrderSearch] = useState(false);
+  const [loadingPreOrders, setLoadingPreOrders] = useState(false);
+  const [pendingPreOrdersCount, setPendingPreOrdersCount] = useState(0);
+
+  const navigation = useNavigation();
+  const route = useRoute();
+
   useEffect(() => {
     loadInitialData();
   }, []);
+
+  // Handle po_ids from navigation params (from PreOrder screen)
+  useEffect(() => {
+    const params = route.params as any;
+    if (params?.po_ids) {
+      handlePreOrderIds(params.po_ids);
+      // Clear param after processing
+      navigation.setParams({ po_ids: undefined } as any);
+    }
+  }, [route.params]);
 
   const loadInitialData = async () => {
     try {
@@ -123,9 +169,29 @@ export default function PembelianTambahScreen() {
     }
   };
 
-  const handleSupplierSelect = (supplier: SupplierItem) => {
+  const handleSupplierSelect = async (supplier: SupplierItem) => {
     setIdSupplier(supplier.id);
     setSupplierName(supplier.nama);
+
+    // Fetch pending pre-orders for this supplier
+    try {
+      const token = await getTokenAuth();
+      if (!token) return;
+
+      const response = await fetch(`${API_BASE_URL}/api/preorder`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await response.json();
+
+      if (data.status && data.data) {
+        const pending = data.data.filter(
+          (po: PreOrderData) => !po.id_pembelian && po.id_supplier === supplier.id
+        );
+        setPendingPreOrdersCount(pending.length);
+      }
+    } catch (error) {
+      console.error('Error fetching pending pre-orders:', error);
+    }
   };
 
   const handleBaganAkunSelect = (item: BaganAkunItem) => {
@@ -165,6 +231,186 @@ export default function PembelianTambahScreen() {
     };
 
     setItemDetails([...itemDetails, newItem]);
+  };
+
+  // Pre-order handling functions
+  const handlePreOrderIds = async (poIdsParam: string) => {
+    try {
+      setLoadingPreOrders(true);
+
+      // Parse comma-separated IDs
+      const poIds = poIdsParam.split(',')
+        .map(id => parseInt(id.trim()))
+        .filter(id => !isNaN(id));
+
+      if (poIds.length === 0) {
+        Alert.alert('Error', 'No valid pre-order IDs');
+        return;
+      }
+
+      // Fetch pre-orders
+      const token = await getTokenAuth();
+      if (!token) return;
+
+      const response = await fetch(
+        `${API_BASE_URL}/get/preorder/by-ids?ids=${poIds.join(',')}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const data = await response.json();
+
+      if (data.status && data.data) {
+        const preOrders = data.data;
+
+        // Validate same supplier
+        const firstSupplierId = preOrders[0].id_supplier;
+        const allSame = preOrders.every((po: PreOrderData) => po.id_supplier === firstSupplierId);
+
+        if (!allSame) {
+          Alert.alert('Error', 'Semua pre-order harus memiliki supplier yang sama');
+          return;
+        }
+
+        // Validate not converted
+        const anyConverted = preOrders.some((po: PreOrderData) => po.id_pembelian);
+        if (anyConverted) {
+          Alert.alert('Error', 'Beberapa pre-order sudah dikonversi');
+          return;
+        }
+
+        // Populate form
+        populateFromPreOrders(preOrders);
+      }
+    } catch (error) {
+      console.error('Error loading pre-orders:', error);
+      Alert.alert('Error', 'Failed to load pre-orders');
+    } finally {
+      setLoadingPreOrders(false);
+    }
+  };
+
+  const populateFromPreOrders = (preOrders: PreOrderData[]) => {
+    // Set supplier
+    const supplierId = preOrders[0].id_supplier;
+    const supplierName = preOrders[0].supplier_nama || '';
+    setIdSupplier(supplierId);
+    setSupplierName(supplierName);
+
+    // Merge items from all pre-orders
+    const itemMap = new Map<number, ItemDetail>();
+
+    preOrders.forEach(po => {
+      po.items.forEach(item => {
+        if (itemMap.has(item.id_masterbarang)) {
+          // Combine quantities
+          const existing = itemMap.get(item.id_masterbarang)!;
+          existing.qty = (parseInt(existing.qty) + item.qty).toString();
+        } else {
+          // Add new item
+          itemMap.set(item.id_masterbarang, {
+            id: item.id_masterbarang,
+            nama: item.nama,
+            merk: item.merk || '',
+            kategori: '',
+            satuan: item.satuan || 'pcs',
+            qty: item.qty.toString(),
+            hargabeli: item.harga.toString(),
+            dpp: item.harga.toString(),
+            pricelist: '',
+            qty_print: '0',
+          });
+        }
+      });
+    });
+
+    // Convert map to array
+    const mergedItems = Array.from(itemMap.values());
+    setItemDetails(mergedItems);
+
+    // Set selected pre-orders
+    setSelectedPreOrders(preOrders);
+
+    // Set notes
+    const notes = preOrders.map(po => `PO #${po.id}: ${po.notes}`).join('\n');
+    setKeterangan(notes);
+  };
+
+  const fetchAllPreOrders = async () => {
+    try {
+      setLoadingPreOrders(true);
+      const token = await getTokenAuth();
+      if (!token) return;
+
+      const response = await fetch(`${API_BASE_URL}/api/preorder`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await response.json();
+
+      if (data.status && data.data) {
+        // Filter only pending pre-orders
+        const pending = data.data.filter((po: PreOrderData) => !po.id_pembelian);
+        setPreOrders(pending);
+      }
+    } catch (error) {
+      console.error('Error loading pre-orders:', error);
+      Alert.alert('Error', 'Failed to load pre-orders');
+    } finally {
+      setLoadingPreOrders(false);
+    }
+  };
+
+  const handleOpenPreOrderSearch = async () => {
+    if (idSupplier === 0) {
+      Alert.alert('Info', 'Silakan pilih supplier terlebih dahulu');
+      return;
+    }
+    await fetchAllPreOrders();
+    setShowPreOrderSearch(true);
+  };
+
+  const handleTogglePreOrder = (preOrder: PreOrderData) => {
+    // Check if already selected
+    const isSelected = selectedPreOrders.some(po => po.id === preOrder.id);
+
+    if (isSelected) {
+      // Remove from selection
+      setSelectedPreOrders(selectedPreOrders.filter(po => po.id !== preOrder.id));
+    } else {
+      // Validate same supplier
+      if (selectedPreOrders.length > 0) {
+        const firstSupplierId = selectedPreOrders[0].id_supplier;
+        if (preOrder.id_supplier !== firstSupplierId) {
+          Alert.alert('Error', 'Semua pre-order harus memiliki supplier yang sama');
+          return;
+        }
+      }
+      // Add to selection
+      setSelectedPreOrders([...selectedPreOrders, preOrder]);
+    }
+  };
+
+  const handleConfirmPreOrderSelection = () => {
+    if (selectedPreOrders.length === 0) {
+      Alert.alert('Info', 'Silakan pilih minimal 1 pre-order');
+      return;
+    }
+
+    populateFromPreOrders(selectedPreOrders);
+    setShowPreOrderSearch(false);
+  };
+
+  const handleRemovePreOrder = (index: number) => {
+    const newSelected = [...selectedPreOrders];
+    newSelected.splice(index, 1);
+    setSelectedPreOrders(newSelected);
+
+    // If no more pre-orders, clear items
+    if (newSelected.length === 0) {
+      setItemDetails([]);
+      setKeterangan('');
+    } else {
+      // Re-populate with remaining pre-orders
+      populateFromPreOrders(newSelected);
+    }
   };
 
   const updateItemDetail = (index: number, field: keyof ItemDetail, value: string) => {
@@ -318,8 +564,8 @@ export default function PembelianTambahScreen() {
       const payload = {
         data: {
           pembelian: {
-            tanggal: new Date().toISOString(),
-            tanggal_invoice: tanggalInvoice,
+            tanggal: formatDateTimeForMySQL(new Date()),
+            tanggal_invoice: formatDateTimeForMySQL(tanggalInvoice),
             id_supplier: idSupplier,
             keterangan,
             bayar: bayarAmount,
@@ -335,6 +581,8 @@ export default function PembelianTambahScreen() {
           },
           detailpembelian,
         },
+        // Include pre-order IDs for conversion
+        preOrderIds: selectedPreOrders.map(po => po.id).filter(id => id !== undefined)
       };
 
       const res = await fetch(`${API_BASE_URL}/pembelian`, {
@@ -365,6 +613,10 @@ export default function PembelianTambahScreen() {
               setBiayaTambahan('');
               setItemDetails([]);
 
+              // Reset pre-order state
+              setSelectedPreOrders([]);
+              setPendingPreOrdersCount(0);
+
               // Reset date to now
               const now = new Date();
               setTanggalInvoice(now.toISOString().slice(0, 16));
@@ -394,7 +646,6 @@ export default function PembelianTambahScreen() {
   const baseTotal = calculateBaseTotal();
   const ppnAmount = calculatePpnAmount();
   const grandTotal = calculateTotal();
-  const navigation = useNavigation();
 
   return (
     <SafeAreaView style={styles.container}>
@@ -457,6 +708,54 @@ export default function PembelianTambahScreen() {
               <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
             </TouchableOpacity>
           </View>
+
+          {/* Pending Pre-Orders Notification */}
+          {idSupplier > 0 && pendingPreOrdersCount > 0 && (
+            <View style={styles.infoAlert}>
+              <Ionicons name="information-circle" size={20} color="#3b82f6" />
+              <Text style={styles.infoText}>
+                Ada {pendingPreOrdersCount} pre-order menunggu untuk supplier ini.
+              </Text>
+              <TouchableOpacity onPress={handleOpenPreOrderSearch}>
+                <Text style={styles.infoLink}>Lihat</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Pre-Order Selection */}
+          {idSupplier > 0 && (
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Nomor PO (Optional)</Text>
+              <TouchableOpacity
+                style={styles.selectButton}
+                onPress={handleOpenPreOrderSearch}
+                disabled={saving}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={selectedPreOrders.length > 0 ? styles.selectValue : styles.selectPlaceholder}>
+                    {selectedPreOrders.length > 0
+                      ? selectedPreOrders.map(po => `#${po.id}`).join(', ')
+                      : 'Pilih Pre-Order'}
+                  </Text>
+                </View>
+                <Ionicons name="search" size={20} color="#9CA3AF" />
+              </TouchableOpacity>
+
+              {/* Selected PO Chips */}
+              {selectedPreOrders.length > 0 && (
+                <View style={styles.chipContainer}>
+                  {selectedPreOrders.map((po, idx) => (
+                    <View key={idx} style={styles.chip}>
+                      <Text style={styles.chipText}>PO #{po.id}</Text>
+                      <TouchableOpacity onPress={() => handleRemovePreOrder(idx)}>
+                        <Ionicons name="close-circle" size={18} color="#6B7280" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
 
           {/* Keterangan */}
           <View style={styles.formGroup}>
@@ -821,6 +1120,81 @@ export default function PembelianTambahScreen() {
         onClose={() => setShowTambahBarang(false)}
         onDone={handleTambahBarangDone}
       />
+
+      {/* Pre-Order Search Modal */}
+      {showPreOrderSearch && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Pilih Pre-Order</Text>
+              <TouchableOpacity onPress={() => setShowPreOrderSearch(false)}>
+                <Ionicons name="close" size={24} color="#374151" />
+              </TouchableOpacity>
+            </View>
+
+            {loadingPreOrders ? (
+              <View style={styles.modalLoading}>
+                <ActivityIndicator size="large" color="#f59e0b" />
+                <Text style={styles.loadingText}>Memuat pre-orders...</Text>
+              </View>
+            ) : (
+              <ScrollView style={styles.modalContent}>
+                {preOrders
+                  .filter(po => po.id_supplier === idSupplier)
+                  .map((preOrder) => {
+                    const isSelected = selectedPreOrders.some(po => po.id === preOrder.id);
+                    return (
+                      <TouchableOpacity
+                        key={preOrder.id}
+                        style={[styles.preOrderItem, isSelected && styles.preOrderItemSelected]}
+                        onPress={() => handleTogglePreOrder(preOrder)}
+                      >
+                        <View style={styles.preOrderCheckbox}>
+                          <Ionicons
+                            name={isSelected ? 'checkbox' : 'square-outline'}
+                            size={24}
+                            color={isSelected ? '#f59e0b' : '#9CA3AF'}
+                          />
+                        </View>
+                        <View style={styles.preOrderInfo}>
+                          <Text style={styles.preOrderId}>PO #{preOrder.id}</Text>
+                          <Text style={styles.preOrderDate}>
+                            {new Date(preOrder.tanggal_po).toLocaleDateString('id-ID')}
+                          </Text>
+                          <Text style={styles.preOrderSupplier}>{preOrder.supplier_nama}</Text>
+                          <Text style={styles.preOrderItems}>
+                            {preOrder.items.length} item(s)
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                {preOrders.filter(po => po.id_supplier === idSupplier).length === 0 && (
+                  <View style={styles.emptyState}>
+                    <Ionicons name="document-outline" size={48} color="#9CA3AF" />
+                    <Text style={styles.emptyText}>Tidak ada pre-order untuk supplier ini</Text>
+                  </View>
+                )}
+              </ScrollView>
+            )}
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonCancel]}
+                onPress={() => setShowPreOrderSearch(false)}
+              >
+                <Text style={styles.modalButtonTextCancel}>Batal</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonConfirm]}
+                onPress={handleConfirmPreOrderSelection}
+              >
+                <Text style={styles.modalButtonTextConfirm}>Konfirmasi</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -1187,6 +1561,157 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: '700',
+  },
+  // Pre-order styles
+  infoAlert: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    gap: 8,
+  },
+  infoText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#1E40AF',
+  },
+  infoLink: {
+    fontSize: 14,
+    color: '#3b82f6',
+    fontWeight: '600',
+  },
+  chipContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    gap: 6,
+  },
+  chipText: {
+    fontSize: 14,
+    color: '#92400E',
+    fontWeight: '500',
+  },
+  modalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContainer: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    width: '90%',
+    maxHeight: '80%',
+    overflow: 'hidden',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  modalContent: {
+    maxHeight: 400,
+  },
+  modalLoading: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  preOrderItem: {
+    flexDirection: 'row',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    alignItems: 'center',
+  },
+  preOrderItemSelected: {
+    backgroundColor: '#FEF3C7',
+  },
+  preOrderCheckbox: {
+    marginRight: 12,
+  },
+  preOrderInfo: {
+    flex: 1,
+  },
+  preOrderId: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  preOrderDate: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 2,
+  },
+  preOrderSupplier: {
+    fontSize: 14,
+    color: '#374151',
+    marginBottom: 2,
+  },
+  preOrderItems: {
+    fontSize: 12,
+    color: '#9CA3AF',
+  },
+  emptyState: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    marginTop: 12,
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    gap: 12,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  modalButtonCancel: {
+    backgroundColor: '#F3F4F6',
+  },
+  modalButtonConfirm: {
+    backgroundColor: '#f59e0b',
+  },
+  modalButtonTextCancel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  modalButtonTextConfirm: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'white',
   },
 });
 

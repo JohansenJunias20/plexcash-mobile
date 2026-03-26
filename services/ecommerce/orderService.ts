@@ -35,6 +35,12 @@ export interface IOrder {
   total_price?: number | string;
   platform?: string;
   shop_name?: string;
+  id_ecommerce?: number;
+  from?: string;
+  booking_sn?: string | null;
+  package_id?: string | null;
+  orderType?: string;
+  isBookingOrder?: boolean;
 }
 
 /**
@@ -100,11 +106,11 @@ export const fetchOrders = async (
  */
 export const formatPrice = (price: number | string | undefined): string => {
   if (!price) return 'Rp 0';
-  
+
   const numPrice = typeof price === 'string' ? parseFloat(price) : price;
-  
+
   if (isNaN(numPrice)) return 'Rp 0';
-  
+
   return `Rp ${numPrice.toLocaleString('id-ID')}`;
 };
 
