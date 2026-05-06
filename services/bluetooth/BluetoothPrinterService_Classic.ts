@@ -1,6 +1,6 @@
 import { Platform, PermissionsAndroid } from 'react-native';
 import RNBluetoothClassic, { BluetoothDevice as RNBluetoothDevice } from 'react-native-bluetooth-classic';
-import { IBluetoothPrinterService, BluetoothDevice } from './IBluetoothPrinterService';
+import { IBluetoothPrinterService, BluetoothDevice, PrintOptions } from './IBluetoothPrinterService';
 
 export interface ReceiptData {
   storeName: string;
@@ -325,14 +325,17 @@ class BluetoothPrinterService_Classic implements IBluetoothPrinterService {
 
   /**
    * Send test print
+   * @param options - Optional overrides (classic.noCut skips paper cut command)
    */
-  async testPrint(): Promise<boolean> {
+  async testPrint(options?: PrintOptions): Promise<boolean> {
     if (!this.connectedDevice) {
       throw new Error('No device connected');
     }
 
+    const noCut = options?.classic?.noCut ?? false;
+
     try {
-      console.log('🖨️ [BT-SERVICE-CLASSIC] Sending test print...');
+      console.log(`🖨️ [BT-SERVICE-CLASSIC] Sending test print (noCut=${noCut})...`);
 
       // ESC/POS commands for test print
       const commands = [
@@ -345,10 +348,15 @@ class BluetoothPrinterService_Classic implements IBluetoothPrinterService {
         '------------------------\n',
         'Printer: OK\n',
         'Connection: Bluetooth Classic\n',
+        noCut ? '' : '',      // placeholder to keep array structure
         '------------------------\n',
         '\n\n\n',
-        '\x1D\x56\x00',       // Cut paper
       ];
+
+      // Only append cut command if noCut is false (Scenario 6 disables this)
+      if (!noCut) {
+        commands.push('\x1D\x56\x00'); // Cut paper
+      }
 
       const data = commands.join('');
       await this.connectedDevice.write(data);
@@ -363,21 +371,25 @@ class BluetoothPrinterService_Classic implements IBluetoothPrinterService {
 
   /**
    * Print receipt
+   * @param data - Receipt data
+   * @param options - Optional overrides (classic.noCut skips paper cut command)
    */
-  async printReceipt(data: ReceiptData): Promise<boolean> {
+  async printReceipt(data: ReceiptData, options?: PrintOptions): Promise<boolean> {
     if (!this.connectedDevice) {
       throw new Error('No device connected');
     }
 
+    const noCut = options?.classic?.noCut ?? false;
+
     try {
-      console.log('🖨️ [BT-SERVICE-CLASSIC] Printing receipt...');
+      console.log(`🖨️ [BT-SERVICE-CLASSIC] Printing receipt (noCut=${noCut})...`);
 
       // Get paper size and language from data
       const paperWidth = data.paperSize || '80mm';
       const language = data.language || 'id';
 
       // Generate ESC/POS commands
-      const escPosData = this.generateReceiptESCPOS(data, paperWidth, language);
+      const escPosData = this.generateReceiptESCPOS(data, paperWidth, language, noCut);
 
       // Send to printer
       await this.connectedDevice.write(escPosData);
@@ -401,8 +413,9 @@ class BluetoothPrinterService_Classic implements IBluetoothPrinterService {
 
   /**
    * Generate ESC/POS commands for receipt
+   * @param noCut - When true, omit the paper cut command (Scenario 6)
    */
-  private generateReceiptESCPOS(data: ReceiptData, paperWidth: string, language: string): string {
+  private generateReceiptESCPOS(data: ReceiptData, paperWidth: string, language: string, noCut = false): string {
     const maxWidth = paperWidth === '58mm' ? 32 : 48;
     const commands: string[] = [];
 
@@ -499,7 +512,10 @@ class BluetoothPrinterService_Classic implements IBluetoothPrinterService {
 
     // Feed and cut
     commands.push('\n\n\n');
-    commands.push('\x1D\x56\x00'); // Cut paper
+    // Scenario 6: Some printers hang/fail when receiving cut paper command
+    if (!noCut) {
+      commands.push('\x1D\x56\x00'); // Cut paper
+    }
 
     return commands.join('');
   }

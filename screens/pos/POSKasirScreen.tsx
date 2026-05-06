@@ -31,6 +31,8 @@ import {
   LANPrinterDiscovery,
   LANPrinterService,
   ProtocolType,
+  PrintScenario,
+  PrintOptions,
 } from '../../services/BluetoothPrinterService';
 import LANPrinterSettings from '../../components/LANPrinterSettings';
 import { useAuth } from '../../context/AuthContext';
@@ -153,6 +155,18 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
   const [printerType, setPrinterType] = useState<'bluetooth' | 'lan'>('bluetooth');
   const [selectedLANPrinter, setSelectedLANPrinter] = useState<LANPrinter | null>(null);
   const [isTestPrinting, setIsTestPrinting] = useState(false);
+  /**
+   * Active print scenario (1–6).
+   * Persisted in AsyncStorage under 'pos_print_scenario'.
+   * - '1' = BT Classic (default SPP, most printers)
+   * - '2' = BLE + Write With Response (ACK per chunk)
+   * - '3' = BLE + Write Without Response (fast, no ACK)
+   * - '4' = BLE + All UUID Scan (non-standard UUID)
+   * - '5' = BLE + No MTU (older printers)
+   * - '6' = BT Classic + No Paper Cut (cut-command disabled)
+   */
+  const [printScenario, setPrintScenario] = useState<PrintScenario>('1');
+  const [showScenarioDropdown, setShowScenarioDropdown] = useState(false);
   const [isPkpActive, setIsPkpActive] = useState(false);
   const [ppnRate, setPpnRate] = useState(11);
   const [saving, setSaving] = useState(false);
@@ -201,6 +215,7 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
     requestCameraPermission();
     loadSavedBaganAkun();
     loadSavedPrinter();
+    loadSavedScenario();
     loadSavedViewMode();
     // Focus on search input when screen loads
     setTimeout(() => searchInputRef.current?.focus(), 300);
@@ -365,6 +380,97 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
       Alert.alert('Error', 'Failed to switch BLE library');
     }
   };
+
+  /** Load saved print scenario from AsyncStorage */
+  const loadSavedScenario = async () => {
+    try {
+      const saved = await AsyncStorage.getItem('pos_print_scenario');
+      if (saved && ['1','2','3','4','5','6'].includes(saved)) {
+        const scenario = saved as PrintScenario;
+        setPrintScenario(scenario);
+        // Auto-switch library to match saved scenario
+        const libForScenario = scenario === '1' || scenario === '6' ? 'bt-classic' : 'ble-plx';
+        setBleLibrary(libForScenario);
+        await BluetoothPrinterServiceFactory.switchLibrary(libForScenario);
+        console.log(`🎯 [PRINTER] Loaded print scenario: Opsi ${scenario}`);
+      }
+    } catch (error) {
+      console.error('Error loading saved scenario:', error);
+    }
+  };
+
+  /** Save chosen scenario to AsyncStorage and update library accordingly */
+  const saveScenarioSelection = async (scenario: PrintScenario) => {
+    try {
+      await AsyncStorage.setItem('pos_print_scenario', scenario);
+      setPrintScenario(scenario);
+      setShowScenarioDropdown(false);
+
+      // Scenario 1 & 6 use BT Classic, the rest use BLE PLX
+      const newLib: BleLibraryType = (scenario === '1' || scenario === '6') ? 'bt-classic' : 'ble-plx';
+      if (newLib !== bleLibrary) {
+        setBleLibrary(newLib);
+        await BluetoothPrinterServiceFactory.switchLibrary(newLib);
+        // Clear stale printer list
+        setPrinters([]);
+        setSelectedPrinter('');
+        await AsyncStorage.removeItem('pos_selected_printer');
+      }
+      await AsyncStorage.setItem('pos_ble_library', newLib);
+      console.log(`🎯 [PRINTER] Scenario set to Opsi ${scenario} (library: ${newLib})`);
+    } catch (error) {
+      console.error('Error saving scenario:', error);
+    }
+  };
+
+  /**
+   * Build PrintOptions from the currently active scenario.
+   * Classic scenarios return classic options; BLE scenarios return ble options.
+   */
+  const buildPrintOptions = (): PrintOptions => {
+    switch (printScenario) {
+      case '2': return { ble: { forceWriteWithResponse: true } };
+      case '3': return { ble: { forceWriteWithoutResponse: true } };
+      case '4': return { ble: { scanAllUUIDs: true } };
+      case '5': return { ble: { skipMTU: true } };
+      case '6': return { classic: { noCut: true } };
+      default:  return {}; // Opsi 1: BT Classic default, no extra options
+    }
+  };
+
+  /** Human-readable label for each scenario (for dropdown display) */
+  const SCENARIO_OPTIONS: { value: PrintScenario; label: string; description: string }[] = [
+    {
+      value: '1',
+      label: 'Opsi 1 — BT Classic (Default)',
+      description: 'Bluetooth Classic (SPP). Cocok untuk mayoritas thermal printer. Coba ini terlebih dahulu.',
+    },
+    {
+      value: '2',
+      label: 'Opsi 2 — BLE + Write With Response',
+      description: 'BLE dengan konfirmasi (ACK) per data chunk. Cocok bila Opsi 1 tidak merespons sama sekali.',
+    },
+    {
+      value: '3',
+      label: 'Opsi 3 — BLE + Write Without Response',
+      description: 'BLE tanpa konfirmasi, lebih cepat. Cocok untuk printer BLE (HM-10 module) seperti beberapa merk China.',
+    },
+    {
+      value: '4',
+      label: 'Opsi 4 — BLE + Scan Semua UUID',
+      description: 'BLE dengan scan semua karakteristik. Coba bila UUID printer non-standar dan Opsi 2/3 gagal.',
+    },
+    {
+      value: '5',
+      label: 'Opsi 5 — BLE + Tanpa MTU Negotiation',
+      description: 'BLE tanpa negosiasi ukuran MTU. Coba bila printer disconnect/hang saat mengirim data.',
+    },
+    {
+      value: '6',
+      label: 'Opsi 6 — BT Classic + Tanpa Paper Cut',
+      description: 'BT Classic tanpa perintah potong kertas. Coba bila print berjalan tapi printer hang atau tidak ada output.',
+    },
+  ];
 
   const loadSavedViewMode = async () => {
     try {
@@ -1274,7 +1380,9 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
       };
 
       console.log('🖨️ [POS] Sending receipt to printer...');
-      const printed = await service.printReceipt(receiptData);
+      const printOpts = buildPrintOptions();
+      console.log(`🎯 [POS] Using print scenario Opsi ${printScenario}`, printOpts);
+      const printed = await service.printReceipt(receiptData, printOpts);
 
       if (printed) {
         console.log('✅ [POS] Receipt printed successfully');
@@ -1500,7 +1608,9 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
         }
 
         console.log('🖨️ [POS] Sending test print...');
-        const success = await service.testPrint();
+        const printOpts = buildPrintOptions();
+        console.log(`🎯 [POS] Test print scenario Opsi ${printScenario}`, printOpts);
+        const success = await service.testPrint(printOpts);
 
         if (!success) {
           throw new Error('Test print failed');
@@ -2684,7 +2794,75 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
               {/* Bluetooth-specific settings */}
               {printerType === 'bluetooth' && (
                 <>
-                  {/* BLE Library Selection */}
+                  {/* === PRINT SCENARIO (Troubleshooting) === */}
+                  <View style={styles.printerSection}>
+                    <Text style={styles.sectionLabel}>🔧 Skenario Print (Troubleshooting)</Text>
+                    <Text style={styles.helperText}>
+                      Jika printer terkoneksi tapi tidak bisa print, coba ganti skenario satu per satu.
+                    </Text>
+
+                    {/* Dropdown trigger */}
+                    <TouchableOpacity
+                      style={styles.scenarioDropdownButton}
+                      onPress={() => setShowScenarioDropdown(prev => !prev)}
+                      activeOpacity={0.8}
+                    >
+                      <View style={styles.scenarioDropdownLeft}>
+                        <Ionicons name="options-outline" size={18} color="#f59e0b" />
+                        <Text style={styles.scenarioDropdownValue} numberOfLines={1}>
+                          {SCENARIO_OPTIONS.find(s => s.value === printScenario)?.label ?? `Opsi ${printScenario}`}
+                        </Text>
+                      </View>
+                      <Ionicons
+                        name={showScenarioDropdown ? 'chevron-up' : 'chevron-down'}
+                        size={18}
+                        color="#6B7280"
+                      />
+                    </TouchableOpacity>
+
+                    {/* Dropdown list */}
+                    {showScenarioDropdown && (
+                      <View style={styles.scenarioDropdownList}>
+                        {SCENARIO_OPTIONS.map(opt => (
+                          <TouchableOpacity
+                            key={opt.value}
+                            style={[
+                              styles.scenarioDropdownItem,
+                              printScenario === opt.value && styles.scenarioDropdownItemActive,
+                            ]}
+                            onPress={() => saveScenarioSelection(opt.value)}
+                            activeOpacity={0.7}
+                          >
+                            <View style={styles.scenarioDropdownItemRow}>
+                              {printScenario === opt.value
+                                ? <Ionicons name="radio-button-on" size={16} color="#f59e0b" />
+                                : <Ionicons name="radio-button-off" size={16} color="#9CA3AF" />
+                              }
+                              <Text style={[
+                                styles.scenarioDropdownLabel,
+                                printScenario === opt.value && styles.scenarioDropdownLabelActive,
+                              ]}>
+                                {opt.label}
+                              </Text>
+                            </View>
+                            <Text style={styles.scenarioDropdownDesc}>{opt.description}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
+
+                    {/* Active scenario description (collapsed view) */}
+                    {!showScenarioDropdown && (
+                      <View style={styles.scenarioActiveInfo}>
+                        <Ionicons name="information-circle-outline" size={14} color="#6B7280" />
+                        <Text style={styles.scenarioActiveDesc}>
+                          {SCENARIO_OPTIONS.find(s => s.value === printScenario)?.description}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+
+                  {/* BLE Library Selection (hidden when scenario auto-selects it) */}
                   <View style={styles.printerSection}>
                     <Text style={styles.sectionLabel}>Bluetooth Library</Text>
                 <View style={styles.paperSizeContainer}>
@@ -3711,6 +3889,92 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontStyle: 'italic',
   },
+  // --- Print Scenario Dropdown ---
+  scenarioDropdownButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginTop: 10,
+  },
+  scenarioDropdownLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+    marginRight: 8,
+  },
+  scenarioDropdownValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937',
+    flex: 1,
+  },
+  scenarioDropdownList: {
+    marginTop: 4,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+  },
+  scenarioDropdownItem: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  scenarioDropdownItemActive: {
+    backgroundColor: '#FFFBEB',
+  },
+  scenarioDropdownItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  scenarioDropdownLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#374151',
+    flex: 1,
+  },
+  scenarioDropdownLabelActive: {
+    color: '#d97706',
+  },
+  scenarioDropdownDesc: {
+    fontSize: 12,
+    color: '#6B7280',
+    lineHeight: 17,
+    paddingLeft: 24,
+  },
+  scenarioActiveInfo: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    marginTop: 8,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  scenarioActiveDesc: {
+    fontSize: 12,
+    color: '#6B7280',
+    flex: 1,
+    lineHeight: 17,
+  },
+
   scanButton: {
     flexDirection: 'row',
     alignItems: 'center',

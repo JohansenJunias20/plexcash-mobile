@@ -1,6 +1,6 @@
 import { Platform, Alert, PermissionsAndroid } from 'react-native';
 import { BleManager, Device } from 'react-native-ble-plx';
-import { IBluetoothPrinterService, BluetoothDevice } from './IBluetoothPrinterService';
+import { IBluetoothPrinterService, BluetoothDevice, PrintOptions, BLEPrintOptions } from './IBluetoothPrinterService';
 
 export interface ReceiptData {
   storeName: string;
@@ -471,8 +471,9 @@ class BluetoothPrinterService_BLE_PLX implements IBluetoothPrinterService {
 
   /**
    * Print a receipt using Bluetooth thermal printer
+   * @param options - BLE print behaviour overrides (scenarios 2–5)
    */
-  async printReceipt(data: ReceiptData): Promise<boolean> {
+  async printReceipt(data: ReceiptData, options?: PrintOptions): Promise<boolean> {
     try {
       if (!this.connectedDevice) {
         console.error('❌ [BT-SERVICE-PLX] No printer connected');
@@ -491,7 +492,7 @@ class BluetoothPrinterService_BLE_PLX implements IBluetoothPrinterService {
       console.log(`📄 [BT-SERVICE-PLX] Generated receipt data (${escPosData.length} characters)`);
 
       // Send data to printer via BLE with timeout protection
-      const printPromise = this.sendDataToPrinter(escPosData);
+      const printPromise = this.sendDataToPrinter(escPosData, options?.ble);
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Print timeout after 30 seconds')), 30000)
       );
@@ -619,8 +620,9 @@ class BluetoothPrinterService_BLE_PLX implements IBluetoothPrinterService {
 
   /**
    * Test print to Bluetooth thermal printer
+   * @param options - BLE print behaviour overrides (scenarios 2–5)
    */
-  async testPrint(): Promise<boolean> {
+  async testPrint(options?: PrintOptions): Promise<boolean> {
     try {
       if (!this.connectedDevice) {
         console.error('❌ [BT-SERVICE] No printer connected');
@@ -650,8 +652,8 @@ class BluetoothPrinterService_BLE_PLX implements IBluetoothPrinterService {
 
       console.log(`📄 [BT-SERVICE] Test print data (${data.length} characters)`);
 
-      // Send with timeout protection
-      const printPromise = this.sendDataToPrinter(data);
+      // Send with timeout protection, passing BLE options for the active scenario
+      const printPromise = this.sendDataToPrinter(data, options?.ble);
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Test print timeout after 30 seconds')), 30000)
       );
@@ -672,26 +674,32 @@ class BluetoothPrinterService_BLE_PLX implements IBluetoothPrinterService {
   }
 
   /**
-   * Send raw data to connected Bluetooth printer
+   * Send raw data to connected Bluetooth printer.
+   *
+   * @param data    ESC/POS string to transmit
+   * @param options BLE behaviour overrides from the active print scenario:
+   *   - forceWriteWithResponse  (Scenario 2) always use ACK writes
+   *   - forceWriteWithoutResponse (Scenario 3) always skip ACK
+   *   - scanAllUUIDs            (Scenario 4) do not skip any UUID
+   *   - skipMTU                 (Scenario 5) do not negotiate MTU
    */
-  private async sendDataToPrinter(data: string): Promise<void> {
+  private async sendDataToPrinter(data: string, options?: BLEPrintOptions): Promise<void> {
     if (!this.connectedDevice) {
       throw new Error('No printer connected');
     }
 
+    const forceWithResponse    = options?.forceWriteWithResponse    ?? false;
+    const forceWithoutResponse = options?.forceWriteWithoutResponse ?? false;
+    const scanAllUUIDs         = options?.scanAllUUIDs              ?? false;
+    const skipMTU              = options?.skipMTU                   ?? false;
+
     try {
       console.log('📤 [BT-SERVICE] Sending data to printer...');
+      console.log(`🔧 [BT-SERVICE] BLE options: forceWithResponse=${forceWithResponse}, forceWithoutResponse=${forceWithoutResponse}, scanAllUUIDs=${scanAllUUIDs}, skipMTU=${skipMTU}`);
 
       // Get services and characteristics
       const services = await this.connectedDevice.services();
       console.log(`🔍 [BT-SERVICE] Found ${services.length} services`);
-
-      // Common printer service UUIDs (in order of priority)
-      const PRINTER_SERVICE_UUIDS = [
-        '000018f0-0000-1000-8000-00805f9b34fb', // Common thermal printer service
-        '0000ff00-0000-1000-8000-00805f9b34fb', // Another common printer service
-        '49535343-fe7d-4ae5-8fa9-9fafd205e455', // HM-10 BLE module (common in cheap printers)
-      ];
 
       // Common printer characteristic UUIDs (in order of priority)
       const PRINTER_CHAR_UUIDS = [
@@ -700,7 +708,7 @@ class BluetoothPrinterService_BLE_PLX implements IBluetoothPrinterService {
         '49535343-8841-43f4-a8d4-ecbe34729bb3', // HM-10 write characteristic
       ];
 
-      // Skip known non-printer characteristics
+      // Skip known non-printer characteristics (only when NOT in scanAllUUIDs mode)
       const SKIP_CHAR_UUIDS = [
         '00002a00-0000-1000-8000-00805f9b34fb', // Device Name (read-only)
         '00002a01-0000-1000-8000-00805f9b34fb', // Appearance
@@ -710,48 +718,54 @@ class BluetoothPrinterService_BLE_PLX implements IBluetoothPrinterService {
 
       let printCharacteristic = null;
 
-      // First, try to find known printer characteristics
-      for (const service of services) {
-        const characteristics = await service.characteristics();
-
-        for (const char of characteristics) {
-          // Check if this is a known printer characteristic
-          if (PRINTER_CHAR_UUIDS.includes(char.uuid.toLowerCase())) {
-            if (char.isWritableWithResponse || char.isWritableWithoutResponse) {
-              console.log(`✅ [BT-SERVICE] Found known printer characteristic: ${char.uuid}`);
-              printCharacteristic = char;
-              break;
-            }
-          }
-        }
-
-        if (printCharacteristic) break;
-      }
-
-      // If no known printer characteristic found, find any writable characteristic
-      // but skip known non-printer ones
-      if (!printCharacteristic) {
-        console.log('⚠️ [BT-SERVICE] No known printer characteristic found, searching for writable characteristics...');
-
+      // Scenario 4 (scanAllUUIDs): scan every writable characteristic without filtering
+      if (scanAllUUIDs) {
+        console.log('🔍 [BT-SERVICE] Scenario 4 — scanning ALL writable characteristics...');
         for (const service of services) {
           const characteristics = await service.characteristics();
-
           for (const char of characteristics) {
-            // Skip known non-printer characteristics
-            if (SKIP_CHAR_UUIDS.includes(char.uuid.toLowerCase())) {
-              console.log(`⏭️ [BT-SERVICE] Skipping non-printer characteristic: ${char.uuid}`);
-              continue;
-            }
-
-            // Check if characteristic is writable
             if (char.isWritableWithResponse || char.isWritableWithoutResponse) {
-              console.log(`🔍 [BT-SERVICE] Found writable characteristic: ${char.uuid}`);
+              console.log(`🔍 [BT-SERVICE] Found writable characteristic (all-scan): ${char.uuid}`);
               printCharacteristic = char;
               break;
             }
           }
-
           if (printCharacteristic) break;
+        }
+      } else {
+        // Default: try known UUIDs first
+        for (const service of services) {
+          const characteristics = await service.characteristics();
+          for (const char of characteristics) {
+            if (PRINTER_CHAR_UUIDS.includes(char.uuid.toLowerCase())) {
+              if (char.isWritableWithResponse || char.isWritableWithoutResponse) {
+                console.log(`✅ [BT-SERVICE] Found known printer characteristic: ${char.uuid}`);
+                printCharacteristic = char;
+                break;
+              }
+            }
+          }
+          if (printCharacteristic) break;
+        }
+
+        // Fallback: any writable char that is not a known non-printer UUID
+        if (!printCharacteristic) {
+          console.log('⚠️ [BT-SERVICE] No known printer characteristic found, searching for writable characteristics...');
+          for (const service of services) {
+            const characteristics = await service.characteristics();
+            for (const char of characteristics) {
+              if (SKIP_CHAR_UUIDS.includes(char.uuid.toLowerCase())) {
+                console.log(`⏭️ [BT-SERVICE] Skipping non-printer characteristic: ${char.uuid}`);
+                continue;
+              }
+              if (char.isWritableWithResponse || char.isWritableWithoutResponse) {
+                console.log(`🔍 [BT-SERVICE] Found writable characteristic: ${char.uuid}`);
+                printCharacteristic = char;
+                break;
+              }
+            }
+            if (printCharacteristic) break;
+          }
         }
       }
 
@@ -761,16 +775,19 @@ class BluetoothPrinterService_BLE_PLX implements IBluetoothPrinterService {
 
       console.log(`✍️ [BT-SERVICE] Writing to characteristic: ${printCharacteristic.uuid}`);
 
-      // Try to request larger MTU for faster transmission
-      try {
-        await this.connectedDevice.requestMTU(512);
-        console.log(`📏 [BT-SERVICE] Requested MTU: 512 bytes`);
-      } catch (mtuError) {
-        console.log(`⚠️ [BT-SERVICE] Could not request MTU, using default`);
+      // Scenario 5 (skipMTU): skip MTU negotiation entirely to avoid crashing older printers
+      if (!skipMTU) {
+        try {
+          await this.connectedDevice.requestMTU(512);
+          console.log(`📏 [BT-SERVICE] Requested MTU: 512 bytes`);
+        } catch (mtuError) {
+          console.log(`⚠️ [BT-SERVICE] Could not request MTU, using default`);
+        }
+      } else {
+        console.log(`📏 [BT-SERVICE] Scenario 5 — skipping MTU negotiation`);
       }
 
       // Use conservative chunk size to avoid BLE MTU issues
-      // Default BLE MTU is 23 bytes, minus 3 bytes overhead = 20 bytes payload
       const chunkSize = 20; // Safe size that works with all BLE devices
       console.log(`📦 [BT-SERVICE] Using chunk size: ${chunkSize} bytes`);
 
@@ -791,13 +808,20 @@ class BluetoothPrinterService_BLE_PLX implements IBluetoothPrinterService {
 
           console.log(`📤 [BT-SERVICE] Sending chunk ${i + 1}/${totalChunks} (${chunk.length} bytes)`);
 
-          if (printCharacteristic.isWritableWithoutResponse) {
-            // Use writeWithoutResponse for faster transmission
+          // Determine write method based on scenario options and characteristic capability
+          const useWithResponse = forceWithResponse
+            ? true  // Scenario 2: always ACK
+            : forceWithoutResponse
+              ? false  // Scenario 3: never ACK
+              : !printCharacteristic.isWritableWithoutResponse; // default: prefer without-response
+
+          if (!useWithResponse) {
+            // Write without response (faster, Scenario 3 or default when supported)
             await printCharacteristic.writeWithoutResponse(base64Chunk);
             // Small delay between chunks to prevent buffer overflow
             await new Promise(resolve => setTimeout(resolve, 10));
           } else {
-            // Use writeWithResponse for reliability
+            // Write with response (reliable, Scenario 2 or fallback)
             await printCharacteristic.writeWithResponse(base64Chunk);
           }
         }

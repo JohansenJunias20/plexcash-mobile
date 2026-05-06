@@ -27,7 +27,8 @@ export { BluetoothPrinterServiceFactory };
 
 // Export types
 export type { BleLibraryType, PrinterLibraryType } from './bluetooth/BluetoothPrinterServiceFactory';
-export type { BluetoothDevice, IBluetoothPrinterService } from './bluetooth/IBluetoothPrinterService';
+export type { BluetoothDevice, IBluetoothPrinterService, PrintScenario, PrintOptions, BLEPrintOptions, ClassicPrintOptions } from './bluetooth/IBluetoothPrinterService';
+
 export type { ReceiptData } from './bluetooth/BluetoothPrinterService_BLE_PLX';
 export type { LANPrinter, ProtocolType, ProtocolTestResult, ProtocolConfirmationCallback } from './bluetooth/LANPrinterService';
 
