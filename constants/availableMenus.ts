@@ -49,6 +49,7 @@ export const AVAILABLE_MENUS: MenuItem[] = [
   
   // ECOMMERCE
   { id: 'Pesanan', label: 'Pesanan', subtitle: 'Ecommerce Orders', icon: 'cart-outline', route: 'Pesanan', category: 'ECOMMERCE' },
+  { id: 'Diskon', label: 'Diskon', subtitle: 'Promo & Harga Coret', icon: 'pricetag-outline', route: 'DiskonScreen', category: 'ECOMMERCE' },
   { id: 'EcommerceChat', label: 'Chat', subtitle: 'Customer Chat', icon: 'chatbubbles-outline', route: 'EcommerceChat', category: 'ECOMMERCE' },
   { id: 'Notifikasi', label: 'Notifikasi', subtitle: 'Notifications', icon: 'notifications-outline', route: 'Notifikasi', category: 'ECOMMERCE' },
   { id: 'Penarikan', label: 'Penarikan', subtitle: 'Withdrawal', icon: 'wallet-outline', route: 'Penarikan', category: 'ECOMMERCE' },

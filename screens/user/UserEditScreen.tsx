@@ -74,6 +74,7 @@ type Permissions = {
     integration: boolean;
     returonline: boolean;
     booking_orders: boolean;
+    diskon: boolean;
     ecommerce_tools: {
       product: boolean;
     };
@@ -141,6 +142,7 @@ const defaultPermissions: Permissions = {
     integration: false,
     returonline: false,
     booking_orders: false,
+    diskon: false,
     ecommerce_tools: { product: false },
   },
   customer: { rakitpc: false },
@@ -639,6 +641,9 @@ export default function UserEditScreen({ route, navigation }: Props): JSX.Elemen
             )}
             {renderCheckbox('Booking Orders', permissions.ecommerce.booking_orders, (v) => 
               setPermissions(p => ({ ...p, ecommerce: { ...p.ecommerce, booking_orders: v } }))
+            )}
+            {renderCheckbox('Diskon & Promo', permissions.ecommerce.diskon, (v) => 
+              setPermissions(p => ({ ...p, ecommerce: { ...p.ecommerce, diskon: v } }))
             )}
             {renderCheckbox('Tools / Produk', permissions.ecommerce.ecommerce_tools.product, (v) => 
               setPermissions(p => ({ ...p, ecommerce: { ...p.ecommerce, ecommerce_tools: { product: v } } }))

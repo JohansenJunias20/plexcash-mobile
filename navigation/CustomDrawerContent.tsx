@@ -381,6 +381,12 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ navigation, s
       {/* ECOMMERCE Section */}
       <SectionHeader title="ECOMMERCE" />
       <DrawerItem
+        label="Diskon & Promo"
+        icon="pricetag-outline"
+        onPress={() => navigation.navigate('DiskonScreen')}
+        active={currentRoute === 'DiskonScreen'}
+      />
+      <DrawerItem
         label="Pesanan"
         icon="list"
         onPress={() => navigation.navigate('Pesanan')}

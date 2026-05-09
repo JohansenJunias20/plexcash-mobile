@@ -324,8 +324,8 @@ class ApiService {
 
       // Calculate token expiry timestamps
       const now = Date.now();
-      const tokenExpiry = authData.expiresIn ? now + (authData.expiresIn * 1000) : now + (3600 * 1000); // Default 1 hour
-      const refreshTokenExpiry = authData.refreshExpiresIn ? now + (authData.refreshExpiresIn * 1000) : now + (90 * 24 * 60 * 60 * 1000); // Default 90 days
+      const tokenExpiry = authData.expiresIn ? now + (authData.expiresIn * 1000) : now + (10 * 365 * 24 * 3600 * 1000); // Default 10 years for permanent auth
+      const refreshTokenExpiry = authData.refreshExpiresIn ? now + (authData.refreshExpiresIn * 1000) : now + (10 * 365 * 24 * 3600 * 1000); // Default 10 years
 
       // Store in AsyncStorage (for device auth system)
       await AsyncStorage.setItem('authToken', token);

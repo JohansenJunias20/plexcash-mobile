@@ -677,52 +677,31 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
       // Strategy: Search both masterbarang and bundling, then group bundling by masterbarang
 
       // PART 1: Search masterbarang (existing logic)
-      const qsSku = new URLSearchParams();
-      qsSku.set('start', '0');
-      qsSku.set('end', '20');
-      qsSku.set('sku', query);
-      qsSku.set('nama', '');
-      qsSku.set('merk', '');
-      qsSku.set('kategori', '');
-
-      const qsNama = new URLSearchParams();
-      qsNama.set('start', '0');
-      qsNama.set('end', '20');
-      qsNama.set('sku', '');
-      qsNama.set('nama', query);
-      qsNama.set('merk', '');
-      qsNama.set('kategori', '');
+      // Use the proper /get/masterbarang/search endpoint with OR logic
+      const qs = new URLSearchParams({
+        nama: query,
+        sku: query,
+        merk: query,
+        kategori: query,
+        start: '0',
+        end: '50', // Increase limit to capture all variants
+        jumlah_online: '2147483647',
+        search_mode: 'or'
+      });
 
       console.log('🔍 [POS] Searching products and bundling...');
 
-      // Execute masterbarang searches in parallel
-      const [responseSku, responseNama] = await Promise.all([
-        fetch(`${API_BASE_URL}/get/masterbarang/search?${qsSku.toString()}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        }),
-        fetch(`${API_BASE_URL}/get/masterbarang/search?${qsNama.toString()}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        })
-      ]);
+      const response = await fetch(`${API_BASE_URL}/get/masterbarang/search?${qs.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
 
-      const dataSku = await responseSku.json();
-      const dataNama = await responseNama.json();
+      const data = await response.json();
 
-      // Merge masterbarang results and remove duplicates by ID
       const barangProducts: Product[] = [];
       const seenIds = new Set<number>();
 
-      if (dataSku.status && dataSku.data) {
-        dataSku.data.forEach((product: Product) => {
-          if (!seenIds.has(product.id)) {
-            barangProducts.push({ ...product, is_bundling: false, bundling_variants: [] });
-            seenIds.add(product.id);
-          }
-        });
-      }
-
-      if (dataNama.status && dataNama.data) {
-        dataNama.data.forEach((product: Product) => {
+      if (data.status && data.data) {
+        data.data.forEach((product: Product) => {
           if (!seenIds.has(product.id)) {
             barangProducts.push({ ...product, is_bundling: false, bundling_variants: [] });
             seenIds.add(product.id);
@@ -734,7 +713,7 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
       const bundlingParams = new URLSearchParams();
       bundlingParams.set('search', query);
       bundlingParams.set('page', '1');
-      bundlingParams.set('pageSize', '20');
+      bundlingParams.set('pageSize', '50');
 
       const bundlingResponse = await fetch(`${API_BASE_URL}/get/bundling?${bundlingParams.toString()}`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -963,9 +942,9 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
     }
 
     // Clear search
-    setSearchQuery('');
-    setProducts([]);
-    setShowProductList(false);
+    // setSearchQuery('');
+    // setProducts([]);
+    // setShowProductList(false);
     searchInputRef.current?.focus();
   };
 

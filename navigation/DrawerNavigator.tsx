@@ -62,6 +62,7 @@ import MutasiAkunScreen from '../screens/transaksi/MutasiAkunScreen';
 import PesanBarangScreen from '../screens/transaksi/PesanBarangScreen';
 
 // ECOMMERCE Section
+import DiskonScreen from '../screens/ecommerce/Diskon/DiskonScreen';
 import EcommerceChatScreen from '../screens/ecommerce/EcommerceChatScreen';
 import EcommerceChatDetailScreen from '../screens/ecommerce/EcommerceChatDetailScreen';
 import NotifikasiScreen from '../screens/ecommerce/NotifikasiScreen';
@@ -297,6 +298,7 @@ const DrawerNavigatorContent = () => {
       <Drawer.Screen name="PesanBarang" component={PesanBarangScreen} />
 
       {/* ECOMMERCE Section - Using Stack Navigators */}
+      <Drawer.Screen name="DiskonScreen" component={DiskonScreen} />
       <Drawer.Screen name="Pesanan" component={OrdersStackScreen} />
       <Drawer.Screen name="EcommerceChat" component={EcommerceChatStackScreen} />
       <Drawer.Screen name="Notifikasi" component={NotifikasiScreen} />

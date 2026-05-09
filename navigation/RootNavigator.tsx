@@ -18,6 +18,7 @@ import OrderDetailScreen from '../screens/orders/OrderDetailScreen';
 import LabelPreviewScreen from '../screens/orders/LabelPreviewScreen';
 import ScanOutScreen from '../screens/scanout/ScanOutScreen';
 import POSKasirScreen from '../screens/pos/POSKasirScreen';
+import DiskonScreen from '../screens/ecommerce/Diskon/DiskonScreen';
 import UserListScreen from '../screens/user/UserListScreen';
 import UserEditScreen from '../screens/user/UserEditScreen';
 import BundlingListScreen from '../screens/bundling/BundlingListScreen';
@@ -62,6 +63,7 @@ export type AppStackParamList = {
   PembelianRincian: { id: number };
   PerangkatList: undefined;
   PerangkatConfig: { client_id: string; desktop_name: string };
+  DiskonScreen: undefined;
 };
 
 const AuthStack = createNativeStackNavigator();
@@ -147,6 +149,7 @@ export default function RootNavigator() {
       <AppStack.Screen name="LabelPreview" component={LabelPreviewScreen} options={{ title: 'Label Preview' }} />
       <AppStack.Screen name="ScanOut" component={ScanOutScreen} options={{ title: 'Scan Out' }} />
       <AppStack.Screen name="POSKasir" component={POSKasirScreen} options={{ headerShown: false }} />
+      <AppStack.Screen name="DiskonScreen" component={DiskonScreen} options={{ title: 'Diskon' }} />
       <AppStack.Screen name="BundlingList" component={BundlingListScreen} options={{ title: 'Bundling' }} />
       <AppStack.Screen name="BundlingEdit" component={BundlingEditScreen} options={{ title: 'Bundling' }} />
       <AppStack.Screen name="StokOpname" component={StokOpnameScreen} options={{ headerShown: false }} />
