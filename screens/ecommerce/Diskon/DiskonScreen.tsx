@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, useWindowDimensions, ActivityIndicator, FlatList, RefreshControl, Alert, Modal, Platform, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, useWindowDimensions, ActivityIndicator, FlatList, RefreshControl, Alert, Modal, Platform, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { TabView, SceneMap, TabBar } from 'react-native-tab-view';
+import { TabView, TabBar } from 'react-native-tab-view';
 import { Ionicons } from '@expo/vector-icons';
 import ApiService from '../../../services/api';
 import moment from 'moment';
@@ -30,15 +30,22 @@ export default function DiskonScreen({ navigation }: any) {
   const [loadingAnalisis, setLoadingAnalisis] = useState(false);
 
   const [isAddModalVisible, setAddModalVisible] = useState(false);
-  const [preselectedItem, setPreselectedItem] = useState<any>(null);
+  const [preselectedItems, setPreselectedItems] = useState<any[]>([]);
 
-  const openAddModalWithItem = (item: any) => {
-    setPreselectedItem(item);
+  // Analisis multi-select
+  const [analisisSelected, setAnalisisSelected] = useState<Set<number>>(new Set());
+  const [analisisSearch, setAnalisisSearch] = useState('');
+  const [analisisFilterEtalase, setAnalisisFilterEtalase] = useState<'all' | 'ada' | 'tidak'>('all');
+  const [analisisFilterHpp, setAnalisisFilterHpp] = useState<'all' | 'ada' | 'tidak'>('all');
+  const [analisisFilterBound, setAnalisisFilterBound] = useState<'all' | 'ada' | 'tidak'>('all');
+
+  const openAddModalWithItems = (items: any[]) => {
+    setPreselectedItems(items);
     setAddModalVisible(true);
   };
 
   const openAddModal = () => {
-    setPreselectedItem(null);
+    setPreselectedItems([]);
     setAddModalVisible(true);
   };
 
@@ -160,7 +167,7 @@ export default function DiskonScreen({ navigation }: any) {
               </View>
               <Text style={styles.cardDetail}>Mulai: {moment(item.start_time).format('DD MMM YYYY HH:mm')}</Text>
               <Text style={styles.cardDetail}>Akhir: {moment(item.end_time).format('DD MMM YYYY HH:mm')}</Text>
-              <Text style={styles.cardDetail}>Auto Renew: {item.is_renewed ? 'Ya' : 'Tidak'}</Text>
+              <Text style={styles.cardDetail}>Auto Renew: {item.auto_renew ? 'Ya' : 'Tidak'}</Text>
               
               <View style={styles.cardActions}>
                 <TouchableOpacity style={styles.actionBtn} onPress={() => handleDeletePromo(item.id)}>
@@ -229,51 +236,202 @@ export default function DiskonScreen({ navigation }: any) {
     </View>
   );
 
-  const renderAnalisis = () => (
-    <View style={styles.tabContent}>
-      {loadingAnalisis ? <ActivityIndicator size="large" color="#f59e0b" style={styles.loader} /> : (
-        <FlatList
-          data={analisisItems}
-          keyExtractor={(item: any) => item.id.toString()}
-          refreshControl={<RefreshControl refreshing={loadingAnalisis} onRefresh={fetchAnalisis} />}
-          renderItem={({ item }) => (
-            <TouchableOpacity style={styles.card} onPress={() => openAddModalWithItem(item)}>
-              <Text style={styles.cardTitle}>{item.nama}</Text>
-              <Text style={styles.cardDetail}>SKU: {item.sku} | Merk: {item.merk}</Text>
-              <View style={styles.rowBetween}>
-                <Text style={styles.cardDetail}>HPP: Rp {Number(item.hpp).toLocaleString('id-ID')}</Text>
-                <Text style={styles.cardDetail}>Harga Jual: Rp {Number(item.harga_jual_2).toLocaleString('id-ID')}</Text>
-              </View>
-              <Text style={[styles.cardDetail, {marginTop: 4, fontWeight: 'bold'}]}>
-                Shopee Bound: {item.jumlah_shopee_bound}
+  const renderAnalisis = () => {
+    // Filter
+    let filtered = [...analisisItems] as any[];
+    if (analisisSearch) {
+      const q = analisisSearch.toLowerCase();
+      filtered = filtered.filter((i: any) =>
+        (i.nama && i.nama.toLowerCase().includes(q)) ||
+        (i.sku && i.sku.toLowerCase().includes(q)) ||
+        (i.merk && i.merk.toLowerCase().includes(q))
+      );
+    }
+    if (analisisFilterHpp === 'ada') filtered = filtered.filter((i: any) => i.hpp > 0);
+    if (analisisFilterHpp === 'tidak') filtered = filtered.filter((i: any) => !(i.hpp > 0));
+    if (analisisFilterBound === 'ada') filtered = filtered.filter((i: any) => i.jumlah_shopee_bound > 0);
+    if (analisisFilterBound === 'tidak') filtered = filtered.filter((i: any) => !(i.jumlah_shopee_bound > 0));
+    if (analisisFilterEtalase === 'ada') filtered = filtered.filter((i: any) => i.jumlah_etalase_harga_coret > 0);
+    if (analisisFilterEtalase === 'tidak') filtered = filtered.filter((i: any) => !(i.jumlah_etalase_harga_coret > 0));
+
+    const allIds = filtered.map((i: any) => i.id);
+    const allSelected = allIds.length > 0 && allIds.every((id: number) => analisisSelected.has(id));
+    const selectedCount = analisisSelected.size;
+
+    const toggleOne = (id: number) => {
+      setAnalisisSelected(prev => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id); else next.add(id);
+        return next;
+      });
+    };
+
+    const selectAll = () => setAnalisisSelected(new Set(allIds));
+    const clearAll = () => setAnalisisSelected(new Set());
+
+    const buildPromoItems = (ids: Set<number>) =>
+      (analisisItems as any[])
+        .filter((i: any) => ids.has(i.id))
+        .map((i: any) => ({
+          id_masterbarang: i.id,
+          nama: i.nama,
+          sku: i.sku,
+          merk: i.merk,
+          hpp: i.hpp,
+          harga_jual_2: i.harga_jual_2,
+          harga_promo: '',
+          persentase_promo: '',
+          purchase_limit: '0',
+          included_id_onlines: [],
+          showMappings: false,
+        }));
+
+    return (
+      <View style={{ flex: 1 }}>
+        {/* Search bar */}
+        <View style={[styles.searchBarRow]}>
+          <TextInput
+            style={styles.analisisSearchInput}
+            placeholder="Cari nama/SKU/merk..."
+            value={analisisSearch}
+            onChangeText={setAnalisisSearch}
+          />
+          <TouchableOpacity style={styles.refreshBtn} onPress={fetchAnalisis}>
+            <Ionicons name="refresh" size={18} color="#6b7280" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Filter badges */}
+        <View style={styles.filterRow}>
+          <Text style={styles.filterLabel}>Harga Coret:</Text>
+          {(['all', 'ada', 'tidak'] as const).map(v => (
+            <TouchableOpacity
+              key={v}
+              style={[styles.filterChip, analisisFilterEtalase === v && styles.filterChipActive]}
+              onPress={() => setAnalisisFilterEtalase(v)}
+            >
+              <Text style={[styles.filterChipText, analisisFilterEtalase === v && styles.filterChipTextActive]}>
+                {v === 'all' ? 'Semua' : v === 'ada' ? '✅ Ada' : '❌ Belum Ada'}
               </Text>
-              {item.etalase_harga_coret && item.etalase_harga_coret.length > 0 && (
-                <View style={styles.etalaseContainer}>
-                  <Text style={styles.etalaseTitle}>Harga di Shopee:</Text>
-                  {item.etalase_harga_coret.map((et: any, idx: number) => (
-                    <Text key={idx} style={styles.etalaseText}>
-                      - {et.shop_name}: Rp {Number(et.harga_promo).toLocaleString('id-ID')} ({et.diskon_pct}%)
-                    </Text>
-                  ))}
-                </View>
-              )}
-              <View style={{ marginTop: 8, alignSelf: 'flex-end' }}>
-                <Text style={{ color: '#f59e0b', fontWeight: 'bold', fontSize: 13 }}>+ Buat Promo</Text>
-              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Select-all bar */}
+        <View style={styles.selectAllBar}>
+          <TouchableOpacity onPress={allSelected ? clearAll : selectAll} style={styles.selectAllBtn}>
+            <Ionicons name={allSelected ? 'checkbox' : 'square-outline'} size={20} color="#f59e0b" />
+            <Text style={styles.selectAllText}>
+              {allSelected ? 'Batal Semua' : `Pilih Semua (${filtered.length})`}
+            </Text>
+          </TouchableOpacity>
+          {analisisFilterEtalase === 'tidak' && filtered.length > 0 && (
+            <TouchableOpacity
+              style={styles.selectAllQuickBtn}
+              onPress={() => setAnalisisSelected(new Set(allIds))}
+            >
+              <Text style={styles.selectAllQuickText}>Pilih Semua Belum Promo</Text>
             </TouchableOpacity>
           )}
-          ListEmptyComponent={<Text style={styles.emptyText}>Tidak ada data analisis.</Text>}
-        />
-      )}
-    </View>
-  );
+        </View>
 
-  const renderScene = SceneMap({
-    lokal: renderLokal,
-    aktif: renderAktif,
-    riwayat: renderRiwayat,
-    analisis: renderAnalisis,
-  });
+        {loadingAnalisis
+          ? <ActivityIndicator size="large" color="#f59e0b" style={styles.loader} />
+          : (
+          <FlatList
+            data={filtered}
+            keyExtractor={(item: any) => item.id.toString()}
+            refreshControl={<RefreshControl refreshing={loadingAnalisis} onRefresh={fetchAnalisis} />}
+            renderItem={({ item }: any) => {
+              const isChecked = analisisSelected.has(item.id);
+              const hasEtalase = item.jumlah_etalase_harga_coret > 0;
+              return (
+                <TouchableOpacity
+                  style={[styles.card, isChecked && styles.cardSelected]}
+                  onPress={() => toggleOne(item.id)}
+                  onLongPress={() => {
+                    openAddModalWithItems(buildPromoItems(new Set([item.id])));
+                  }}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+                    <Ionicons
+                      name={isChecked ? 'checkbox' : 'square-outline'}
+                      size={22}
+                      color={isChecked ? '#f59e0b' : '#d1d5db'}
+                      style={{ marginRight: 10, marginTop: 2 }}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Text style={[styles.cardTitle, { flex: 1 }]}>{item.nama}</Text>
+                        <View style={[styles.etalaseBadge, hasEtalase ? styles.etalaseBadgeActive : styles.etalaseBadgeNone]}>
+                          <Text style={[styles.etalaseBadgeText, hasEtalase ? { color: '#15803d' } : { color: '#9ca3af' }]}>
+                            {hasEtalase ? `✓ ${item.jumlah_etalase_harga_coret} Promo` : '— Belum Promo'}
+                          </Text>
+                        </View>
+                      </View>
+                      <Text style={styles.cardDetail}>SKU: {item.sku}{item.merk ? ` · ${item.merk}` : ''}</Text>
+                      <View style={styles.rowBetween}>
+                        <Text style={styles.cardDetail}>HPP: Rp {Number(item.hpp).toLocaleString('id-ID')}</Text>
+                        <Text style={styles.cardDetail}>HJ2: Rp {Number(item.harga_jual_2).toLocaleString('id-ID')}</Text>
+                      </View>
+                      <Text style={[styles.cardDetail, { fontWeight: 'bold', marginTop: 2 }]}>
+                        Shopee Bound: {item.jumlah_shopee_bound}
+                      </Text>
+                      {hasEtalase && (
+                        <View style={styles.etalaseContainer}>
+                          <Text style={styles.etalaseTitle}>Harga Coret Aktif:</Text>
+                          {item.etalase_harga_coret.map((et: any, idx: number) => (
+                            <Text key={idx} style={styles.etalaseText}>
+                              • {et.shop_name}: Rp {Number(et.harga_promo).toLocaleString('id-ID')}
+                              {et.diskon_pct ? ` (-${et.diskon_pct}%)` : ''}
+                            </Text>
+                          ))}
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              );
+            }}
+            ListEmptyComponent={<Text style={styles.emptyText}>Tidak ada data analisis.</Text>}
+            contentContainerStyle={{ paddingBottom: selectedCount > 0 ? 100 : 16 }}
+          />
+        )}
+
+        {/* Floating action bar when items selected */}
+        {selectedCount > 0 && (
+          <View style={styles.selectionActionBar}>
+            <Text style={styles.selectionCount}>{selectedCount} barang dipilih</Text>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <TouchableOpacity style={styles.selectionClearBtn} onPress={clearAll}>
+                <Text style={styles.selectionClearText}>Batal</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.selectionPromoBtn}
+                onPress={() => {
+                  openAddModalWithItems(buildPromoItems(analisisSelected));
+                  clearAll();
+                }}
+              >
+                <Ionicons name="pricetag" size={16} color="#fff" />
+                <Text style={styles.selectionPromoText}>Buat Promo</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  const renderScene = ({ route }: any) => {
+    switch (route.key) {
+      case 'lokal': return renderLokal();
+      case 'aktif': return renderAktif();
+      case 'riwayat': return renderRiwayat();
+      case 'analisis': return renderAnalisis();
+      default: return null;
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -303,13 +461,15 @@ export default function DiskonScreen({ navigation }: any) {
         )}
       />
 
-      {/* FAB Tambah Promo */}
-      <TouchableOpacity 
-        style={styles.fab}
-        onPress={openAddModal}
-      >
-        <Ionicons name="add" size={24} color="white" />
-      </TouchableOpacity>
+      {/* FAB Tambah Promo - hanya di tab Promo Lokal */}
+      {index === 0 && (
+        <TouchableOpacity 
+          style={styles.fab}
+          onPress={openAddModal}
+        >
+          <Ionicons name="add" size={24} color="white" />
+        </TouchableOpacity>
+      )}
 
       {/* Modal Add Promo */}
       <Modal
@@ -319,7 +479,7 @@ export default function DiskonScreen({ navigation }: any) {
         onRequestClose={() => setAddModalVisible(false)}
       >
         <DiskonAddModal 
-          initialItem={preselectedItem}
+          initialItems={preselectedItems}
           onClose={() => setAddModalVisible(false)} 
           onSuccess={() => {
             setAddModalVisible(false);
@@ -384,4 +544,30 @@ const styles = StyleSheet.create({
   etalaseContainer: { marginTop: 8, backgroundColor: '#f8fafc', padding: 8, borderRadius: 6 },
   etalaseTitle: { fontSize: 12, fontWeight: 'bold', color: '#64748b', marginBottom: 4 },
   etalaseText: { fontSize: 12, color: '#334155', marginBottom: 2 },
+  // Analisis
+  cardSelected: { borderWidth: 2, borderColor: '#f59e0b', backgroundColor: '#fffbeb' },
+  etalaseBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10, marginLeft: 6 },
+  etalaseBadgeActive: { backgroundColor: '#dcfce7' },
+  etalaseBadgeNone: { backgroundColor: '#f3f4f6' },
+  etalaseBadgeText: { fontSize: 10, fontWeight: 'bold' },
+  searchBarRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 10, paddingBottom: 4, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
+  analisisSearchInput: { flex: 1, borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, padding: 8, fontSize: 13, backgroundColor: '#f9fafb', marginRight: 8 },
+  refreshBtn: { padding: 8 },
+  filterRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#fff', gap: 6, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
+  filterLabel: { fontSize: 12, color: '#6b7280', fontWeight: '600', marginRight: 4 },
+  filterChip: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb' },
+  filterChipActive: { backgroundColor: '#fef3c7', borderColor: '#f59e0b' },
+  filterChipText: { fontSize: 11, color: '#6b7280', fontWeight: '600' },
+  filterChipTextActive: { color: '#d97706' },
+  selectAllBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#f9fafb', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
+  selectAllBtn: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  selectAllText: { fontSize: 12, color: '#374151', fontWeight: '600' },
+  selectAllQuickBtn: { backgroundColor: '#fff3cd', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: '#f59e0b' },
+  selectAllQuickText: { fontSize: 11, color: '#d97706', fontWeight: 'bold' },
+  selectionActionBar: { position: 'absolute', bottom: 24, left: 12, right: 12, backgroundColor: '#1e3a8a', borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 8 },
+  selectionCount: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
+  selectionClearBtn: { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
+  selectionClearText: { color: '#fff', fontWeight: '600', fontSize: 13 },
+  selectionPromoBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#f59e0b', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8 },
+  selectionPromoText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
 });

@@ -1138,7 +1138,7 @@ export default function PembelianTambahScreen() {
                 <Text style={styles.loadingText}>Memuat pre-orders...</Text>
               </View>
             ) : (
-              <ScrollView style={styles.modalContent}>
+              <View style={styles.modalContent}>
                 {preOrders
                   .filter(po => po.id_supplier === idSupplier)
                   .map((preOrder) => {
@@ -1175,7 +1175,7 @@ export default function PembelianTambahScreen() {
                     <Text style={styles.emptyText}>Tidak ada pre-order untuk supplier ini</Text>
                   </View>
                 )}
-              </ScrollView>
+              </View>
             )}
 
             <View style={styles.modalFooter}>

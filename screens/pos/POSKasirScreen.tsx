@@ -1088,6 +1088,7 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
   const processPayment = async () => {
     const { total } = calculateTotal();
     const terbayarAmount = parseFloat(terbayar || '0');
+    const bayarAmount = parseFloat(bayar || '0'); // Actual cash received from customer
     const sisa = total - terbayarAmount;
 
     // Employee selection is now optional - no validation required
@@ -1207,7 +1208,7 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
               {
                 text: 'Yes, Print',
                 onPress: async () => {
-                  await printReceipt(data.id, terbayarAmount);
+                  await printReceipt(data.id, bayarAmount);
                   // After printing, ask for new sale
                   Alert.alert('Print Complete', 'Start a new sale?', [
                     { text: 'Yes', onPress: () => resetTransaction() },
@@ -1232,7 +1233,7 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
             {
               text: 'Print Receipt',
               onPress: () => {
-                printReceipt(data.id, terbayarAmount);
+                printReceipt(data.id, bayarAmount);
               },
             },
             {
@@ -1352,8 +1353,8 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
         ppn: isPkpActive ? ppn : undefined,
         ppnRate: isPkpActive ? ppnRate : undefined,
         total,
-        payment,
-        change: payment - total,
+        payment, // Actual cash received from customer (bayar)
+        change: Math.max(payment - total, 0), // Kembalian = bayar - total (0 if no change)
         paperSize,
         language: receiptLanguage,
       };

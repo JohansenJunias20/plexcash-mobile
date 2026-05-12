@@ -61,6 +61,7 @@ export const AVAILABLE_MENUS: MenuItem[] = [
   { id: 'ProsesOtomatis', label: 'Proses Otomatis', subtitle: 'Automation', icon: 'cog-outline', route: 'ProsesOtomatis', category: 'ECOMMERCE' },
   { id: 'ScanOut', label: 'Scan Out', subtitle: 'Scan Shipping Labels', icon: 'scan-outline', route: 'ScanOut', category: 'ECOMMERCE' },
   { id: 'ScanIn', label: 'Scan In', subtitle: 'Scan Returned Packages', icon: 'scan-outline', route: 'ScanIn', category: 'ECOMMERCE' },
+  { id: 'ScanSearch', label: 'Cari by Scan', subtitle: 'Search by Scan', icon: 'search-circle-outline', route: 'ScanSearch', category: 'ECOMMERCE' },
 
   // LAPORAN
   { id: 'Neraca', label: 'Neraca', subtitle: 'Balance Sheet', icon: 'stats-chart-outline', route: 'Neraca', category: 'LAPORAN' },

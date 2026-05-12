@@ -205,28 +205,15 @@ class BluetoothPrinterService_Classic implements IBluetoothPrinterService {
         console.log('⚠️ [BT-SERVICE-CLASSIC] No existing discovery to cancel');
       }
 
-      // Start discovery with error handling
+      // Start discovery - in v1.73.x startDiscovery() blocks until complete
+      // and returns the discovered devices directly (no getDiscoveredDevices()).
       console.log('📡 [BT-SERVICE-CLASSIC] Initiating Bluetooth discovery...');
-      const discovering = await RNBluetoothClassic.startDiscovery();
-      if (!discovering) {
-        throw new Error('Failed to start Bluetooth discovery. Please try again.');
-      }
+      const discoveredDevices = await RNBluetoothClassic.startDiscovery();
 
-      console.log('⏳ [BT-SERVICE-CLASSIC] Scanning...');
-      // Wait for scan duration
-      await new Promise(resolve => setTimeout(resolve, durationMs));
-
-      // Stop discovery
-      console.log('🛑 [BT-SERVICE-CLASSIC] Stopping discovery...');
-      await RNBluetoothClassic.cancelDiscovery();
-
-      // Get discovered devices
-      const devices = await RNBluetoothClassic.getDiscoveredDevices();
-
-      console.log(`🔍 [BT-SERVICE-CLASSIC] Discovery complete. Found ${devices?.length || 0} devices`);
+      console.log(`🔍 [BT-SERVICE-CLASSIC] Discovery complete. Found ${discoveredDevices?.length || 0} devices`);
 
       // Convert to our BluetoothDevice format
-      const bluetoothDevices: BluetoothDevice[] = (devices || [])
+      const bluetoothDevices: BluetoothDevice[] = (discoveredDevices || [])
         .filter(device => device.name && device.name.trim() !== '')
         .map(device => ({
           id: device.address,
@@ -271,17 +258,12 @@ class BluetoothPrinterService_Classic implements IBluetoothPrinterService {
       }
 
       // Get list of bonded devices
+      // Note: getUnpairedDevices() was removed in v1.73.x — use getBondedDevices() only.
       const bondedDevices = await RNBluetoothClassic.getBondedDevices();
       let device = bondedDevices.find(d => d.address === address);
 
-      // If not bonded, get from unpaired devices
       if (!device) {
-        const unpairedDevices = await RNBluetoothClassic.getUnpairedDevices();
-        device = unpairedDevices.find(d => d.address === address);
-      }
-
-      if (!device) {
-        throw new Error(`Device ${address} not found`);
+        throw new Error(`Device ${address} not found in bonded devices list. Please pair the printer first in Android Bluetooth Settings.`);
       }
 
       // Connect to device
@@ -521,11 +503,14 @@ class BluetoothPrinterService_Classic implements IBluetoothPrinterService {
   }
 
   private formatCurrency(amount: number): string {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
+    // NOTE: Do NOT use style:'currency' - it produces locale-specific Unicode
+    // space characters (e.g. U+202F narrow no-break space) that thermal printers
+    // misinterpret as literal 'a', resulting in "Rpa100.000" output.
+    const formatted = new Intl.NumberFormat('id-ID', {
       minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
     }).format(amount);
+    return `Rp ${formatted}`;
   }
 
   private formatLine(label: string, value: string, maxWidth: number): string {

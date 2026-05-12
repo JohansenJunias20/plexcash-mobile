@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal, ActivityIndicator, Alert, TextInput } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
@@ -20,6 +20,7 @@ const MainScreen = (): React.JSX.Element => {
   const [loadingDatabase, setLoadingDatabase] = useState(true);
   const [showDatabasePicker, setShowDatabasePicker] = useState(false);
   const [switchingDatabase, setSwitchingDatabase] = useState(false);
+  const [dbSearch, setDbSearch] = useState('');
   const navigation = useNavigation<any>();
   const { isDeveloperMode, toggleDeveloperMode } = useDeveloperMode();
 
@@ -29,7 +30,8 @@ const MainScreen = (): React.JSX.Element => {
   const [availableMenus, setAvailableMenus] = useState<MenuItem[]>([]);
   const [selectedMenuIds, setSelectedMenuIds] = useState<Set<string>>(new Set());
 
-  const isAdmin = (user as any)?.email === 'johansen.junias17@gmail.com';
+  const ADMIN_EMAILS = ['johansen.junias17@gmail.com', 'josoft.josoft@gmail.com'];
+  const isAdmin = ADMIN_EMAILS.includes((user as any)?.email);
 
   const handleOpenSettings = () => setShowSettings(true);
   const handleCloseSettings = () => setShowSettings(false);
@@ -350,15 +352,34 @@ const MainScreen = (): React.JSX.Element => {
           visible={showDatabasePicker}
           transparent={true}
           animationType="slide"
-          onRequestClose={() => setShowDatabasePicker(false)}
+          onRequestClose={() => { setShowDatabasePicker(false); setDbSearch(''); }}
         >
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>Switch Database</Text>
-                <TouchableOpacity onPress={() => setShowDatabasePicker(false)}>
+                <TouchableOpacity onPress={() => { setShowDatabasePicker(false); setDbSearch(''); }}>
                   <Ionicons name="close" size={24} color="#374151" />
                 </TouchableOpacity>
+              </View>
+
+              {/* Search Bar */}
+              <View style={styles.dbSearchContainer}>
+                <Ionicons name="search" size={18} color="#9CA3AF" style={styles.dbSearchIcon} />
+                <TextInput
+                  style={styles.dbSearchInput}
+                  placeholder="Cari database..."
+                  placeholderTextColor="#9CA3AF"
+                  value={dbSearch}
+                  onChangeText={setDbSearch}
+                  autoCorrect={false}
+                  autoCapitalize="none"
+                />
+                {dbSearch.length > 0 && (
+                  <TouchableOpacity onPress={() => setDbSearch('')}>
+                    <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+                  </TouchableOpacity>
+                )}
               </View>
 
               {switchingDatabase ? (
@@ -368,7 +389,9 @@ const MainScreen = (): React.JSX.Element => {
                 </View>
               ) : (
                 <ScrollView style={styles.databaseList}>
-                  {databases.map((db) => (
+                  {databases
+                    .filter(db => db.toLowerCase().includes(dbSearch.toLowerCase()))
+                    .map((db) => (
                     <TouchableOpacity
                       key={db}
                       style={[
@@ -395,6 +418,12 @@ const MainScreen = (): React.JSX.Element => {
                       )}
                     </TouchableOpacity>
                   ))}
+                  {databases.filter(db => db.toLowerCase().includes(dbSearch.toLowerCase())).length === 0 && (
+                    <View style={styles.dbSearchEmpty}>
+                      <Ionicons name="search-outline" size={32} color="#D1D5DB" />
+                      <Text style={styles.dbSearchEmptyText}>Tidak ada database "{dbSearch}"</Text>
+                    </View>
+                  )}
                 </ScrollView>
               )}
             </View>
@@ -613,6 +642,11 @@ const styles = StyleSheet.create({
   loadingContainer: { padding: 40, alignItems: 'center' },
   loadingText: { marginTop: 15, fontSize: 16, color: '#6B7280' },
   databaseList: { maxHeight: 400 },
+  dbSearchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F3F4F6', borderRadius: 10, marginHorizontal: 16, marginVertical: 12, paddingHorizontal: 12, paddingVertical: 8 },
+  dbSearchIcon: { marginRight: 8 },
+  dbSearchInput: { flex: 1, fontSize: 15, color: '#111827', paddingVertical: 0 },
+  dbSearchEmpty: { alignItems: 'center', paddingVertical: 40, gap: 10 },
+  dbSearchEmptyText: { fontSize: 14, color: '#9CA3AF', textAlign: 'center' },
   databaseItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
   databaseItemActive: { backgroundColor: '#FEF3C7' },
   databaseItemLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },

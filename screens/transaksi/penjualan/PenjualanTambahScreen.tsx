@@ -9,7 +9,6 @@ import {
   Alert,
   ActivityIndicator,
   Platform,
-  FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -1227,12 +1226,9 @@ export default function PenjualanTambahScreen() {
               <Text style={styles.emptyStateText}>Belum ada barang</Text>
             </View>
           ) : (
-            <FlatList
-              data={itemDetails}
-              scrollEnabled={false}
-              keyExtractor={(item, index) => index.toString()}
-              renderItem={({ item, index }) => (
-                <View style={styles.itemCard}>
+            <View>
+              {itemDetails.map((item, index) => (
+                <View key={index} style={styles.itemCard}>
                   <View style={styles.itemHeader}>
                     <Text style={styles.itemName}>{item.nama}</Text>
                     <TouchableOpacity onPress={() => handleDeleteItem(index)}>
@@ -1297,8 +1293,8 @@ export default function PenjualanTambahScreen() {
                     </Text>
                   </View>
                 </View>
-              )}
-            />
+              ))}
+            </View>
           )}
         </View>
 

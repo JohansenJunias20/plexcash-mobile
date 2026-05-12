@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Switch, Alert, ActivityIndicator, Modal, FlatList, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Switch, Alert, ActivityIndicator, Modal, FlatList, KeyboardAvoidingView, Platform, StatusBar } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import ApiService from '../../../services/api';
 import moment from 'moment';
@@ -8,13 +9,13 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 interface DiskonAddModalProps {
   onClose: () => void;
   onSuccess: () => void;
-  initialItem?: any;
+  initialItems?: any[];
 }
 
-export default function DiskonAddModal({ onClose, onSuccess, initialItem }: DiskonAddModalProps) {
+export default function DiskonAddModal({ onClose, onSuccess, initialItems }: DiskonAddModalProps) {
   const [namaPromo, setNamaPromo] = useState('');
   const [startTime, setStartTime] = useState(new Date());
-  const [endTime, setEndTime] = useState(moment().add(6, 'months').toDate());
+  const [endTime, setEndTime] = useState(moment().add(6, 'months').subtract(1, 'hour').toDate());
   
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
@@ -38,19 +39,19 @@ export default function DiskonAddModal({ onClose, onSuccess, initialItem }: Disk
 
   useEffect(() => {
     fetchShops();
-    if (initialItem) {
-      const newItem = {
-        id_masterbarang: initialItem.id || initialItem.ID,
-        nama: initialItem.nama || initialItem.NAMA,
-        hpp: Number(initialItem.hpp || initialItem.HPP || 0),
-        harga_jual_2: Number(initialItem.harga_jual_2 || initialItem.hargajual2 || initialItem.HARGAJUAL2 || 0),
-        harga_promo: '',
-        persentase_promo: '',
-        purchase_limit: '0',
-        included_id_onlines: [],
-        showMappings: false
-      };
-      setSelectedItems([newItem]);
+    if (initialItems && initialItems.length > 0) {
+      const mapped = initialItems.map((it: any) => ({
+        id_masterbarang: it.id_masterbarang || it.id || it.ID,
+        nama: it.nama || it.NAMA,
+        hpp: Number(it.hpp || it.HPP || 0),
+        harga_jual_2: Number(it.harga_jual_2 || it.hargajual2 || it.HARGAJUAL2 || 0),
+        harga_promo: it.harga_promo || '',
+        persentase_promo: it.persentase_promo || '',
+        purchase_limit: it.purchase_limit || '0',
+        included_id_onlines: it.included_id_onlines || [],
+        showMappings: false,
+      }));
+      setSelectedItems(mapped);
     }
   }, []);
 
@@ -238,15 +239,34 @@ export default function DiskonAddModal({ onClose, onSuccess, initialItem }: Disk
     }
   };
 
-  const hasConflict = (id_masterbarang: number) => {
-    // Basic conflict check matching backend result structure
-    // Normally backend returns array of online_masterbarang that has conflicts. 
-    // We do a simple check if any conflict exists for this item
-    // Due to complexity of variants, we simplify: if conflicts array has anything, we warn.
-    return promoConflicts.length > 0; // Simplified for mobile
+  const hasConflictForItem = (id_masterbarang: number) => {
+    return promoConflicts.some((c: any) => String(c.id_masterbarang) === String(id_masterbarang));
+  };
+
+  const getItemConflicts = (id_masterbarang: number) =>
+    promoConflicts.filter((c: any) => String(c.id_masterbarang) === String(id_masterbarang));
+
+  const isNotInShop = (id_masterbarang: number) => {
+    if (!selectedShop) return false;
+    const mappings = onlineMappings.filter((m: any) => String(m.id_masterbarang) === String(id_masterbarang));
+    return mappings.length === 0;
+  };
+
+  const getMappingsForItem = (id_masterbarang: number) =>
+    onlineMappings.filter((m: any) => String(m.id_masterbarang) === String(id_masterbarang));
+
+  const hasVariantConflict = (id_masterbarang: number, id_online: number) => {
+    return getItemConflicts(id_masterbarang).some((c: any) => {
+      if (!c.included_id_onlines) return true;
+      try {
+        const ids = JSON.parse(c.included_id_onlines);
+        return ids.includes(id_online);
+      } catch { return true; }
+    });
   };
 
   return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#f3f4f6' }}>
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       {/* Header */}
       <View style={styles.header}>
@@ -370,30 +390,44 @@ export default function DiskonAddModal({ onClose, onSuccess, initialItem }: Disk
             </View>
           )}
 
-          {selectedItems.map((item) => (
-            <View key={item.id_masterbarang} style={styles.selectedCard}>
-              <View style={styles.selectedHeader}>
-                <Text style={styles.selectedTitle} numberOfLines={2}>{item.nama}</Text>
-                <TouchableOpacity onPress={() => handleRemoveItem(item.id_masterbarang)}>
-                  <Ionicons name="trash" size={20} color="#ef4444" />
-                </TouchableOpacity>
-              </View>
-              
-              <View style={styles.priceInfo}>
-                <Text style={styles.priceLabel}>Base: Rp {item.harga_jual_2.toLocaleString('id-ID')}</Text>
-                <Text style={styles.priceLabel}>HPP: Rp {item.hpp.toLocaleString('id-ID')}</Text>
-              </View>
+          {selectedItems.map((item) => {
+            const notInShop = isNotInShop(item.id_masterbarang);
+            const conflict = hasConflictForItem(item.id_masterbarang);
+            const itemMappings = getMappingsForItem(item.id_masterbarang);
+            const cardOpacity = notInShop ? 0.45 : 1;
 
-              {(() => {
-                const itemMappings = onlineMappings.filter(m => m.id_masterbarang === item.id_masterbarang);
-                if (itemMappings.length <= 1) return null;
+            const includedSet = new Set(
+              item.included_id_onlines?.length > 0
+                ? item.included_id_onlines
+                : itemMappings.map((m: any) => m.id_online)
+            );
 
-                const includedSet = new Set(item.included_id_onlines?.length > 0 ? item.included_id_onlines : itemMappings.map(m => m.id_online));
-                
-                return (
+            return (
+              <View key={item.id_masterbarang} style={[styles.selectedCard, { opacity: cardOpacity }]}>
+                <View style={styles.selectedHeader}>
+                  <Text style={styles.selectedTitle} numberOfLines={2}>{item.nama}</Text>
+                  <TouchableOpacity onPress={() => handleRemoveItem(item.id_masterbarang)}>
+                    <Ionicons name="trash" size={20} color="#ef4444" />
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.priceInfo}>
+                  <Text style={styles.priceLabel}>Base: Rp {item.harga_jual_2.toLocaleString('id-ID')}</Text>
+                  <Text style={styles.priceLabel}>HPP: Rp {item.hpp.toLocaleString('id-ID')}</Text>
+                </View>
+
+                {notInShop && (
+                  <Text style={styles.notInShopWarn}>🚫 Produk tidak ada di toko {selectedShop?.name}</Text>
+                )}
+                {conflict && !notInShop && (
+                  <Text style={styles.conflictWarn}>⚠️ Produk sudah mengikuti promo aktif</Text>
+                )}
+
+                {/* Variant expand (≥2 mappings di toko ini) */}
+                {itemMappings.length > 1 && (
                   <View style={styles.variantContainer}>
-                    <TouchableOpacity 
-                      style={styles.variantToggleBtn} 
+                    <TouchableOpacity
+                      style={styles.variantToggleBtn}
                       onPress={() => updateItem(item.id_masterbarang, 'showMappings', !item.showMappings)}
                     >
                       <Text style={styles.variantToggleText}>
@@ -401,14 +435,15 @@ export default function DiskonAddModal({ onClose, onSuccess, initialItem }: Disk
                       </Text>
                       <Ionicons name={item.showMappings ? 'chevron-up' : 'chevron-down'} size={16} color="#3b82f6" />
                     </TouchableOpacity>
-                    
+
                     {item.showMappings && (
                       <View style={styles.variantList}>
                         {itemMappings.map((m: any, idx: number) => {
                           const isIncluded = includedSet.has(m.id_online);
+                          const vConflict = hasVariantConflict(item.id_masterbarang, m.id_online);
                           return (
-                            <TouchableOpacity 
-                              key={idx} 
+                            <TouchableOpacity
+                              key={idx}
                               style={styles.variantItem}
                               onPress={() => {
                                 const newSet = new Set(includedSet);
@@ -417,63 +452,71 @@ export default function DiskonAddModal({ onClose, onSuccess, initialItem }: Disk
                                 updateItem(item.id_masterbarang, 'included_id_onlines', Array.from(newSet));
                               }}
                             >
-                              <Ionicons 
-                                name={isIncluded ? 'checkbox' : 'square-outline'} 
-                                size={20} 
-                                color={isIncluded ? '#f59e0b' : '#9ca3af'} 
+                              <Ionicons
+                                name={isIncluded ? 'checkbox' : 'square-outline'}
+                                size={20}
+                                color={isIncluded ? '#f59e0b' : '#9ca3af'}
                               />
-                              <Text style={styles.variantItemText} numberOfLines={2}>
-                                {m.shopee_item_name ? `${m.shopee_item_name} ${m.shopee_model_name ? '- ' + m.shopee_model_name : ''}` : `ID: ${m.id_online}`}
-                              </Text>
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.variantItemText} numberOfLines={2}>
+                                  {m.shopee_item_name
+                                    ? `${m.shopee_item_name}${m.shopee_model_name ? ' - ' + m.shopee_model_name : ''}`
+                                    : `ID: ${m.id_online}`}
+                                </Text>
+                                {vConflict && (
+                                  <Text style={{ color: '#d97706', fontSize: 10, fontWeight: 'bold' }}>
+                                    ⚠️ Sudah ikut promo aktif
+                                  </Text>
+                                )}
+                              </View>
                             </TouchableOpacity>
                           );
                         })}
                       </View>
                     )}
                   </View>
-                );
-              })()}
+                )}
 
-              {promoConflicts.length > 0 && (
-                <Text style={styles.conflictWarn}>⚠️ Mungkin konflik dengan promo aktif</Text>
-              )}
-
-              <View style={styles.inputGrid}>
-                <View style={styles.inputCol}>
-                  <Text style={styles.inputLabel}>Harga Promo</Text>
-                  <TextInput 
-                    style={styles.numberInput} 
-                    keyboardType="numeric" 
-                    value={item.harga_promo}
-                    onChangeText={v => updateItem(item.id_masterbarang, 'harga_promo', v)}
-                    placeholder="Rp"
-                  />
-                  {Number(item.harga_promo) > 0 && Number(item.harga_promo) < item.hpp && (
-                    <Text style={styles.errorText}>Di bawah HPP!</Text>
-                  )}
-                </View>
-                <View style={styles.inputCol}>
-                  <Text style={styles.inputLabel}>Diskon (%)</Text>
-                  <TextInput 
-                    style={styles.numberInput} 
-                    keyboardType="numeric" 
-                    value={item.persentase_promo}
-                    onChangeText={v => updateItem(item.id_masterbarang, 'persentase_promo', v)}
-                    placeholder="%"
-                  />
-                </View>
-                <View style={styles.inputCol}>
-                  <Text style={styles.inputLabel}>Limit</Text>
-                  <TextInput 
-                    style={styles.numberInput} 
-                    keyboardType="numeric" 
-                    value={item.purchase_limit}
-                    onChangeText={v => updateItem(item.id_masterbarang, 'purchase_limit', v)}
-                  />
+                <View style={styles.inputGrid}>
+                  <View style={styles.inputCol}>
+                    <Text style={styles.inputLabel}>Harga Promo</Text>
+                    <TextInput
+                      style={[styles.numberInput, notInShop && styles.inputDisabled]}
+                      keyboardType="numeric"
+                      value={item.harga_promo}
+                      onChangeText={v => updateItem(item.id_masterbarang, 'harga_promo', v)}
+                      placeholder="Rp"
+                      editable={!notInShop && !conflict}
+                    />
+                    {Number(item.harga_promo) > 0 && Number(item.harga_promo) < item.hpp && (
+                      <Text style={styles.errorText}>Di bawah HPP!</Text>
+                    )}
+                  </View>
+                  <View style={styles.inputCol}>
+                    <Text style={styles.inputLabel}>Diskon (%)</Text>
+                    <TextInput
+                      style={[styles.numberInput, notInShop && styles.inputDisabled]}
+                      keyboardType="numeric"
+                      value={item.persentase_promo}
+                      onChangeText={v => updateItem(item.id_masterbarang, 'persentase_promo', v)}
+                      placeholder="%"
+                      editable={!notInShop && !conflict}
+                    />
+                  </View>
+                  <View style={styles.inputCol}>
+                    <Text style={styles.inputLabel}>Limit</Text>
+                    <TextInput
+                      style={[styles.numberInput, notInShop && styles.inputDisabled]}
+                      keyboardType="numeric"
+                      value={item.purchase_limit}
+                      onChangeText={v => updateItem(item.id_masterbarang, 'purchase_limit', v)}
+                      editable={!notInShop && !conflict}
+                    />
+                  </View>
                 </View>
               </View>
-            </View>
-          ))}
+            );
+          })}
           
           {selectedItems.length === 0 && (
             <Text style={styles.emptyItemsText}>Belum ada produk yang dipilih.</Text>
@@ -503,6 +546,7 @@ export default function DiskonAddModal({ onClose, onSuccess, initialItem }: Disk
         </View>
       </Modal>
     </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
@@ -511,7 +555,6 @@ const styles = StyleSheet.create({
   header: { 
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', 
     padding: 16, backgroundColor: 'white', borderBottomWidth: 1, borderBottomColor: '#e5e7eb',
-    paddingTop: Platform.OS === 'ios' ? 50 : 16
   },
   closeBtn: { padding: 4 },
   headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#1f2937' },
@@ -538,6 +581,8 @@ const styles = StyleSheet.create({
   priceInfo: { flexDirection: 'row', gap: 12, marginBottom: 12 },
   priceLabel: { fontSize: 12, color: '#6b7280', backgroundColor: '#f3f4f6', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   conflictWarn: { color: '#d97706', fontSize: 12, fontWeight: 'bold', marginBottom: 8 },
+  notInShopWarn: { color: '#ef4444', fontSize: 12, fontWeight: 'bold', marginBottom: 8, backgroundColor: '#fef2f2', padding: 6, borderRadius: 6 },
+  inputDisabled: { backgroundColor: '#e5e7eb', color: '#9ca3af' },
   inputGrid: { flexDirection: 'row', gap: 8 },
   inputCol: { flex: 1 },
   inputLabel: { fontSize: 11, color: '#6b7280', marginBottom: 4 },
