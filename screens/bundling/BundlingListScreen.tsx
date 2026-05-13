@@ -27,6 +27,7 @@ export interface BundlingItem {
   stok?: number;
   hpp?: number;
   berat?: number;
+  satuan?: string | null;
 }
 
 type Nav = NativeStackNavigationProp<AppStackParamList, 'BundlingList'>;
@@ -58,9 +59,10 @@ export default function BundlingListScreen(): JSX.Element {
       if (data.status) {
         const bundlingItems: BundlingItem[] = data.data.map((item: any) => ({
           id: item.id,
-          nama: item.nama,
-          sku: item.sku,
-          label: item.label,
+          nama: item.nama || '',
+          sku: item.sku || '',
+          label: item.label || '',
+          satuan: item.satuan || null,
           hargajual: Number(item.hargajual) || 0,
           stok: Number(item.stok) || 0,
           hpp: Number(item.hpp) || 0,
@@ -142,9 +144,10 @@ export default function BundlingListScreen(): JSX.Element {
 
   const filteredItems = items.filter(
     (item) =>
-      item.nama.toLowerCase().includes(query.toLowerCase()) ||
-      item.sku.toLowerCase().includes(query.toLowerCase()) ||
-      (item.label && item.label.toLowerCase().includes(query.toLowerCase()))
+      (item.nama || '').toLowerCase().includes(query.toLowerCase()) ||
+      (item.sku || '').toLowerCase().includes(query.toLowerCase()) ||
+      (item.label && item.label.toLowerCase().includes(query.toLowerCase())) ||
+      (item.satuan && item.satuan.toLowerCase().includes(query.toLowerCase()))
   );
 
   const renderItem = ({ item }: { item: BundlingItem }) => (
@@ -161,11 +164,14 @@ export default function BundlingListScreen(): JSX.Element {
             {item.label}
           </Text>
         )}
-        <Text style={styles.subtitle}>{item.sku}</Text>
+        <Text style={styles.subtitle}>{item.sku || 'Tanpa SKU'}</Text>
         <View style={styles.row}>
           <Text style={styles.badgePrice}>
             Rp {item.hargajual.toLocaleString('id-ID')}
           </Text>
+          {!!item.satuan && (
+            <Text style={styles.badge}>Satuan: {item.satuan}</Text>
+          )}
           {item.stok !== undefined && (
             <Text style={styles.badge}>Stok: {item.stok}</Text>
           )}

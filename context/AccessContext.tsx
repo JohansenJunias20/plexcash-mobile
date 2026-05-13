@@ -109,7 +109,31 @@ export const AccessProvider = ({ children }: { children: ReactNode }) => {
       setIsLoading(true);
       const response = await ApiService.getUserAccess();
       if (response.status && response.access) {
-        setAccess(response.access);
+        
+        // Deep parse the access object to handle any nested JSON strings
+        const deepParseJson = (obj: any): any => {
+          if (typeof obj === 'string') {
+            try {
+              const parsed = JSON.parse(obj);
+              return deepParseJson(parsed);
+            } catch (e) {
+              return obj;
+            }
+          }
+          if (obj && typeof obj === 'object') {
+            if (Array.isArray(obj)) {
+              return obj.map(item => deepParseJson(item));
+            }
+            const result: any = {};
+            for (const key in obj) {
+              result[key] = deepParseJson(obj[key]);
+            }
+            return result;
+          }
+          return obj;
+        };
+        
+        setAccess(deepParseJson(response.access));
       } else {
         console.warn('Failed to fetch user access:', response.reason);
         // Set default empty access

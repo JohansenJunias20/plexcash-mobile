@@ -35,10 +35,10 @@ export default function BundlingEditScreen(): JSX.Element {
   const bundlingId = route.params?.id;
   const isEditMode = bundlingId !== undefined;
 
-  // Form fields
   const [sku, setSku] = useState('');
   const [nama, setNama] = useState('');
   const [label, setLabel] = useState('');
+  const [satuan, setSatuan] = useState('');
   const [hargaJual, setHargaJual] = useState('');
 
   // Auto-calculated fields
@@ -86,6 +86,7 @@ export default function BundlingEditScreen(): JSX.Element {
         setSku(data.sku || '');
         setNama(data.nama || '');
         setLabel(data.label || '');
+        setSatuan(data.satuan || '');
         setHargaJual(String(data.harga || data.hargajual || 0));
         setBerat(Number(data.berat) || 0);
         setStok(Number(data.stok) || 0);
@@ -185,6 +186,7 @@ export default function BundlingEditScreen(): JSX.Element {
         nama,
         sku,
         label,
+        satuan,
         harga_jual: parseFloat(hargaJual) || 0,
         items: items.map((item) => ({
           id: item.id_masterbarang,
@@ -310,6 +312,16 @@ export default function BundlingEditScreen(): JSX.Element {
               value={label}
               onChangeText={setLabel}
               placeholder="ex: Bundling Paket 1"
+            />
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Satuan (Opsional)</Text>
+            <TextInput
+              style={styles.input}
+              value={satuan}
+              onChangeText={setSatuan}
+              placeholder="ex: Pcs, Box, Lusin"
             />
           </View>
 

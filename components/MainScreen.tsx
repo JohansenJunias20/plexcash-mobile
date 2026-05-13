@@ -1,19 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal, ActivityIndicator, Alert, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal, ActivityIndicator, Alert, TextInput, NativeModules } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import * as Updates from 'expo-updates';
 import { useAuth } from '../context/AuthContext';
+import { useAccess } from '../context/AccessContext';
 import Settings from './Settings';
 import { useNavigation, DrawerActions } from '@react-navigation/native';
 import ApiService from '../services/api';
 import { useDeveloperMode } from '../context/DeveloperModeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { AVAILABLE_MENUS, DEFAULT_QUICK_ACTIONS, MAX_QUICK_ACTIONS, MenuItem } from '../constants/availableMenus';
+import { AVAILABLE_MENUS, DEFAULT_QUICK_ACTIONS, MAX_QUICK_ACTIONS, MenuItem, resolveAccessKey } from '../constants/availableMenus';
 
 const STORAGE_KEY = '@quick_actions_config';
 
 const MainScreen = (): React.JSX.Element => {
   const { user } = useAuth();
+  const { access } = useAccess();
   const [showSettings, setShowSettings] = useState(false);
   const [currentDatabase, setCurrentDatabase] = useState<string>('');
   const [databases, setDatabases] = useState<string[]>([]);
@@ -45,32 +48,42 @@ const MainScreen = (): React.JSX.Element => {
           const savedIds: string[] = JSON.parse(saved);
           const loadedActions = savedIds
             .map(id => AVAILABLE_MENUS.find(menu => menu.id === id))
-            .filter((menu): menu is MenuItem => menu !== undefined);
+            .filter((menu): menu is MenuItem => menu !== undefined)
+            .filter(menu => resolveAccessKey(access as any, menu.accessKey));
           setQuickActions(loadedActions);
-          setSelectedMenuIds(new Set(savedIds));
+          setSelectedMenuIds(new Set(loadedActions.map(m => m.id)));
         } else {
-          // Load default Quick Actions
+          // Load default Quick Actions filtered by access
           const defaultActions = DEFAULT_QUICK_ACTIONS
             .map(id => AVAILABLE_MENUS.find(menu => menu.id === id))
-            .filter((menu): menu is MenuItem => menu !== undefined);
+            .filter((menu): menu is MenuItem => menu !== undefined)
+            .filter(menu => resolveAccessKey(access as any, menu.accessKey));
           setQuickActions(defaultActions);
-          setSelectedMenuIds(new Set(DEFAULT_QUICK_ACTIONS));
+          setSelectedMenuIds(new Set(defaultActions.map(m => m.id)));
         }
-        setAvailableMenus(AVAILABLE_MENUS);
+        // Only show menus that the user has access to in the available list
+        const accessibleMenus = AVAILABLE_MENUS.filter(menu =>
+          resolveAccessKey(access as any, menu.accessKey)
+        );
+        setAvailableMenus(accessibleMenus);
       } catch (error) {
         console.error('Error loading quick actions:', error);
-        // Fallback to defaults
+        // Fallback to defaults filtered by access
         const defaultActions = DEFAULT_QUICK_ACTIONS
           .map(id => AVAILABLE_MENUS.find(menu => menu.id === id))
-          .filter((menu): menu is MenuItem => menu !== undefined);
+          .filter((menu): menu is MenuItem => menu !== undefined)
+          .filter(menu => resolveAccessKey(access as any, menu.accessKey));
         setQuickActions(defaultActions);
-        setSelectedMenuIds(new Set(DEFAULT_QUICK_ACTIONS));
-        setAvailableMenus(AVAILABLE_MENUS);
+        setSelectedMenuIds(new Set(defaultActions.map(m => m.id)));
+        const accessibleMenus = AVAILABLE_MENUS.filter(menu =>
+          resolveAccessKey(access as any, menu.accessKey)
+        );
+        setAvailableMenus(accessibleMenus);
       }
     };
 
     loadQuickActions();
-  }, []);
+  }, [access]);
 
   // Save Quick Actions configuration to AsyncStorage
   const saveQuickActions = async (actions: MenuItem[]) => {
@@ -97,12 +110,10 @@ const MainScreen = (): React.JSX.Element => {
           setCurrentDatabase(dbResponse.data);
         }
 
-        // If admin, also fetch database list
-        if (isAdmin) {
-          const listResponse = await ApiService.getDatabaseList();
-          if (listResponse.status && listResponse.data) {
-            setDatabases(listResponse.data);
-          }
+        // Fetch database list for everyone (backend handles permissions)
+        const listResponse = await ApiService.getDatabaseList();
+        if (listResponse.status && listResponse.data) {
+          setDatabases(listResponse.data);
         }
       } catch (error) {
         console.error('Error fetching database info:', error);
@@ -130,7 +141,20 @@ const MainScreen = (): React.JSX.Element => {
         Alert.alert(
           'Database Switched',
           `Successfully switched to database: ${newDatabase}`,
-          [{ text: 'OK' }]
+          [{ 
+            text: 'OK',
+            onPress: async () => {
+              try {
+                if (__DEV__ && NativeModules.DevSettings && NativeModules.DevSettings.reload) {
+                  NativeModules.DevSettings.reload();
+                } else {
+                  await Updates.reloadAsync();
+                }
+              } catch (e) {
+                console.error('Failed to reload app:', e);
+              }
+            }
+          }]
         );
       } else {
         Alert.alert(
@@ -288,8 +312,8 @@ const MainScreen = (): React.JSX.Element => {
             {/* Database Indicator */}
             <TouchableOpacity
               style={styles.statusCard}
-              onPress={() => isAdmin && setShowDatabasePicker(true)}
-              disabled={!isAdmin || loadingDatabase}
+              onPress={() => (isAdmin || databases.length > 1) && setShowDatabasePicker(true)}
+              disabled={!(isAdmin || databases.length > 1) || loadingDatabase}
             >
               <View style={styles.statusLeft}>
                 <Ionicons name="server-outline" size={24} color="#F59E0B" />
@@ -300,7 +324,7 @@ const MainScreen = (): React.JSX.Element => {
                   </Text>
                 </View>
               </View>
-              {isAdmin && !loadingDatabase && (
+              {(isAdmin || databases.length > 1) && !loadingDatabase && (
                 <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.7)" />
               )}
             </TouchableOpacity>
@@ -346,8 +370,8 @@ const MainScreen = (): React.JSX.Element => {
         </View>
       </ScrollView>
 
-      {/* Database Picker Modal (Admin Only) */}
-      {isAdmin && (
+      {/* Database Picker Modal */}
+      {(isAdmin || databases.length > 1) && (
         <Modal
           visible={showDatabasePicker}
           transparent={true}

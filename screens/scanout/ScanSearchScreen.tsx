@@ -34,11 +34,73 @@ export default function ScanSearchScreen() {
   const inputRef = useRef<TextInput>(null);
   const device = useCameraDevice('back');
 
+  // Normalisasi resi dari berbagai format barcode.
+  // Label Gojek/GoSend sering menggunakan QR code yang berisi URL tracking
+  // atau format berbeda dari nomor resi yang tersimpan di database.
+  const normalizeResi = (raw: string): string => {
+    if (!raw) return raw;
+    const trimmed = raw.trim();
+
+    // ── 1. Ekstrak resi Gojek (GK-XX-XXXXXXXXX) dari manapun di dalam string ──
+    // Hanya cocokkan jika format sudah memiliki tanda dash yang benar
+    const gojekWithDash = trimmed.match(/\bGK-\d{1,3}-\d{5,}\b/i);
+    if (gojekWithDash) return gojekWithDash[0].toUpperCase();
+
+    // ── 2. Cek apakah ini URL tracking ──
+    // mis. https://track.gojek.com/s/GK-11-876133085
+    //      https://gojek.com/track?tracking=GK-11-876133085
+    try {
+      const url = new URL(trimmed);
+      // Cek query params dulu (lebih spesifik)
+      const trackingParam =
+        url.searchParams.get('tracking') ||
+        url.searchParams.get('resi') ||
+        url.searchParams.get('awb') ||
+        url.searchParams.get('no') ||
+        url.searchParams.get('waybill');
+      if (trackingParam && trackingParam.length > 4) return trackingParam;
+
+      // Ambil bagian terakhir URL path
+      const pathParts = url.pathname.split('/').filter(Boolean);
+      const lastPart = pathParts[pathParts.length - 1];
+      if (lastPart && lastPart.length > 4) return lastPart;
+    } catch {
+      // Bukan URL, lanjut
+    }
+
+    // ── 3. Cek apakah JSON ──
+    // mis. {"no_resi":"GK-11-876133085","kurir":"GOSEND"}
+    try {
+      const parsed = JSON.parse(trimmed);
+      const resiValue =
+        parsed.resi ||
+        parsed.no_resi ||
+        parsed.tracking_number ||
+        parsed.tracking ||
+        parsed.awb ||
+        parsed.waybill ||
+        parsed.id;
+      if (resiValue && String(resiValue).length > 4) return String(resiValue);
+    } catch {
+      // Bukan JSON, gunakan nilai asli
+    }
+
+    // ── 4. Fallback: trim saja ──
+    return trimmed;
+  };
+
   const codeScanner = useCodeScanner({
-    codeTypes: ['qr', 'code-128', 'code-39', 'ean-13', 'ean-8'],
+    // Tambah format barcode tambahan untuk Gojek/GoSend:
+    // - pdf-417: sering digunakan pada label pengiriman
+    // - data-matrix: digunakan beberapa kurir
+    // - aztec: alternatif QR code
+    // - itf: barcode numerik untuk logistik
+    // - code-93: varian code-39
+    codeTypes: ['qr', 'code-128', 'code-39', 'code-93', 'ean-13', 'ean-8', 'pdf-417', 'data-matrix', 'aztec', 'itf'],
     onCodeScanned: (codes) => {
       if (codes.length > 0 && codes[0].value) {
-        handleBarcodeScanned({ data: codes[0].value });
+        const normalized = normalizeResi(codes[0].value);
+        handleBarcodeScanned({ data: normalized });
       }
     },
   });
@@ -88,22 +150,28 @@ export default function ScanSearchScreen() {
 
   const handleBarcodeScanned = async ({ data }: { data: string }) => {
     if (processing) return;
-    if (pendingScans.has(data)) return;
+
+    // Normalisasi resi sebelum diproses (kalau belum dinormalisasi dari codeScanner)
+    const resi = normalizeResi(data);
+
+    if (pendingScans.has(resi)) return;
 
     setScanning(false);
     setProcessing(true);
-    setCurrentScan(data);
-    setPendingScans(prev => new Set(prev).add(data));
+    setCurrentScan(resi);
+    setPendingScans(prev => new Set(prev).add(resi));
+
+    console.log(`[ScanSearch] Scan: raw="${data}" normalized="${resi}"`);
 
     try {
       // Search order by resi number
       const response = await ApiService.authenticatedRequest(
-        `/get/ecommerce/order/by_resi?resi=${encodeURIComponent(data)}`
+        `/get/ecommerce/order/by_resi?resi=${encodeURIComponent(resi)}`
       );
 
       setPendingScans(prev => {
         const newSet = new Set(prev);
-        newSet.delete(data);
+        newSet.delete(resi);
         return newSet;
       });
 
@@ -117,7 +185,7 @@ export default function ScanSearchScreen() {
         await playSound('success');
 
         const newResult: ScanResult = {
-          resi: data,
+          resi: resi,
           timestamp: new Date(),
           status: 'found',
           orderId,
@@ -146,7 +214,7 @@ export default function ScanSearchScreen() {
         await playSound('error');
 
         const newResult: ScanResult = {
-          resi: data,
+          resi: resi,
           timestamp: new Date(),
           status: 'not_found',
         };
@@ -154,7 +222,7 @@ export default function ScanSearchScreen() {
 
         Alert.alert(
           '🔍 Pesanan Tidak Ditemukan',
-          response?.reason || `Tidak ada pesanan dengan resi: ${data}`,
+          response?.reason || `Tidak ada pesanan dengan resi: ${resi}`,
           [
             {
               text: 'OK',
@@ -172,7 +240,7 @@ export default function ScanSearchScreen() {
 
       setPendingScans(prev => {
         const newSet = new Set(prev);
-        newSet.delete(data);
+        newSet.delete(resi);
         return newSet;
       });
 
@@ -180,7 +248,7 @@ export default function ScanSearchScreen() {
       await playSound('error');
 
       const newResult: ScanResult = {
-        resi: data,
+        resi: resi,
         timestamp: new Date(),
         status: 'not_found',
       };

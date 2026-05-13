@@ -9,12 +9,30 @@ import {
   ActivityIndicator,
   Alert,
   TextInput,
+  NativeModules,
 } from 'react-native';
 import { DrawerContentScrollView } from '@react-navigation/drawer';
 import { Ionicons } from '@expo/vector-icons';
+import * as Updates from 'expo-updates';
 import { useAuth } from '../context/AuthContext';
 import { useAccess } from '../context/AccessContext';
 import ApiService from '../services/api';
+
+/** Helper to strictly check boolean-like values */
+const checkAccess = (val: any): boolean => {
+  if (val === undefined || val === null || val === false || val === 0 || val === '0' || val === '') return false;
+  if (typeof val === 'string' && val.toLowerCase() === 'false') return false;
+  return !!val;
+};
+
+/** Mirror of web Sidebar's hasAnyTrue — returns true if obj or any nested value is true */
+const hasAnyTrue = (obj: any): boolean => {
+  if (!obj) return false;
+  if (typeof obj === 'object') {
+    return Object.values(obj).some((val) => hasAnyTrue(val));
+  }
+  return checkAccess(obj);
+};
 
 interface DrawerItemProps {
   label: string;
@@ -108,7 +126,8 @@ interface CustomDrawerContentProps {
 
 const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ navigation, state }) => {
   const { user } = useAuth();
-  const { isLoading: accessLoading } = useAccess();
+  const { access, isLoading: accessLoading } = useAccess();
+  const a = access as any;
   const [currentDatabase, setCurrentDatabase] = useState<string>('');
   const [databases, setDatabases] = useState<string[]>([]);
   const [loadingDatabase, setLoadingDatabase] = useState(true);
@@ -129,11 +148,9 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ navigation, s
           setCurrentDatabase(dbResponse.data);
         }
 
-        if (isAdmin) {
-          const listResponse = await ApiService.getDatabaseList();
-          if (listResponse.status && listResponse.data) {
-            setDatabases(listResponse.data);
-          }
+        const listResponse = await ApiService.getDatabaseList();
+        if (listResponse.status && listResponse.data) {
+          setDatabases(listResponse.data);
         }
       } catch (error) {
         console.error('Error fetching database info:', error);
@@ -158,7 +175,24 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ navigation, s
       if (response.status) {
         setCurrentDatabase(newDatabase);
         setShowDatabasePicker(false);
-        Alert.alert('Database Switched', `Successfully switched to: ${newDatabase}`);
+        Alert.alert(
+          'Database Switched', 
+          `Successfully switched to: ${newDatabase}`,
+          [{
+            text: 'OK',
+            onPress: async () => {
+              try {
+                if (__DEV__ && NativeModules.DevSettings && NativeModules.DevSettings.reload) {
+                  NativeModules.DevSettings.reload();
+                } else {
+                  await Updates.reloadAsync();
+                }
+              } catch (e) {
+                console.error('Failed to reload app:', e);
+              }
+            }
+          }]
+        );
       }
     } catch (error) {
       console.error('Error switching database:', error);
@@ -190,7 +224,7 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ navigation, s
           </View>
         </View>
 
-        {/* Home */}
+        {/* Home - always visible */}
         <DrawerItem
           label="Home"
           icon="home"
@@ -198,332 +232,108 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ navigation, s
           active={currentRoute === 'Main'}
         />
 
-      {/* MASTER Section */}
-      <SectionHeader title="MASTER" />
-      <DrawerItem
-        label="Barang"
-        icon="cube"
-        onPress={() => navigation.navigate('BarangList')}
-        active={currentRoute === 'BarangList'}
-      />
-      <DrawerItem
-        label="Supplier"
-        icon="briefcase"
-        onPress={() => navigation.navigate('SupplierList')}
-        active={currentRoute === 'SupplierList'}
-      />
-      <DrawerItem
-        label="Customer"
-        icon="people"
-        onPress={() => navigation.navigate('CustomerList')}
-        active={currentRoute === 'CustomerList'}
-      />
-      <DrawerItem
-        label="Satuan"
-        icon="scale"
-        onPress={() => navigation.navigate('SatuanList')}
-        active={currentRoute === 'SatuanList'}
-      />
-      <DrawerItem
-        label="Bagan Akun"
-        icon="calculator"
-        onPress={() => navigation.navigate('BaganAkunList')}
-        active={currentRoute === 'BaganAkunList'}
-      />
-      <DrawerItem
-        label="User"
-        icon="person"
-        onPress={() => navigation.navigate('UserList')}
-        active={currentRoute === 'UserList'}
-      />
-      <DrawerItem
-        label="Upload"
-        icon="cloud-upload"
-        onPress={() => navigation.navigate('UploadScreen')}
-        active={currentRoute === 'UploadScreen'}
-      />
-      <DrawerItem
-        label="Bundling"
-        icon="albums"
-        onPress={() => navigation.navigate('BundlingList')}
-        active={currentRoute === 'BundlingList'}
-      />
-      <DrawerItem
-        label="Import"
-        icon="download"
-        onPress={() => navigation.navigate('ImportBarang')}
-        active={currentRoute === 'ImportBarang'}
-      />
-      <DrawerItem
-        label="Warehouse"
-        icon="business"
-        onPress={() => navigation.navigate('WarehouseList')}
-        active={currentRoute === 'WarehouseList'}
-        badge="NEW"
-      />
+      {/* MASTER Section - only if user has any master access */}
+      {hasAnyTrue(a?.master) && <SectionHeader title="MASTER" />}
+      {checkAccess(a?.master?.barang) && <DrawerItem label="Barang" icon="cube" onPress={() => navigation.navigate('BarangList')} active={currentRoute === 'BarangList'} />}
+      {checkAccess(a?.master?.supplier) && <DrawerItem label="Supplier" icon="briefcase" onPress={() => navigation.navigate('SupplierList')} active={currentRoute === 'SupplierList'} />}
+      {checkAccess(a?.master?.customer) && <DrawerItem label="Customer" icon="people" onPress={() => navigation.navigate('CustomerList')} active={currentRoute === 'CustomerList'} />}
+      {checkAccess(a?.master?.satuan) && <DrawerItem label="Satuan" icon="scale" onPress={() => navigation.navigate('SatuanList')} active={currentRoute === 'SatuanList'} />}
+      {checkAccess(a?.master?.baganakun) && <DrawerItem label="Bagan Akun" icon="calculator" onPress={() => navigation.navigate('BaganAkunList')} active={currentRoute === 'BaganAkunList'} />}
+      {checkAccess(a?.master?.user) && <DrawerItem label="User" icon="person" onPress={() => navigation.navigate('UserList')} active={currentRoute === 'UserList'} />}
+      {checkAccess(a?.master?.upload) && <DrawerItem label="Upload" icon="cloud-upload" onPress={() => navigation.navigate('UploadScreen')} active={currentRoute === 'UploadScreen'} />}
+      {checkAccess(a?.master?.bundling) && <DrawerItem label="Bundling" icon="albums" onPress={() => navigation.navigate('BundlingList')} active={currentRoute === 'BundlingList'} />}
+      {checkAccess(a?.master?.import_barang) && <DrawerItem label="Import" icon="download" onPress={() => navigation.navigate('ImportBarang')} active={currentRoute === 'ImportBarang'} />}
+      {checkAccess(a?.master?.warehouse) && <DrawerItem label="Warehouse" icon="business" onPress={() => navigation.navigate('WarehouseList')} active={currentRoute === 'WarehouseList'} badge="NEW" />}
 
       {/* TRANSAKSI Section */}
-      <SectionHeader title="TRANSAKSI" />
+      {(() => {
+        // Debugging the access object for the specific issue the user is reporting
+        if (a) {
+          console.log("=== DEBUG AKSES ===");
+          console.log(JSON.stringify(a, null, 2));
+        }
+        return hasAnyTrue(a?.transaksi) ? <SectionHeader title="TRANSAKSI" /> : null;
+      })()}
 
-      {/* Pembelian - Collapsible */}
-      <CollapsibleSection title="Pembelian" icon="cart">
-        <DrawerItem
-          label="Tambah"
-          icon="add-circle"
-          onPress={() => navigation.navigate('PembelianTambah')}
-          active={currentRoute === 'PembelianTambah'}
-          nested
-        />
-        <DrawerItem
-          label="Search"
-          icon="search"
-          onPress={() => navigation.navigate('PembelianSearch')}
-          active={currentRoute === 'PembelianSearch'}
-          nested
-        />
-        <DrawerItem
-          label="Pelunasan"
-          icon="cash"
-          onPress={() => navigation.navigate('PembelianPelunasan')}
-          active={currentRoute === 'PembelianPelunasan'}
-          nested
-        />
-        <DrawerItem
-          label="Retur"
-          icon="return-down-back"
-          onPress={() => navigation.navigate('PembelianRetur')}
-          active={currentRoute === 'PembelianRetur'}
-          nested
-        />
-        <DrawerItem
-          label="DP Beli"
-          icon="card"
-          onPress={() => navigation.navigate('PembelianDPBeli')}
-          active={currentRoute === 'PembelianDPBeli'}
-          nested
-        />
-        <DrawerItem
-          label="Pre Order"
-          icon="document-text"
-          onPress={() => navigation.navigate('PreOrder')}
-          active={currentRoute === 'PreOrder'}
-          nested
-          badge="NEW"
-        />
-      </CollapsibleSection>
+      {/* Pembelian - Collapsible, only if any pembelian sub-access */}
+      {(checkAccess(a?.transaksi?.pembelian?.tambah) || checkAccess(a?.transaksi?.pembelian?.search) || checkAccess(a?.transaksi?.pembelian?.pelunasan) || checkAccess(a?.transaksi?.pembelian?.retur) || checkAccess(a?.transaksi?.pembelian?.dp_beli) || checkAccess(a?.transaksi?.pembelian?.preorder) || checkAccess(a?.transaksi?.pembelian?.hutang)) && (
+        <CollapsibleSection title="Pembelian" icon="cart">
+          {checkAccess(a?.transaksi?.pembelian?.tambah) && <DrawerItem label="Tambah" icon="add-circle" onPress={() => navigation.navigate('PembelianTambah')} active={currentRoute === 'PembelianTambah'} nested />}
+          {checkAccess(a?.transaksi?.pembelian?.search) && <DrawerItem label="Search" icon="search" onPress={() => navigation.navigate('PembelianSearch')} active={currentRoute === 'PembelianSearch'} nested />}
+          {checkAccess(a?.transaksi?.pembelian?.pelunasan) && <DrawerItem label="Pelunasan" icon="cash" onPress={() => navigation.navigate('PembelianPelunasan')} active={currentRoute === 'PembelianPelunasan'} nested />}
+          {checkAccess(a?.transaksi?.pembelian?.retur) && <DrawerItem label="Retur" icon="return-down-back" onPress={() => navigation.navigate('PembelianRetur')} active={currentRoute === 'PembelianRetur'} nested />}
+          {checkAccess(a?.transaksi?.pembelian?.dp_beli) && <DrawerItem label="DP Beli" icon="card" onPress={() => navigation.navigate('PembelianDPBeli')} active={currentRoute === 'PembelianDPBeli'} nested />}
+          {checkAccess(a?.transaksi?.pembelian?.preorder) && <DrawerItem label="Pre Order" icon="calendar" onPress={() => navigation.navigate('PreOrder')} active={currentRoute === 'PreOrder'} nested />}
+          {checkAccess(a?.transaksi?.pembelian?.hutang) && <DrawerItem label="Hutang" icon="wallet" onPress={() => Alert.alert('Segera Hadir', 'Fitur Hutang Pembelian sedang dalam pengembangan.')} active={false} nested badge="Soon" />}
+        </CollapsibleSection>
+      )}
 
       {/* Penjualan - Collapsible */}
-      <CollapsibleSection title="Penjualan" icon="cash-outline">
-        <DrawerItem
-          label="Tambah"
-          icon="add-circle"
-          onPress={() => navigation.navigate('PenjualanTambah')}
-          active={currentRoute === 'PenjualanTambah'}
-          nested
-        />
-        <DrawerItem
-          label="Search"
-          icon="search"
-          onPress={() => navigation.navigate('PenjualanSearch')}
-          active={currentRoute === 'PenjualanSearch'}
-          nested
-        />
-        <DrawerItem
-          label="Pelunasan"
-          icon="cash"
-          onPress={() => navigation.navigate('PenjualanPelunasan')}
-          active={currentRoute === 'PenjualanPelunasan'}
-          nested
-        />
-        <DrawerItem
-          label="Retur"
-          icon="return-down-back"
-          onPress={() => navigation.navigate('PenjualanRetur')}
-          active={currentRoute === 'PenjualanRetur'}
-          nested
-        />
-      </CollapsibleSection>
+      {(checkAccess(a?.transaksi?.penjualan?.tambah) || checkAccess(a?.transaksi?.penjualan?.search) || checkAccess(a?.transaksi?.penjualan?.pelunasan) || checkAccess(a?.transaksi?.penjualan?.retur) || checkAccess(a?.transaksi?.penjualan?.pos_kasir) || checkAccess(a?.transaksi?.penjualan?.dpjual) || checkAccess(a?.transaksi?.penjualan?.piutang) || checkAccess(a?.transaksi?.penjualan?.post_print)) && (
+        <CollapsibleSection title="Penjualan" icon="cash-outline">
+          {checkAccess(a?.transaksi?.penjualan?.tambah) && <DrawerItem label="Tambah" icon="add-circle" onPress={() => navigation.navigate('PenjualanTambah')} active={currentRoute === 'PenjualanTambah'} nested />}
+          {checkAccess(a?.transaksi?.penjualan?.search) && <DrawerItem label="Search" icon="search" onPress={() => navigation.navigate('PenjualanSearch')} active={currentRoute === 'PenjualanSearch'} nested />}
+          {checkAccess(a?.transaksi?.penjualan?.pelunasan) && <DrawerItem label="Pelunasan" icon="cash" onPress={() => navigation.navigate('PenjualanPelunasan')} active={currentRoute === 'PenjualanPelunasan'} nested />}
+          {checkAccess(a?.transaksi?.penjualan?.retur) && <DrawerItem label="Retur" icon="return-down-back" onPress={() => navigation.navigate('PenjualanRetur')} active={currentRoute === 'PenjualanRetur'} nested />}
+          {checkAccess(a?.transaksi?.penjualan?.pos_kasir) && <DrawerItem label="POS Kasir" icon="print" onPress={() => navigation.navigate('POSKasir')} active={currentRoute === 'POSKasir'} nested />}
+          {checkAccess(a?.transaksi?.penjualan?.dpjual) && <DrawerItem label="DP Jual" icon="card" onPress={() => Alert.alert('Segera Hadir', 'Fitur DP Penjualan sedang dalam pengembangan.')} active={false} nested badge="Soon" />}
+          {checkAccess(a?.transaksi?.penjualan?.piutang) && <DrawerItem label="Piutang" icon="wallet" onPress={() => Alert.alert('Segera Hadir', 'Fitur Piutang Penjualan sedang dalam pengembangan.')} active={false} nested badge="Soon" />}
+        </CollapsibleSection>
+      )}
 
       {/* Jurnal - Collapsible */}
-      <CollapsibleSection title="Jurnal" icon="book">
-        <DrawerItem
-          label="Tambah"
-          icon="add-circle"
-          onPress={() => navigation.navigate('JurnalTambah')}
-          active={currentRoute === 'JurnalTambah'}
-          nested
-        />
-        <DrawerItem
-          label="Search"
-          icon="search"
-          onPress={() => navigation.navigate('JurnalSearch')}
-          active={currentRoute === 'JurnalSearch'}
-          nested
-        />
-      </CollapsibleSection>
+      {(checkAccess(a?.transaksi?.jurnal?.tambah) || checkAccess(a?.transaksi?.jurnal?.search) || checkAccess(a?.transaksi?.jurnal?.biaya)) && (
+        <CollapsibleSection title="Jurnal" icon="book">
+          {checkAccess(a?.transaksi?.jurnal?.tambah) && <DrawerItem label="Tambah" icon="add-circle" onPress={() => navigation.navigate('JurnalTambah')} active={currentRoute === 'JurnalTambah'} nested />}
+          {checkAccess(a?.transaksi?.jurnal?.search) && <DrawerItem label="Search" icon="search" onPress={() => navigation.navigate('JurnalSearch')} active={currentRoute === 'JurnalSearch'} nested />}
+          {checkAccess(a?.transaksi?.jurnal?.biaya) && <DrawerItem label="Biaya" icon="cash" onPress={() => Alert.alert('Segera Hadir', 'Fitur Jurnal Biaya sedang dalam tahap pengembangan untuk aplikasi mobile.')} active={false} nested badge="Soon" />}
+        </CollapsibleSection>
+      )}
 
-      <DrawerItem
-        label="Mutasi Akun"
-        icon="swap-horizontal"
-        onPress={() => navigation.navigate('MutasiAkun')}
-        active={currentRoute === 'MutasiAkun'}
-      />
-      <DrawerItem
-        label="Stok Opname"
-        icon="clipboard"
-        onPress={() => navigation.navigate('StokOpname')}
-        active={currentRoute === 'StokOpname'}
-      />
-      <DrawerItem
-        label="Pesan Barang"
-        icon="cube"
-        onPress={() => navigation.navigate('PesanBarang')}
-        active={currentRoute === 'PesanBarang'}
-      />
+      {checkAccess(a?.transaksi?.detailbaganakun) && <DrawerItem label="Mutasi Akun" icon="swap-horizontal" onPress={() => navigation.navigate('MutasiAkun')} active={currentRoute === 'MutasiAkun'} />}
+      {checkAccess(a?.transaksi?.stokopname) && <DrawerItem label="Stok Opname" icon="clipboard" onPress={() => navigation.navigate('StokOpname')} active={currentRoute === 'StokOpname'} />}
+      {checkAccess(a?.transaksi?.pesanbarang) && <DrawerItem label="Pesan Barang" icon="cube" onPress={() => navigation.navigate('PesanBarang')} active={currentRoute === 'PesanBarang'} />}
 
       {/* ECOMMERCE Section */}
-      <SectionHeader title="ECOMMERCE" />
-      <DrawerItem
-        label="Diskon & Promo"
-        icon="pricetag-outline"
-        onPress={() => navigation.navigate('DiskonScreen')}
-        active={currentRoute === 'DiskonScreen'}
-      />
-      <DrawerItem
-        label="Pesanan"
-        icon="list"
-        onPress={() => navigation.navigate('Pesanan')}
-        active={currentRoute === 'Pesanan'}
-      />
-      <DrawerItem
-        label="Chat"
-        icon="chatbubbles"
-        onPress={() => navigation.navigate('EcommerceChat')}
-        active={currentRoute === 'EcommerceChat'}
-      />
-      <DrawerItem
-        label="Notifikasi"
-        icon="notifications"
-        onPress={() => navigation.navigate('Notifikasi')}
-        active={currentRoute === 'Notifikasi'}
-      />
-      <DrawerItem
-        label="Penarikan"
-        icon="wallet"
-        onPress={() => navigation.navigate('Penarikan')}
-        active={currentRoute === 'Penarikan'}
-      />
-      <DrawerItem
-        label="Retur Online"
-        icon="return-up-back"
-        onPress={() => navigation.navigate('ReturOnline')}
-        active={currentRoute === 'ReturOnline'}
-      />
-      <DrawerItem
-        label="Booking Orders"
-        icon="airplane"
-        onPress={() => navigation.navigate('BookingOrders')}
-        active={currentRoute === 'BookingOrders'}
-        badge="NEW"
-      />
-      <DrawerItem
-        label="Integration"
-        icon="git-network"
-        onPress={() => navigation.navigate('Integration')}
-        active={currentRoute === 'Integration'}
-      />
+      {hasAnyTrue(a?.ecommerce) && <SectionHeader title="ECOMMERCE" />}
+      {checkAccess(a?.ecommerce?.diskon) && <DrawerItem label="Diskon & Promo" icon="pricetag-outline" onPress={() => navigation.navigate('DiskonScreen')} active={currentRoute === 'DiskonScreen'} />}
+      {checkAccess(a?.ecommerce?.pesanan) && <DrawerItem label="Pesanan" icon="list" onPress={() => navigation.navigate('Pesanan')} active={currentRoute === 'Pesanan'} />}
+      {checkAccess(a?.ecommerce?.ecommerce_chat) && <DrawerItem label="Chat" icon="chatbubbles" onPress={() => navigation.navigate('EcommerceChat')} active={currentRoute === 'EcommerceChat'} />}
+      {checkAccess(a?.ecommerce?.notifikasi) && <DrawerItem label="Notifikasi" icon="notifications" onPress={() => navigation.navigate('Notifikasi')} active={currentRoute === 'Notifikasi'} />}
+      {checkAccess(a?.ecommerce?.penarikan) && <DrawerItem label="Penarikan" icon="wallet" onPress={() => navigation.navigate('Penarikan')} active={currentRoute === 'Penarikan'} />}
+      {checkAccess(a?.ecommerce?.returonline) && <DrawerItem label="Retur Online" icon="return-up-back" onPress={() => navigation.navigate('ReturOnline')} active={currentRoute === 'ReturOnline'} />}
+      {checkAccess(a?.ecommerce?.booking_orders) && <DrawerItem label="Booking Orders" icon="airplane" onPress={() => navigation.navigate('BookingOrders')} active={currentRoute === 'BookingOrders'} badge="NEW" />}
+      {checkAccess(a?.ecommerce?.integration) && <DrawerItem label="Integration" icon="git-network" onPress={() => navigation.navigate('Integration')} active={currentRoute === 'Integration'} />}
 
-      {/* Tools - Collapsible */}
-      <CollapsibleSection title="Tools" icon="construct">
-        <DrawerItem
-          label="Produk"
-          icon="pricetag"
-          onPress={() => navigation.navigate('EcommerceToolsProduct')}
-          active={currentRoute === 'EcommerceToolsProduct'}
-          nested
-        />
-      </CollapsibleSection>
+      {/* Ecommerce Tools - Collapsible */}
+      {checkAccess(a?.ecommerce?.ecommerce_tools?.product) && (
+        <CollapsibleSection title="Tools" icon="construct">
+          {checkAccess(a?.ecommerce?.ecommerce_tools?.product) && <DrawerItem label="Produk" icon="pricetag" onPress={() => navigation.navigate('EcommerceToolsProduct')} active={currentRoute === 'EcommerceToolsProduct'} nested />}
+        </CollapsibleSection>
+      )}
 
-      <DrawerItem
-        label="Naikkan Produk"
-        icon="arrow-up"
-        onPress={() => navigation.navigate('NaikkanProduk')}
-        active={currentRoute === 'NaikkanProduk'}
-      />
-      <DrawerItem
-        label="Proses Otomatis"
-        icon="cog"
-        onPress={() => navigation.navigate('ProsesOtomatis')}
-        active={currentRoute === 'ProsesOtomatis'}
-      />
-      <DrawerItem
-        label="Scan Out"
-        icon="scan"
-        onPress={() => navigation.navigate('ScanOut')}
-        active={currentRoute === 'ScanOut'}
-      />
-      <DrawerItem
-        label="Scan In"
-        icon="scan"
-        onPress={() => navigation.navigate('ScanIn')}
-        active={currentRoute === 'ScanIn'}
-      />
-      <DrawerItem
-        label="Cari by Scan"
-        icon="search-circle"
-        onPress={() => navigation.navigate('ScanSearch')}
-        active={currentRoute === 'ScanSearch'}
-      />
+      {checkAccess(a?.ecommerce?.naikkan_produk) && <DrawerItem label="Naikkan Produk" icon="arrow-up" onPress={() => navigation.navigate('NaikkanProduk')} active={currentRoute === 'NaikkanProduk'} />}
+      {checkAccess(a?.ecommerce?.proses_otomatis) && <DrawerItem label="Proses Otomatis" icon="cog" onPress={() => navigation.navigate('ProsesOtomatis')} active={currentRoute === 'ProsesOtomatis'} />}
+      {checkAccess(a?.ecommerce?.scanout) && <DrawerItem label="Scan Out" icon="scan" onPress={() => navigation.navigate('ScanOut')} active={currentRoute === 'ScanOut'} />}
+      {checkAccess(a?.ecommerce?.scanin) && <DrawerItem label="Scan In" icon="scan" onPress={() => navigation.navigate('ScanIn')} active={currentRoute === 'ScanIn'} />}
+      {checkAccess(a?.ecommerce?.scanout) && <DrawerItem label="Cari by Scan" icon="search-circle" onPress={() => navigation.navigate('ScanSearch')} active={currentRoute === 'ScanSearch'} />}
 
       {/* LAPORAN Section */}
-      <SectionHeader title="LAPORAN" />
-      <DrawerItem
-        label="Neraca"
-        icon="stats-chart"
-        onPress={() => navigation.navigate('Neraca')}
-        active={currentRoute === 'Neraca'}
-      />
-      <DrawerItem
-        label="Laba Rugi"
-        icon="trending-up"
-        onPress={() => navigation.navigate('LabaRugi')}
-        active={currentRoute === 'LabaRugi'}
-      />
-      <DrawerItem
-        label="Laporan Barang"
-        icon="bar-chart"
-        onPress={() => navigation.navigate('LaporanBarang')}
-        active={currentRoute === 'LaporanBarang'}
-      />
-      <DrawerItem
-        label="Iklan"
-        icon="megaphone"
-        onPress={() => navigation.navigate('Iklan')}
-        active={currentRoute === 'Iklan'}
-      />
-      <DrawerItem
-        label="Perangkat WinForms"
-        icon="desktop-outline"
-        onPress={() => navigation.navigate('PerangkatList')}
-        active={currentRoute === 'PerangkatList'}
-      />
+      {hasAnyTrue(a?.laporan) && <SectionHeader title="LAPORAN" />}
+      {checkAccess(a?.laporan?.neraca) && <DrawerItem label="Neraca" icon="stats-chart" onPress={() => navigation.navigate('Neraca')} active={currentRoute === 'Neraca'} />}
+      {checkAccess(a?.laporan?.labarugi) && <DrawerItem label="Laba Rugi" icon="trending-up" onPress={() => navigation.navigate('LabaRugi')} active={currentRoute === 'LabaRugi'} />}
+      {checkAccess(a?.laporan?.laporanbarang) && <DrawerItem label="Laporan Barang" icon="bar-chart" onPress={() => navigation.navigate('LaporanBarang')} active={currentRoute === 'LaporanBarang'} />}
+      {checkAccess(a?.laporan?.iklan) && <DrawerItem label="Iklan" icon="megaphone" onPress={() => navigation.navigate('Iklan')} active={currentRoute === 'Iklan'} />}
+      {checkAccess(a?.laporan?.perangkat) && <DrawerItem label="Perangkat WinForms" icon="desktop-outline" onPress={() => navigation.navigate('PerangkatList')} active={currentRoute === 'PerangkatList'} />}
 
-      {/* SETTING Section */}
+      {/* SETTING Section - always visible */}
       <SectionHeader title="SETTING" />
-      <DrawerItem
-        label="Settings"
-        icon="settings"
-        onPress={() => navigation.navigate('Setting')}
-        active={currentRoute === 'Setting'}
-      />
+      <DrawerItem label="Settings" icon="settings" onPress={() => navigation.navigate('Setting')} active={currentRoute === 'Setting'} />
 
-      {/* CUSTOMER Section */}
-      <SectionHeader title="CUSTOMER" />
-      {/* Customer section is empty for now, ready for expansion */}
       </DrawerContentScrollView>
 
-      {/* Database Selector at Bottom (Admin Only) */}
-      {isAdmin && (
+      {/* Database Selector at Bottom */}
+      {(isAdmin || databases.length > 1) && (
         <View style={styles.databaseSelectorBottom}>
           <TouchableOpacity
             style={styles.databaseSelector}
@@ -543,7 +353,7 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ navigation, s
       )}
 
       {/* Database Picker Modal */}
-      {isAdmin && (
+      {(isAdmin || databases.length > 1) && (
         <Modal
           visible={showDatabasePicker}
           transparent={true}

@@ -78,8 +78,9 @@ export default function SearchBundlingModal({ visible, onClose, onSelect, except
       const filtered = bundlings.filter(
         (bundling) =>
           !exceptions.includes(bundling.id) &&
-          (bundling.nama.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            bundling.sku.toLowerCase().includes(searchQuery.toLowerCase()))
+          ((bundling.nama || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (bundling.sku || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (bundling.satuan || '').toLowerCase().includes(searchQuery.toLowerCase()))
       );
       setFilteredBundlings(filtered);
     }
@@ -238,9 +239,10 @@ export default function SearchBundlingModal({ visible, onClose, onSelect, except
                     onPress={() => toggleSelect(item)}
                   >
                     <View style={styles.itemContent}>
-                      <Text style={styles.itemName}>{item.nama}</Text>
-                      <Text style={styles.itemDetail}>SKU: {item.sku}</Text>
-                      <Text style={styles.itemDetail}>Stok: {item.stok || 0} | Harga: Rp {(item.hargajual2 || 0).toLocaleString()}</Text>
+                      <Text style={styles.itemName}>{item.nama || ''}</Text>
+                      <Text style={styles.itemDetail}>SKU: {item.sku || 'Tanpa SKU'}</Text>
+                      {!!item.satuan && <Text style={styles.itemDetail}>Satuan: {item.satuan}</Text>}
+                      <Text style={styles.itemDetail}>Stok: {item.stok || 0} | Harga: Rp {(item.hargajual2 || item.hargajual || 0).toLocaleString()}</Text>
                     </View>
                     {isSelected && <Ionicons name="checkmark-circle" size={24} color="#2563eb" />}
                   </TouchableOpacity>
