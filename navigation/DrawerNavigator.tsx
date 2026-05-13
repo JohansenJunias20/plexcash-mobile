@@ -101,6 +101,8 @@ const PerangkatStack = createNativeStackNavigator();
 const PembelianStack = createNativeStackNavigator();
 const PenjualanStack = createNativeStackNavigator();
 
+const ScanSearchStack = createNativeStackNavigator();
+
 const LoadingScreen = () => (
   <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#1F2937' }}>
     <ActivityIndicator size="large" color="#f59e0b" />
@@ -177,6 +179,28 @@ const OrdersStackScreen = () => (
     <OrdersStack.Screen name="OrderDetail" component={OrderDetailScreen} />
     <OrdersStack.Screen name="LabelPreview" component={LabelPreviewScreen} />
   </OrdersStack.Navigator>
+);
+
+const ScanSearchStackScreen = () => (
+  <ScanSearchStack.Navigator
+    screenOptions={{
+      headerShown: false,
+    }}
+  >
+    <ScanSearchStack.Screen name="ScanSearchMain" component={ScanSearchScreen} />
+    <ScanSearchStack.Screen
+      name="OrderDetail"
+      component={OrderDetailScreen}
+      options={{
+        headerShown: true,
+        headerStyle: { backgroundColor: '#f59e0b' },
+        headerTintColor: '#fff',
+        headerTitleStyle: { fontWeight: '600' },
+        title: 'Detail Pesanan',
+      }}
+    />
+    <ScanSearchStack.Screen name="LabelPreview" component={LabelPreviewScreen} />
+  </ScanSearchStack.Navigator>
 );
 
 const EcommerceChatStackScreen = () => (
@@ -323,7 +347,7 @@ const DrawerNavigatorContent = () => {
       {/* Scan Out, Scan In & Scan Search - Special */}
       <Drawer.Screen name="ScanOut" component={ScanOutScreen} />
       <Drawer.Screen name="ScanIn" component={ScanInScreen} />
-      <Drawer.Screen name="ScanSearch" component={ScanSearchScreen} />
+      <Drawer.Screen name="ScanSearch" component={ScanSearchStackScreen} />
     </Drawer.Navigator>
   );
 };

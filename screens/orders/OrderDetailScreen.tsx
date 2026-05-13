@@ -39,7 +39,20 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
   const [showImages, setShowImages] = useState(false);
   const [imagesLoaded, setImagesLoaded] = useState(false);
 
-  useEffect(() => { navigation.setOptions({ title: `Order ${id}` }); }, [navigation, id]);
+  useEffect(() => {
+    navigation.setOptions({
+      title: `Order ${id}`,
+      headerLeft: () => (
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={{ flexDirection: 'row', alignItems: 'center', paddingLeft: 4, gap: 4 }}
+        >
+          <Ionicons name="arrow-back" size={22} color="#f59e0b" />
+          <Text style={{ color: '#f59e0b', fontSize: 15, fontWeight: '600' }}>Scan</Text>
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation, id]);
 
   useEffect(() => { (async () => { try { const res = await ApiService.authenticatedRequest('/access'); if (res?.status) setAccess(res.access); } catch {} })(); }, []);
 
@@ -433,13 +446,22 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
 
       {/* Action Buttons - Fixed at bottom */}
       <View style={styles.actionContainer}>
+        {/* Kembali / Scan Lagi */}
+        <TouchableOpacity
+          style={[styles.actionButton, styles.backButton]}
+          onPress={() => navigation.goBack()}
+        >
+          <Ionicons name="scan-outline" size={18} color="#f59e0b" />
+          <Text style={styles.backButtonText}>Scan Lagi</Text>
+        </TouchableOpacity>
+
         <TouchableOpacity
           style={[styles.actionButton, styles.primaryButton, !canCreate && styles.buttonDisabled]}
           disabled={!canCreate}
           onPress={createSales}
         >
-          <Ionicons name="cart" size={20} color="#fff" />
-          <Text style={styles.primaryButtonText}>Create Sales</Text>
+          <Ionicons name="cart" size={18} color="#fff" />
+          <Text style={styles.primaryButtonText}>Buat Sales</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -447,8 +469,8 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
           disabled={!canCreate}
           onPress={printLabel}
         >
-          <Ionicons name="print" size={20} color="#111827" />
-          <Text style={styles.secondaryButtonText}>Print Label</Text>
+          <Ionicons name="print" size={18} color="#111827" />
+          <Text style={styles.secondaryButtonText}>Print</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -800,6 +822,18 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   buttonDisabled: {
-    opacity: 0.5,
+    opacity: 0.4,
+  },
+  backButton: {
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1.5,
+    borderColor: '#f59e0b',
+    flexShrink: 1,
+    paddingHorizontal: 10,
+  },
+  backButtonText: {
+    color: '#92400E',
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

@@ -133,16 +133,13 @@ export default function ScanSearchScreen() {
         setProcessing(false);
         setTimeout(() => setScanning(true), 500);
 
-        // Auto-navigate to order detail
-        navigation.navigate('Pesanan', {
-          screen: 'OrderDetail',
-          params: {
-            id: orderId,
-            id_ecommerce: idEcommerce,
-            scan_timestamp: d.scan_timestamp || null,
-            print_timestamp: d.print_timestamp || undefined,
-            scanned: d.scanned === true || d.scanned === 1 || d.scanned === '1',
-          }
+        // Auto-navigate to order detail (dalam ScanSearchStack)
+        navigation.navigate('OrderDetail', {
+          id: orderId,
+          id_ecommerce: idEcommerce,
+          scan_timestamp: d.scan_timestamp || null,
+          print_timestamp: d.print_timestamp || undefined,
+          scanned: d.scanned === true || d.scanned === 1 || d.scanned === '1',
         });
       } else {
         await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
@@ -208,12 +205,9 @@ export default function ScanSearchScreen() {
 
   const openOrderDetail = (item: ScanResult) => {
     if (item.status === 'found' && item.orderId && item.idEcommerce !== undefined) {
-      navigation.navigate('Pesanan', {
-        screen: 'OrderDetail',
-        params: {
-          id: item.orderId,
-          id_ecommerce: item.idEcommerce,
-        }
+      navigation.navigate('OrderDetail', {
+        id: item.orderId,
+        id_ecommerce: item.idEcommerce,
       });
     }
   };
@@ -371,42 +365,43 @@ export default function ScanSearchScreen() {
 
         {/* Camera View */}
         <View style={styles.cameraContainer}>
-          <Camera
-            style={styles.camera}
-            device={device}
-            isActive={isCameraActive && scanning}
-            codeScanner={codeScanner}
-          >
-            {!isCameraActive && (
-              <View style={styles.cameraDisabledOverlay}>
-                <Ionicons name="videocam-off" size={64} color="rgba(255,255,255,0.5)" />
-                <Text style={styles.cameraDisabledText}>Kamera Dinonaktifkan</Text>
-                <TouchableOpacity
-                  style={styles.enableCameraButton}
-                  onPress={() => setIsCameraActive(true)}
-                >
-                  <Text style={styles.enableCameraButtonText}>Aktifkan Kamera</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-            <View style={styles.overlay}>
-              <View style={styles.scanArea}>
-                <View style={[styles.corner, styles.topLeft]} />
-                <View style={[styles.corner, styles.topRight]} />
-                <View style={[styles.corner, styles.bottomLeft]} />
-                <View style={[styles.corner, styles.bottomRight]} />
-              </View>
-              <Text style={styles.instructionText}>
-                Scan barcode resi untuk mencari pesanan
-              </Text>
-              {currentScan && (
-                <View style={styles.scanFeedback}>
-                  <ActivityIndicator size="small" color="white" />
-                  <Text style={styles.scanFeedbackText}>Mencari pesanan...</Text>
+          {isCameraActive ? (
+            <Camera
+              style={styles.camera}
+              device={device}
+              isActive={scanning}
+              codeScanner={codeScanner}
+            >
+              <View style={styles.overlay}>
+                <View style={styles.scanArea}>
+                  <View style={[styles.corner, styles.topLeft]} />
+                  <View style={[styles.corner, styles.topRight]} />
+                  <View style={[styles.corner, styles.bottomLeft]} />
+                  <View style={[styles.corner, styles.bottomRight]} />
                 </View>
-              )}
+                <Text style={styles.instructionText}>
+                  Scan barcode resi untuk mencari pesanan
+                </Text>
+                {currentScan && (
+                  <View style={styles.scanFeedback}>
+                    <ActivityIndicator size="small" color="white" />
+                    <Text style={styles.scanFeedbackText}>Mencari pesanan...</Text>
+                  </View>
+                )}
+              </View>
+            </Camera>
+          ) : (
+            <View style={[styles.camera, styles.cameraDisabledOverlay]}>
+              <Ionicons name="videocam-off" size={64} color="rgba(255,255,255,0.5)" />
+              <Text style={styles.cameraDisabledText}>Kamera Dinonaktifkan</Text>
+              <TouchableOpacity
+                style={styles.enableCameraButton}
+                onPress={() => setIsCameraActive(true)}
+              >
+                <Text style={styles.enableCameraButtonText}>Aktifkan Kamera</Text>
+              </TouchableOpacity>
             </View>
-          </Camera>
+          )}
         </View>
 
         {/* Manual Input */}
@@ -481,16 +476,28 @@ export default function ScanSearchScreen() {
 
         {/* Status bar */}
         <View style={styles.statusBar}>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
             <View style={[
               styles.statusDot,
               { backgroundColor: processing ? '#F59E0B' : (scanning ? '#10B981' : '#EF4444') }
             ]} />
             <Text style={styles.statusText}>
-              {processing ? 'Mencari pesanan...' : (scanning ? 'Siap scan' : 'Processing...')}
+              {processing ? 'Mencari pesanan...' : (scanning ? 'Siap scan' : 'Kamera dijeda')}
             </Text>
           </View>
           {processing && <ActivityIndicator size="small" color="#F59E0B" style={{ marginLeft: 8 }} />}
+          {!processing && !scanning && (
+            <TouchableOpacity
+              style={styles.scanAgainButton}
+              onPress={() => {
+                setCurrentScan(null);
+                setScanning(true);
+              }}
+            >
+              <Ionicons name="scan-outline" size={16} color="white" />
+              <Text style={styles.scanAgainText}>Scan Lagi</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     </SafeAreaView>
@@ -595,15 +602,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   cameraDisabledOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    flex: 1,
     backgroundColor: 'rgba(0,0,0,0.85)',
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 10,
   },
   cameraDisabledText: {
     color: 'rgba(255,255,255,0.7)',
@@ -863,5 +865,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6B7280',
     fontWeight: '500',
+  },
+  scanAgainButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#3B82F6',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 6,
+  },
+  scanAgainText: {
+    color: 'white',
+    fontSize: 13,
+    fontWeight: '600',
   },
 });
