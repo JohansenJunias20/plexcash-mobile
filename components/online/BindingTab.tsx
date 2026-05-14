@@ -61,6 +61,7 @@ export default function BindingTab({ productId }: BindingTabProps): JSX.Element 
   const [productData, setProductData] = useState<ProductData | null>(null);
   const [platformsData, setPlatformsData] = useState<any[]>([]);
   const [syncingStock, setSyncingStock] = useState(false);
+  const [bindingInProgress, setBindingInProgress] = useState(false);
   const [ecommerceList, setEcommerceList] = useState<EcommerceAccount[]>([]);
   const [showTambahBaru, setShowTambahBaru] = useState(false);
   const [showBind, setShowBind] = useState(false);
@@ -328,36 +329,74 @@ export default function BindingTab({ productId }: BindingTabProps): JSX.Element 
 
   const handleSearchOnlineSelect = async (product: any) => {
     try {
+      setBindingInProgress(true);
       const selectedAccount = ecommerceList.find(
         (acc) => acc.id === searchOnlineModal.id_ecommerce
       );
 
       if (!selectedAccount || !productData) return;
 
-      // Add the bound product to platforms
-      const newPlatform: Platform = {
-        platform: selectedAccount.platform,
-        name: selectedAccount.name,
-        id_online: product.item_id.toString(),
+      /**
+       * Bind dilakukan via POST /ecommerce/upload (sama seperti web).
+       * Platform baru ditambahkan dengan id_online = id produk marketplace,
+       * id_online_mb = 0 (belum ada di DB), dan id_parent jika variant.
+       * Backend uploadProduct1 akan INSERT ke tabel online_masterbarang.
+       */
+      const newPlatformPayload = {
+        disconnected: false,
+        isVariant: product.isVariant || false,
+        id_online: (product.model_id || product.item_id).toString(),
         id_online_mb: 0,
         id_ecommerce: searchOnlineModal.id_ecommerce,
-        check: true,
-        isVariant: product.isVariant || false,
-        disconnected: false,
-        shop_name: selectedAccount.name,
-        product_name: product.name,
+        platform: selectedAccount.platform,
+        shop_id: selectedAccount.shop_id,
+        nama: product.name,
+        url: product.product_url || '',
+        id_parent: product.parent_id || undefined,
+        category: product.category || { id: '', name: '' },
       };
 
-      // Update platforms
-      const updatedPlatforms = platforms.map((p) => ({ ...p, check: false }));
-      updatedPlatforms.push(newPlatform);
-      setPlatforms(updatedPlatforms);
-      setCurrentIndex(updatedPlatforms.length - 1);
+      const uploadPayload = {
+        id_masterbarang: productId,
+        nama: productData.nama,
+        berat: productData.berat || 0,
+        deskripsi: '',
+        new_sku: productData.sku,
+        images: [],
+        platforms: [newPlatformPayload],
+      };
 
-      Alert.alert('Success', `Bound product from ${selectedAccount.platform}`);
+      console.log('🔗 [BIND] Sending upload/bind request:', JSON.stringify(uploadPayload));
+
+      const bindResponse = await ApiService.authenticatedRequest('/ecommerce/upload', {
+        method: 'POST',
+        body: JSON.stringify(uploadPayload),
+      });
+
+      console.log('🔗 [BIND] Response:', JSON.stringify(bindResponse));
+
+      if (!bindResponse?.status) {
+        // reason bisa berupa object atau string — konversi aman ke string
+        const reason = bindResponse?.reason;
+        const reasonText =
+          typeof reason === 'string'
+            ? reason
+            : typeof reason === 'object' && reason !== null
+            ? (reason.message || reason.msg || reason.error || JSON.stringify(reason))
+            : 'Gagal melakukan bind produk';
+        Alert.alert('Gagal', reasonText);
+        return;
+      }
+
+      // Refresh data dari server agar id_online_mb dan data lain up-to-date
+      await fetchData();
+
+      Alert.alert('Berhasil', `Produk berhasil di-bind ke ${selectedAccount.platform}`);
     } catch (error) {
       console.error('Error binding product:', error);
-      Alert.alert('Error', 'Failed to bind product');
+      Alert.alert('Error', 'Gagal melakukan bind produk');
+    } finally {
+      setBindingInProgress(false);
     }
   };
 
@@ -372,6 +411,14 @@ export default function BindingTab({ productId }: BindingTabProps): JSX.Element 
 
   return (
     <ScrollView style={styles.container}>
+      {/* Binding Progress Overlay */}
+      {bindingInProgress && (
+        <View style={styles.bindingOverlay}>
+          <ActivityIndicator size="large" color="#f59e0b" />
+          <Text style={styles.bindingOverlayText}>Menyimpan bind...</Text>
+        </View>
+      )}
+
       {/* Product Info Header */}
       {productData && (
         <View style={styles.productHeader}>
@@ -386,7 +433,11 @@ export default function BindingTab({ productId }: BindingTabProps): JSX.Element 
           <Ionicons name="add-circle-outline" size={20} color="#f59e0b" />
           <Text style={styles.actionButtonText}>Tambah Baru</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.actionButton} onPress={handleBind}>
+        <TouchableOpacity
+          style={[styles.actionButton, bindingInProgress && styles.actionButtonDisabled]}
+          onPress={handleBind}
+          disabled={bindingInProgress}
+        >
           <Ionicons name="link-outline" size={20} color="#2563eb" />
           <Text style={styles.actionButtonText}>Bind</Text>
         </TouchableOpacity>
@@ -783,6 +834,22 @@ const styles = StyleSheet.create({
   },
   actionButtonDisabled: {
     opacity: 0.6,
+  },
+  bindingOverlay: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fef3c7',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    gap: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#fde68a',
+  },
+  bindingOverlayText: {
+    fontSize: 14,
+    color: '#92400e',
+    fontWeight: '600',
   },
   actionButtonText: {
     fontSize: 12,

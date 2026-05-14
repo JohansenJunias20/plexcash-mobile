@@ -112,8 +112,8 @@ export default function SearchOnlineModal({
   };
 
   const handleSelect = (product: Product) => {
-    onSelect(product);
     onClose();
+    onSelect(product);
   };
 
   const renderProduct = ({ item }: { item: Product }) => {
