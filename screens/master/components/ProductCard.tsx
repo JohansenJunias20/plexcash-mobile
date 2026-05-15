@@ -10,12 +10,12 @@ import { Ionicons } from '@expo/vector-icons';
 
 interface IDefaultBarang {
   id: number | string;
-  nama_barang: string;
+  nama: string;
   sku: string;
-  harga: number;
+  harga_jual: number;
   stok: number;
-  gambar?: string;
-  status_bind?: 'bound' | 'unbound' | 'pending';
+  imageUrl?: string;
+  binded?: boolean;
   status_import?: 'waiting' | 'processing' | 'completed' | 'error';
 }
 
@@ -99,9 +99,9 @@ const ProductCard: React.FC<ProductCardProps> = React.memo(({
 
         {/* Product Image */}
         <View style={styles.imageContainer}>
-          {item.gambar ? (
+          {item.imageUrl ? (
             <Image
-              source={{ uri: item.gambar }}
+              source={{ uri: item.imageUrl }}
               style={styles.image}
               resizeMode="cover"
             />
@@ -115,7 +115,7 @@ const ProductCard: React.FC<ProductCardProps> = React.memo(({
         {/* Product Info */}
         <View style={styles.infoContainer}>
           <Text style={styles.productName} numberOfLines={2}>
-            {item.nama_barang}
+            {item.nama}
           </Text>
 
           <View style={styles.detailRow}>
@@ -129,8 +129,8 @@ const ProductCard: React.FC<ProductCardProps> = React.memo(({
           </View>
 
           <View style={styles.priceRow}>
-            <Text style={styles.price}>{formatPrice(item.harga || 0)}</Text>
-            {getStatusIcon(item.status_bind)}
+            <Text style={styles.price}>{formatPrice(item.harga_jual || 0)}</Text>
+            {item.binded ? getStatusIcon('bound') : getStatusIcon('unbound')}
           </View>
 
           {item.status_import && (

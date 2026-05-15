@@ -56,7 +56,8 @@ export const AVAILABLE_MENUS: MenuItem[] = [
 
   // ECOMMERCE
   { id: 'DiskonScreen', label: 'Diskon & Promo', subtitle: 'Promo & Harga Coret', icon: 'pricetag-outline', route: 'DiskonScreen', category: 'ECOMMERCE', accessKey: 'ecommerce.diskon' },
-  { id: 'Pesanan', label: 'Pesanan', subtitle: 'Ecommerce Orders', icon: 'cart-outline', route: 'Pesanan', category: 'ECOMMERCE', accessKey: 'ecommerce.pesanan' },
+  { id: 'Pesanan', label: 'Pesanan V1', subtitle: 'Legacy Orders', icon: 'cart-outline', route: 'Pesanan', category: 'ECOMMERCE', accessKey: 'ecommerce.pesanan' },
+  { id: 'PesananV2', label: 'Pesanan V2', subtitle: 'Ecommerce Orders', icon: 'cart', route: 'PesananV2', category: 'ECOMMERCE', accessKey: 'ecommerce.pesanan' },
   { id: 'EcommerceChat', label: 'Chat', subtitle: 'Customer Chat', icon: 'chatbubbles-outline', route: 'EcommerceChat', category: 'ECOMMERCE', accessKey: 'ecommerce.ecommerce_chat' },
   { id: 'Notifikasi', label: 'Notifikasi', subtitle: 'Notifications', icon: 'notifications-outline', route: 'Notifikasi', category: 'ECOMMERCE', accessKey: 'ecommerce.notifikasi' },
   { id: 'Penarikan', label: 'Penarikan', subtitle: 'Withdrawal', icon: 'wallet-outline', route: 'Penarikan', category: 'ECOMMERCE', accessKey: 'ecommerce.penarikan' },
@@ -83,7 +84,7 @@ export const AVAILABLE_MENUS: MenuItem[] = [
 export const DEFAULT_QUICK_ACTIONS: string[] = [
   'POSKasir',
   'BarangList',
-  'Pesanan',
+  'PesananV2',
   'ScanOut',
   'UserList',
   'BundlingList',

@@ -12,12 +12,12 @@ import ProductCard from './ProductCard';
 
 interface IDefaultBarang {
   id: number | string;
-  nama_barang: string;
+  nama: string;
   sku: string;
-  harga: number;
+  harga_jual: number;
   stok: number;
-  gambar?: string;
-  status_bind?: 'bound' | 'unbound' | 'pending';
+  imageUrl?: string;
+  binded?: boolean;
   status_import?: 'waiting' | 'processing' | 'completed' | 'error';
 }
 

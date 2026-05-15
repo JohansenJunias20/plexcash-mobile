@@ -298,6 +298,7 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ navigation, s
       {hasAnyTrue(a?.ecommerce) && <SectionHeader title="ECOMMERCE" />}
       {checkAccess(a?.ecommerce?.diskon) && <DrawerItem label="Diskon & Promo" icon="pricetag-outline" onPress={() => navigation.navigate('DiskonScreen')} active={currentRoute === 'DiskonScreen'} />}
       {checkAccess(a?.ecommerce?.pesanan) && <DrawerItem label="Pesanan" icon="list" onPress={() => navigation.navigate('Pesanan')} active={currentRoute === 'Pesanan'} />}
+      {checkAccess(a?.ecommerce?.pesanan) && <DrawerItem label="Pesanan V2" icon="list-circle" onPress={() => navigation.navigate('PesananV2')} active={currentRoute === 'PesananV2'} badge="NEW" />}
       {checkAccess(a?.ecommerce?.ecommerce_chat) && <DrawerItem label="Chat" icon="chatbubbles" onPress={() => navigation.navigate('EcommerceChat')} active={currentRoute === 'EcommerceChat'} />}
       {checkAccess(a?.ecommerce?.notifikasi) && <DrawerItem label="Notifikasi" icon="notifications" onPress={() => navigation.navigate('Notifikasi')} active={currentRoute === 'Notifikasi'} />}
       {checkAccess(a?.ecommerce?.penarikan) && <DrawerItem label="Penarikan" icon="wallet" onPress={() => navigation.navigate('Penarikan')} active={currentRoute === 'Penarikan'} />}

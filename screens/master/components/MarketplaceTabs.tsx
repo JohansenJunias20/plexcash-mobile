@@ -10,19 +10,22 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 
 interface Marketplace {
-  id_ecommerce: number;
-  nama_ecommerce: string;
-  nama_toko: string;
+  id: number;
+  platform: string;
+  name?: string;
+  shop_id: string;
+  status?: string;
   status_import?: 'idle' | 'importing' | 'completed' | 'error';
   import_progress?: number;
   import_total?: number;
 }
 
 interface MarketplaceStatus {
-  id_ecommerce: number;
-  status: 'idle' | 'importing' | 'completed' | 'error';
-  progress: number;
-  total: number;
+  import_status: 'idle' | 'in_progress' | 'completed' | 'failed';
+  progress?: {
+    processed: number;
+    total: number;
+  };
   message?: string;
 }
 
@@ -41,11 +44,11 @@ const MarketplaceTabs: React.FC<MarketplaceTabsProps> = ({
 }) => {
   const getStatusIcon = (status?: string) => {
     switch (status) {
-      case 'importing':
+      case 'in_progress':
         return <ActivityIndicator size="small" color="#fbbf24" />;
       case 'completed':
         return <Ionicons name="checkmark-circle" size={16} color="#10b981" />;
-      case 'error':
+      case 'failed':
         return <Ionicons name="alert-circle" size={16} color="#ef4444" />;
       default:
         return null;
@@ -54,11 +57,11 @@ const MarketplaceTabs: React.FC<MarketplaceTabsProps> = ({
 
   const getStatusColor = (status?: string) => {
     switch (status) {
-      case 'importing':
+      case 'in_progress':
         return '#fbbf24';
       case 'completed':
         return '#10b981';
-      case 'error':
+      case 'failed':
         return '#ef4444';
       default:
         return '#6b7280';
@@ -82,12 +85,12 @@ const MarketplaceTabs: React.FC<MarketplaceTabsProps> = ({
       >
         {marketplaces.map((marketplace, index) => {
           const isActive = index === currentIndex;
-          const status = marketplaceStatus.get(marketplace.id_ecommerce);
-          const statusColor = getStatusColor(status?.status);
+          const status = marketplaceStatus.get(marketplace.id);
+          const statusColor = getStatusColor(status?.import_status);
 
           return (
             <TouchableOpacity
-              key={marketplace.id_ecommerce}
+              key={marketplace.id}
               style={[
                 styles.tab,
                 isActive && styles.tabActive,
@@ -98,28 +101,28 @@ const MarketplaceTabs: React.FC<MarketplaceTabsProps> = ({
               <View style={styles.tabContent}>
                 <View style={styles.tabHeader}>
                   <Text style={[styles.tabTitle, isActive && styles.tabTitleActive]}>
-                    {marketplace.nama_ecommerce}
+                    {marketplace.platform}
                   </Text>
-                  {status && getStatusIcon(status.status)}
+                  {status && getStatusIcon(status.import_status)}
                 </View>
                 <Text style={[styles.tabSubtitle, isActive && styles.tabSubtitleActive]}>
-                  {marketplace.nama_toko}
+                  {marketplace.name || marketplace.shop_id}
                 </Text>
-                {status && status.status === 'importing' && (
+                {status && status.import_status === 'in_progress' && status.progress && status.progress.total > 0 && (
                   <View style={styles.progressContainer}>
                     <View style={styles.progressBar}>
                       <View
                         style={[
                           styles.progressFill,
                           {
-                            width: `${(status.progress / status.total) * 100}%`,
+                            width: `${(status.progress.processed / status.progress.total) * 100}%`,
                             backgroundColor: statusColor,
                           },
                         ]}
                       />
                     </View>
                     <Text style={styles.progressText}>
-                      {status.progress}/{status.total}
+                      {status.progress.processed}/{status.progress.total}
                     </Text>
                   </View>
                 )}

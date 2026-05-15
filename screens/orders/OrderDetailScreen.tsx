@@ -31,7 +31,7 @@ export type OrderDetail = {
 type Props = NativeStackScreenProps<AppStackParamList, 'OrderDetail'>;
 
 export default function OrderDetailScreen({ route, navigation }: Props) {
-  const { id, id_ecommerce, scan_timestamp, print_timestamp, scanned } = route.params;
+  const { id, id_ecommerce, scan_timestamp, print_timestamp, scanned, booking_sn, kilat_order_data } = route.params;
   const [detail, setDetail] = useState<OrderDetail | null>(null);
   const [access, setAccess] = useState<{ actions?: { create?: boolean } } | undefined>();
   const [loading, setLoading] = useState(true);
@@ -89,7 +89,8 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
       if (isRefresh) setRefreshing(true);
       else setLoading(true);
 
-      const res = await ApiService.authenticatedRequest(`/get/ecommerce/order?id=${id}&id_ecommerce=${id_ecommerce}`);
+      const encodedId = encodeURIComponent(id || '');
+      const res = await ApiService.authenticatedRequest(`/get/ecommerce/order?id=${encodedId}&id_ecommerce=${id_ecommerce}`);
       if (res?.status) {
         const d = res.data;
 
@@ -121,6 +122,35 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
           print_timestamp: finalPrintTimestamp,
           scanned: finalScanned,
           scan_timestamp: finalScanTimestamp,
+        });
+      } else if (booking_sn) {
+        // Kilat order: the marketplace API might not support lookup by booking_sn.
+        // Use pre-fetched kilat_order_data from navigation params (items, shipping, etc.)
+        const kd = kilat_order_data;
+        setDetail({
+          id: id || booking_sn,
+          id_ecommerce,
+          platform: kd?.platform || 'SHOPEE',
+          ecommerce_name: kd?.ecommerce_name,
+          date: kd?.tanggal_order,
+          invoice: undefined,
+          status: kd?.status || 'PENGIRIMAN KILAT',
+          total_price: kd?.total_harga,
+          ekspedisi: kd?.nama_kurir,
+          items: (kd?.items || []).map((it: any) => ({
+            sku: it.sku || '-',
+            name: it.nama || it.name || '-',
+            qty: it.qty || 1,
+            price: it.harga_jual || it.price || 0,
+            id_online: undefined,
+            id_parent: undefined,
+            image_url: '',
+          })),
+          orderType: 'PENGIRIMAN KILAT',
+          booking_sn,
+          print_timestamp: print_timestamp || undefined,
+          scanned: scanned || false,
+          scan_timestamp: scan_timestamp || null,
         });
       }
     } catch (e) {
