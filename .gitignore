@@ -3,6 +3,9 @@
 # dependencies
 node_modules/
 
+# Android local config
+android/local.properties
+
 # Expo
 .expo/
 dist/

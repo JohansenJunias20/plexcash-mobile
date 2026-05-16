@@ -2,12 +2,17 @@
 
 buildscript {
   ext.kotlinVersion = '2.1.20'
+  configurations.all {
+    resolutionStrategy {
+      force 'com.android.tools.build:gradle:8.7.3'
+    }
+  }
   repositories {
     google()
     mavenCentral()
   }
   dependencies {
-    classpath('com.android.tools.build:gradle')
+    classpath('com.android.tools.build:gradle:8.7.3')
     classpath('com.facebook.react:react-native-gradle-plugin')
     classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion")
   }
@@ -32,3 +37,5 @@ allprojects {
 
 apply plugin: "expo-root-project"
 apply plugin: "com.facebook.react.rootproject"
+
+
