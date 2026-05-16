@@ -6,7 +6,7 @@
 // For Android Emulator: use http://10.0.2.2 (maps to host's localhost)
 // For Physical Device: use your computer's IP address (e.g., http://192.168.1.210)
 export const API_BASE_URL = "https://app.plexseller.com"; // PRODUCTION - jangan dipakai saat development
-// export const API_BASE_URL = "http://192.168.1.101:80"; // DEVELOPMENT - local server
+// export const API_BASE_URL = "http://192.168.0.106:80"; // DEVELOPMENT - local server
 
 // Debug: Log the actual environment variables being used
 console.log('[API] Environment Debug:', {
@@ -455,9 +455,9 @@ class ApiService {
         console.log('❌ [VALIDATE] Device validation failed');
         console.log('❌ [VALIDATE] Response status:', response.status);
         console.log('❌ [VALIDATE] Error message:', data.message);
-        console.log('🧹 [VALIDATE] Clearing device auth due to validation failure');
+        console.log('⚠️ [VALIDATE] Ignoring validation failure, maintaining session as requested');
 
-        await this.clearDeviceAuth();
+        // Removed await this.clearDeviceAuth();
 
         return {
           success: false,
@@ -471,9 +471,9 @@ class ApiService {
       console.log('💥 [VALIDATE] Error message:', (error as any)?.message);
       console.log('💥 [VALIDATE] Error stack:', (error as any)?.stack);
       console.log('💥 [VALIDATE] Full error object:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
-      console.log('🧹 [VALIDATE] Clearing device auth due to network error');
+      console.log('⚠️ [VALIDATE] Ignoring network error, maintaining session');
 
-      await this.clearDeviceAuth();
+      // Removed await this.clearDeviceAuth();
 
       return {
         success: false,
@@ -575,9 +575,24 @@ class ApiService {
     console.log('🔑 [AUTH-HEADER] Building auth header...');
 
     // Prefer device token stored via QR authorization
-    const deviceToken = await getTokenAuth();
+    let deviceToken = await getTokenAuth();
+
+    if (!deviceToken) {
+      console.log('🔑 [AUTH-HEADER] Not found in SecureStore, trying AsyncStorage fallback...');
+      deviceToken = await AsyncStorage.getItem('authToken');
+      if (deviceToken) {
+        console.log('🔑 [AUTH-HEADER] Found token in AsyncStorage, syncing to SecureStore...');
+        try {
+          const { setTokenAuth } = require('./token');
+          await setTokenAuth(deviceToken);
+        } catch (e) {
+          console.error('🔑 [AUTH-HEADER] Failed to sync token to SecureStore:', e);
+        }
+      }
+    }
+
     if (deviceToken) {
-      console.log('🔑 [AUTH-HEADER] Using device token from SecureStore');
+      console.log('🔑 [AUTH-HEADER] Using device token');
       console.log('🔑 [AUTH-HEADER] Token (first 50 chars):', deviceToken.substring(0, 50) + '...');
       return { Authorization: `Bearer ${deviceToken}` };
     }
@@ -695,13 +710,15 @@ class ApiService {
           console.log('❌ [AUTH-REQ] Already retried once, not retrying again');
         }
 
-        // If we reach here, refresh failed or not applicable - clear auth
-        console.log(`❌ [AUTH-REQ] CLEARING TOKEN after failed refresh attempt`);
-        console.log(`❌ [AUTH-REQ] Stack trace:`);
-        console.log(new Error().stack);
-
-        try { await clearTokenAuth(); } catch {}
-        if (this.authErrorHandler) this.authErrorHandler();
+        // If we reach here, refresh failed or not applicable
+        console.log(`❌ [AUTH-REQ] Token refresh failed or not applicable. IGNORING expired token and keeping user logged in.`);
+        
+        // REMOVED automatic logout
+        // try { await clearTokenAuth(); } catch { }
+        // if (this.authErrorHandler) this.authErrorHandler();
+        
+        // We still throw Unauthorized so the specific API call fails and can be caught by UI
+        // But the user remains authenticated in the app
         throw new Error('Unauthorized');
       }
 

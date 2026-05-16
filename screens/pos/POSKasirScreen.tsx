@@ -723,32 +723,91 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
 
       if (bundlingData.status && bundlingData.data) {
         // PART 3: Fetch detail for each bundling to get masterbarang composition
-        const bundlingDetailsPromises = bundlingData.data.map(async (bundling: any) => {
+        let bundlingDetails: BundlingVariant[] = [];
+        const bundlingIds = bundlingData.data.map((b: any) => b.id);
+        
+        if (bundlingIds.length > 0) {
           try {
-            const detailResponse = await fetch(`${API_BASE_URL}/get/bundling?id=${bundling.id}`, {
-              headers: { Authorization: `Bearer ${token}` }
-            });
-            const detailData = await detailResponse.json();
+            // Fetch all detailbundling in one request using 'or' condition
+            const CHUNK_SIZE = 30; // Chunk to prevent URL too long
+            let allDetailBundlings: any[] = [];
+            
+            for (let i = 0; i < bundlingIds.length; i += CHUNK_SIZE) {
+              const chunkIds = bundlingIds.slice(i, i + CHUNK_SIZE);
+              const detailFormat = chunkIds.map((id: number) => `id_bundling:equal:${id}`).join(',');
+              const detailRes = await fetch(`${API_BASE_URL}/get/detailbundling/condition/or/${detailFormat}`, {
+                headers: { Authorization: `Bearer ${token}` }
+              });
+              const detailJson = await detailRes.json();
+              if (detailJson.status && detailJson.data) {
+                allDetailBundlings = [...allDetailBundlings, ...detailJson.data];
+              }
+            }
 
-            if (detailData.status && detailData.data) {
+            // Extract all masterbarang ids
+            const mbIds = [...new Set(allDetailBundlings.map((d: any) => d.id_masterbarang))].filter(Boolean);
+            
+            let allMasterBarangs: any[] = [];
+            if (mbIds.length > 0) {
+              // Fetch all masterbarang in one request
+              for (let i = 0; i < mbIds.length; i += CHUNK_SIZE) {
+                const chunkIds = mbIds.slice(i, i + CHUNK_SIZE);
+                const mbFormat = chunkIds.map((id: any) => `id:equal:${id}`).join(',');
+                const mbRes = await fetch(`${API_BASE_URL}/get/masterbarang/condition/or/${mbFormat}`, {
+                  headers: { Authorization: `Bearer ${token}` }
+                });
+                const mbJson = await mbRes.json();
+                if (mbJson.status && mbJson.data) {
+                  allMasterBarangs = [...allMasterBarangs, ...mbJson.data];
+                }
+              }
+            }
+            
+            // Reconstruct the bundlingDetails objects
+            bundlingDetails = bundlingData.data.map((bundling: any) => {
+              const details = allDetailBundlings.filter((d: any) => d.id_bundling === bundling.id);
+              const items = details.map((d: any) => {
+                const mb = allMasterBarangs.find(m => m.id === d.id_masterbarang);
+                return {
+                  id: d.id,
+                  id_masterbarang: d.id_masterbarang,
+                  qty_required: d.qty_required,
+                  berat: mb?.berat || 0,
+                  hargajual: mb?.hargajual2 || "0",
+                  stok: mb?.stok || 0,
+                  nama: mb?.nama || "",
+                  sku: mb?.sku || "",
+                  hpp: mb?.hpp || 0,
+                  satuan: mb?.satuan || "",
+                  merk: mb?.merk || ""
+                };
+              });
+              
+              // Calculate stock based on minimum available components
+              let stok = Infinity;
+              if (items.length === 0) {
+                stok = 0;
+              } else {
+                stok = items.reduce((minStok: number, item: any) => {
+                  const maxPossible = Math.floor(Number(item.stok || 0) / Number(item.qty_required || 1));
+                  return maxPossible < minStok ? maxPossible : minStok;
+                }, Infinity);
+              }
+              
               return {
                 id: bundling.id,
                 nama: bundling.nama,
                 sku: bundling.sku,
-                hargajual: detailData.data.harga || bundling.hargajual || 0,
-                stok: detailData.data.stok || 0,
-                satuan: detailData.data.satuan || undefined,
-                items: detailData.data.items || []
+                hargajual: bundling.hargajual || 0,
+                stok: stok === Infinity ? 0 : stok,
+                satuan: bundling.satuan || undefined,
+                items: items
               };
-            }
-            return null;
+            });
           } catch (error) {
-            console.error(`Error fetching bundling detail for id ${bundling.id}:`, error);
-            return null;
+            console.error(`Error fetching bulk bundling details:`, error);
           }
-        });
-
-        const bundlingDetails = (await Promise.all(bundlingDetailsPromises)).filter(b => b !== null) as BundlingVariant[];
+        }
 
         // PART 4: Group bundling by masterbarang
         // Create a map of id_masterbarang -> bundling variants

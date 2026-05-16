@@ -9,6 +9,7 @@ import ApiService from './services/api';
 import LogViewer from './components/LogViewer';
 import UpdateModal from './components/UpdateModal';
 import UpdateSuccessModal from './components/UpdateSuccessModal';
+import SubscriptionAlertModal from './components/SubscriptionAlertModal';
 import { useAppUpdate } from './hooks/useAppUpdate';
 import * as AuthSession from "expo-auth-session";
 import { useEffect } from 'react';
@@ -109,6 +110,9 @@ const AppContent = (): JSX.Element => {
 
       {/* Developer Mode Log Viewer */}
       {isDeveloperMode && <LogViewer visible={true} />}
+
+      {/* Subscription Alert Modal */}
+      <SubscriptionAlertModal />
 
       {/* Flash Message - Global notification system */}
       <FlashMessage position="top" />

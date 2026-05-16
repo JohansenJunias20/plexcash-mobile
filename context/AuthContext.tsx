@@ -150,11 +150,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           // PERSISTENT AUTH FIX: Don't clear auth state if Firebase user is null
           // This prevents automatic logout when Firebase token expires
           // Check if we have a valid session in AsyncStorage first
-          const storedAuthMethod = await AsyncStorage.getItem('authMethod');
-          const storedIsAuth = await AsyncStorage.getItem('isAuthenticated');
+          const authToken = await AsyncStorage.getItem('authToken');
 
-          if (storedAuthMethod === 'firebase' && storedIsAuth === 'true') {
-            logAuth('⚠️ Firebase user is null but we have stored Firebase auth - keeping session alive');
+          if (authToken) {
+            logAuth('⚠️ Firebase user is null but we have stored auth - keeping session alive');
             console.log('⚠️ [AUTH-STATE-CHANGED] Firebase user null but stored auth exists - maintaining session');
             // Don't clear auth state - user will remain logged in
           } else {
@@ -208,13 +207,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               return;
             } else {
               console.log('❌ [AUTH] Device validation failed:', validationResult.message);
-              console.log('🧹 [AUTH] Clearing device auth due to validation failure');
-              await ApiService.clearDeviceAuth();
+              console.log('⚠️ [AUTH] Ignoring validation failure to keep session active');
+              // await ApiService.clearDeviceAuth();
             }
           } catch (error) {
             console.error('❌ [AUTH] Error during device validation:', error);
-            console.log('🧹 [AUTH] Clearing device auth due to error');
-            await ApiService.clearDeviceAuth();
+            console.log('⚠️ [AUTH] Ignoring error to keep session active');
+            // await ApiService.clearDeviceAuth();
           }
         } else {
           console.log('🔍 [AUTH] Device not authorized, checking other auth methods');
@@ -225,9 +224,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const isAuth = await AsyncStorage.getItem('isAuthenticated');
         const authMethod = await AsyncStorage.getItem('authMethod');
 
-        // PERSISTENT AUTH FIX: Restore both QR-code AND Firebase auth from AsyncStorage
-        // This makes Firebase auth behave the same as QR-code auth (no automatic logout)
-        if (authToken && userEmail && isAuth === 'true' && (authMethod === 'qr-code' || authMethod === 'firebase')) {
+        // PERSISTENT AUTH FIX: Restore all sessions from AsyncStorage
+        // This prevents automatic logouts when token validation fails.
+        // We do NOT check `isAuth === 'true'` because device auth does not store this key.
+        if (authToken && userEmail) {
           console.log(`✅ [AUTH] Found ${authMethod} auth token, restoring session (no validation)`);
 
           // Ensure the token is also present in SecureStore.
@@ -245,7 +245,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
           // PERMANENT AUTH: Skip token validation to prevent automatic logout
           // Users will remain logged in until they manually sign out
-          setUser({ email: userEmail, authMethod: authMethod as 'qr-code' | 'firebase' });
+          setUser({ email: userEmail, authMethod: (authMethod as any) || 'unknown', deviceAuthorized: isDeviceAuthorized });
           setIsAuthenticated(true);
           setIsLoading(false);
           return;
@@ -411,24 +411,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       console.log('🚪 [AUTH] Signing out user...');
 
-      if ((user as any)?.authMethod !== 'qr-code' && (user as any)?.authMethod !== 'device' && (user as any)?.authMethod !== 'pin') {
+      // Fix: Wrap Firebase signout in try/catch and ignore errors
+      try {
         await auth.signOut();
+      } catch (e) {
+        console.warn('Firebase sign out error (can be safely ignored):', e);
       }
 
-      if ((user as any)?.authMethod === 'device' || (user as any)?.authMethod === 'pin') {
-        await ApiService.clearDeviceAuth();
-      } else {
-        await AsyncStorage.removeItem('isAuthenticated');
-        await AsyncStorage.removeItem('userEmail');
-        await AsyncStorage.removeItem('authToken');
-      }
+      // Fix: Always clear everything to ensure we don't end up in an invalid state
+      await ApiService.clearDeviceAuth();
+      await AsyncStorage.removeItem('isAuthenticated');
+      await AsyncStorage.removeItem('userEmail');
+      await AsyncStorage.removeItem('authToken');
+      await AsyncStorage.removeItem('authMethod');
 
       setUser(null);
       setIsAuthenticated(false);
       console.log('✅ [AUTH] User signed out successfully');
     } catch (error) {
       console.error('❌ [AUTH] Sign out error:', error);
-      throw error;
+      // Force state update anyway
+      setUser(null);
+      setIsAuthenticated(false);
     }
   };
 
