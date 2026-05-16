@@ -50,10 +50,10 @@ const BindMassalModal: React.FC<BindMassalModalProps> = ({
         id_ecommerce: idEcommerce,
       });
 
-      if (response?.success) {
+      if (response?.status) {
         const data = response.data;
-        const successCount = data?.success || 0;
-        const failedCount = data?.failed || 0;
+        const successCount = (data?.bound_count || 0) + (data?.already_bound_count || 0);
+        const failedCount = data?.failed_sku_count || 0;
 
         showMessage({
           message: 'Berhasil',
@@ -64,7 +64,7 @@ const BindMassalModal: React.FC<BindMassalModalProps> = ({
 
         onSuccess();
       } else {
-        throw new Error(response?.message || 'Bind gagal');
+        throw new Error(response?.reason || 'Bind gagal');
       }
     } catch (error: any) {
       console.error('Error binding products:', error);

@@ -14,6 +14,7 @@ import SupplierEditScreen from '../screens/supplier/SupplierEditScreen';
 import CustomerListScreen from '../screens/customer/CustomerListScreen';
 import CustomerEditScreen from '../screens/customer/CustomerEditScreen';
 import OrdersListScreen from '../screens/orders/OrdersListScreen';
+import PesananV2Screen from '../screens/ecommerce/PesananV2Screen';
 import OrderDetailScreen from '../screens/orders/OrderDetailScreen';
 import LabelPreviewScreen from '../screens/orders/LabelPreviewScreen';
 import ScanOutScreen from '../screens/scanout/ScanOutScreen';
@@ -44,12 +45,27 @@ export type AppStackParamList = {
   CustomerList: undefined;
   CustomerEdit: { id: number } | undefined;
   OrdersList: undefined;
+  PesananV2: undefined;
   OrderDetail: {
     id: string;
     id_ecommerce: number;
     scan_timestamp?: string | null;
     print_timestamp?: string;
     scanned?: boolean;
+    booking_sn?: string;
+    // Pre-fetched kilat order data (from booking cache) to avoid blank detail screen
+    kilat_order_data?: {
+      buyer_username?: string;
+      buyer_city?: string;
+      nama_kurir?: string;
+      no_resi?: string;
+      tanggal_order?: string;
+      total_harga?: number;
+      ecommerce_name?: string;
+      platform?: string;
+      status?: string;
+      items?: { sku: string; nama: string; qty: number; harga_jual?: number }[];
+    };
   };
   LabelPreview: { html: string; title?: string };
   ScanOut: undefined;
@@ -145,6 +161,7 @@ export default function RootNavigator() {
       <AppStack.Screen name="UserList" component={UserListScreen} options={{ title: 'User Management' }} />
       <AppStack.Screen name="UserEdit" component={UserEditScreen} options={{ title: 'User Permissions' }} />
       <AppStack.Screen name="OrdersList" component={OrdersListScreen} options={{ title: 'Pesanan' }} />
+      <AppStack.Screen name="PesananV2" component={PesananV2Screen} options={{ headerShown: false }} />
       <AppStack.Screen name="OrderDetail" component={OrderDetailScreen} options={{ title: 'Detail Pesanan' }} />
       <AppStack.Screen name="LabelPreview" component={LabelPreviewScreen} options={{ title: 'Label Preview' }} />
       <AppStack.Screen name="ScanOut" component={ScanOutScreen} options={{ title: 'Scan Out' }} />

@@ -15,18 +15,20 @@ import * as ImagePicker from 'expo-image-picker';
 import ApiService from '../../../services/api';
 
 interface Marketplace {
-  id_ecommerce: number;
-  nama_ecommerce: string;
-  nama_toko: string;
+  id: number;
+  platform: string;
+  name?: string;
+  shop_id: string;
+  status?: string;
 }
 
 interface MigrationProgress {
   session_id: string;
   total: number;
   processed: number;
-  success: number;
+  succeeded: number;
   failed: number;
-  status: 'running' | 'completed' | 'error';
+  status: 'running' | 'completed' | 'failed' | 'error';
   current_item?: string;
 }
 
@@ -57,48 +59,11 @@ const MigrateModal: React.FC<MigrateModalProps> = ({
   // Set default target marketplace
   useEffect(() => {
     if (marketplaces.length > 0 && targetMarketplace === 0) {
-      setTargetMarketplace(marketplaces[0].id_ecommerce);
+      setTargetMarketplace(marketplaces[0].id);
     }
   }, [marketplaces]);
 
-  // Poll migration progress
-  useEffect(() => {
-    if (!sessionId || !isMigrating) return;
-
-    const pollInterval = setInterval(async () => {
-      try {
-        const response = await ApiService.get(`/migration-progress/${sessionId}`);
-        if (response) {
-          setMigrationProgress(response);
-
-          if (response.status === 'completed' || response.status === 'error') {
-            setIsMigrating(false);
-            clearInterval(pollInterval);
-
-            if (response.status === 'completed') {
-              showMessage({
-                message: 'Berhasil',
-                description: `Migration selesai. Berhasil: ${response.success}, Gagal: ${response.failed}`,
-                type: 'success',
-                duration: 4000,
-              });
-              onSuccess();
-            } else {
-              showMessage({
-                message: 'Error',
-                description: 'Migration gagal',
-                type: 'danger',
-              });
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Error polling migration progress:', error);
-      }
-    }, 2000); // Poll every 2 seconds
-
-    return () => clearInterval(pollInterval);
-  }, [sessionId, isMigrating]);
+  // No longer polling; we update progress manually during chunked processing.
 
   const handlePickTwibbon = async () => {
     try {
@@ -161,32 +126,87 @@ const MigrateModal: React.FC<MigrateModalProps> = ({
     }
 
     setIsMigrating(true);
-    const newSessionId = `migration_${Date.now()}`;
-    setSessionId(newSessionId);
+    const baseSessionId = `migration_${Date.now()}`;
+    
+    // Split into chunks of 5
+    const CHUNK_SIZE = 5;
+    const chunks = [];
+    for (let i = 0; i < selectedIds.length; i += CHUNK_SIZE) {
+      chunks.push(selectedIds.slice(i, i + CHUNK_SIZE));
+    }
+
+    let processedCount = 0;
+    let succeededCount = 0;
+    let failedCount = 0;
+
+    setMigrationProgress({
+      session_id: baseSessionId,
+      total: selectedIds.length,
+      processed: 0,
+      succeeded: 0,
+      failed: 0,
+      status: 'running',
+    });
 
     try {
-      const response = await ApiService.post('/migrate-barang', {
-        ids: selectedIds,
-        source_id_ecommerce: sourceIdEcommerce,
-        target_id_ecommerce: targetMarketplace,
-        with_twibbon: !!twibbonPath,
-        twibbon_path: twibbonPath,
-        session_id: newSessionId,
-      });
+      for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i];
+        const chunkSessionId = `${baseSessionId}_chunk_${i}`;
 
-      if (!response?.success) {
-        throw new Error(response?.message || 'Migration gagal dimulai');
+        setMigrationProgress(prev => prev ? { ...prev, current_item: `Memproses ${i + 1}/${chunks.length} grup produk` } : null);
+
+        const response = await ApiService.post('/migrate-barang', {
+          ids: chunk,
+          source_id_ecommerce: sourceIdEcommerce,
+          target_id_ecommerce: targetMarketplace,
+          with_twibbon: !!twibbonPath,
+          twibbon_path: twibbonPath,
+          session_id: chunkSessionId,
+        });
+
+        processedCount += chunk.length;
+
+        if (response?.status) {
+          succeededCount += chunk.length;
+        } else {
+          // If the backend returned partial success/failures within the chunk
+          if (response?.reason?.rejected_list) {
+            failedCount += response.reason.rejected_list.length;
+            succeededCount += chunk.length - response.reason.rejected_list.length;
+          } else {
+            failedCount += chunk.length;
+          }
+        }
+
+        setMigrationProgress(prev => prev ? {
+          ...prev,
+          processed: processedCount,
+          succeeded: succeededCount,
+          failed: failedCount,
+        } : null);
       }
+
+      setMigrationProgress(prev => prev ? { ...prev, status: 'completed' } : null);
+      setIsMigrating(false);
+
+      showMessage({
+        message: 'Berhasil',
+        description: `Migration selesai. Berhasil: ${succeededCount}, Gagal: ${failedCount}`,
+        type: 'success',
+        duration: 4000,
+      });
+      
+      onSuccess();
     } catch (error: any) {
-      console.error('Error starting migration:', error);
+      console.error('Error migrating products:', error);
       showMessage({
         message: 'Error',
-        description: error.message || 'Gagal memulai migration',
+        description: error.message || 'Gagal memigrasikan sebagian produk',
         type: 'danger',
         duration: 4000,
       });
       setIsMigrating(false);
-      setSessionId(null);
+      setMigrationProgress(prev => prev ? { ...prev, status: 'error' } : null);
     }
   };
 
@@ -202,7 +222,7 @@ const MigrateModal: React.FC<MigrateModalProps> = ({
   };
 
   const progressPercentage = migrationProgress
-    ? (migrationProgress.processed / migrationProgress.total) * 100
+    ? ((migrationProgress.processed || 0) / Math.max(migrationProgress.total || 1, 1)) * 100
     : 0;
 
   return (
@@ -241,29 +261,29 @@ const MigrateModal: React.FC<MigrateModalProps> = ({
               >
                 {marketplaces.map((marketplace) => (
                   <TouchableOpacity
-                    key={marketplace.id_ecommerce}
+                    key={marketplace.id}
                     style={[
                       styles.marketplaceOption,
-                      targetMarketplace === marketplace.id_ecommerce && styles.marketplaceOptionSelected,
+                      targetMarketplace === marketplace.id && styles.marketplaceOptionSelected,
                     ]}
-                    onPress={() => setTargetMarketplace(marketplace.id_ecommerce)}
+                    onPress={() => setTargetMarketplace(marketplace.id)}
                     disabled={isMigrating}
                   >
                     <Text
                       style={[
                         styles.marketplaceName,
-                        targetMarketplace === marketplace.id_ecommerce && styles.marketplaceNameSelected,
+                        targetMarketplace === marketplace.id && styles.marketplaceNameSelected,
                       ]}
                     >
-                      {marketplace.nama_ecommerce}
+                      {marketplace.platform}
                     </Text>
                     <Text
                       style={[
                         styles.marketplaceShop,
-                        targetMarketplace === marketplace.id_ecommerce && styles.marketplaceShopSelected,
+                        targetMarketplace === marketplace.id && styles.marketplaceShopSelected,
                       ]}
                     >
-                      {marketplace.nama_toko}
+                      {marketplace.name || marketplace.shop_id}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -317,7 +337,7 @@ const MigrateModal: React.FC<MigrateModalProps> = ({
                 <View style={styles.progressStats}>
                   <View style={styles.progressStat}>
                     <Ionicons name="checkmark-circle" size={20} color="#10b981" />
-                    <Text style={styles.progressStatText}>Berhasil: {migrationProgress.success}</Text>
+                    <Text style={styles.progressStatText}>Berhasil: {migrationProgress.succeeded || 0}</Text>
                   </View>
                   <View style={styles.progressStat}>
                     <Ionicons name="close-circle" size={20} color="#ef4444" />

@@ -14,6 +14,7 @@ import BulkBarcodeScreen from '../screens/barang/BulkBarcodeScreen';
 import NewOnlineScreen from '../screens/barang/NewOnlineScreen';
 import POSKasirScreen from '../screens/pos/POSKasirScreen';
 import OrdersListScreen from '../screens/orders/OrdersListScreen';
+import PesananV2Screen from '../screens/ecommerce/PesananV2Screen';
 import OrderDetailScreen from '../screens/orders/OrderDetailScreen';
 import LabelPreviewScreen from '../screens/orders/LabelPreviewScreen';
 import ScanOutScreen from '../screens/scanout/ScanOutScreen';
@@ -94,6 +95,7 @@ const CustomerStack = createNativeStackNavigator();
 const UserStack = createNativeStackNavigator();
 const BundlingStack = createNativeStackNavigator();
 const OrdersStack = createNativeStackNavigator();
+const PesananV2Stack = createNativeStackNavigator();
 const EcommerceChatStack = createNativeStackNavigator();
 const NaikkanProdukStack = createNativeStackNavigator();
 const ProsesOtomatisStack = createNativeStackNavigator();
@@ -179,6 +181,18 @@ const OrdersStackScreen = () => (
     <OrdersStack.Screen name="OrderDetail" component={OrderDetailScreen} />
     <OrdersStack.Screen name="LabelPreview" component={LabelPreviewScreen} />
   </OrdersStack.Navigator>
+);
+
+const PesananV2StackScreen = () => (
+  <PesananV2Stack.Navigator
+    screenOptions={{
+      headerShown: false,
+    }}
+  >
+    <PesananV2Stack.Screen name="PesananV2Main" component={PesananV2Screen} />
+    <PesananV2Stack.Screen name="OrderDetail" component={OrderDetailScreen} />
+    <PesananV2Stack.Screen name="LabelPreview" component={LabelPreviewScreen} />
+  </PesananV2Stack.Navigator>
 );
 
 const ScanSearchStackScreen = () => (
@@ -324,6 +338,7 @@ const DrawerNavigatorContent = () => {
       {/* ECOMMERCE Section - Using Stack Navigators */}
       <Drawer.Screen name="DiskonScreen" component={DiskonScreen} />
       <Drawer.Screen name="Pesanan" component={OrdersStackScreen} />
+      <Drawer.Screen name="PesananV2" component={PesananV2StackScreen} />
       <Drawer.Screen name="EcommerceChat" component={EcommerceChatStackScreen} />
       <Drawer.Screen name="Notifikasi" component={NotifikasiScreen} />
       <Drawer.Screen name="Penarikan" component={PenarikanScreen} />

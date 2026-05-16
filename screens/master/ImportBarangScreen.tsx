@@ -23,9 +23,11 @@ import MigrateModal from './components/MigrateModal';
 
 // Types
 interface Marketplace {
-  id_ecommerce: number;
-  nama_ecommerce: string;
-  nama_toko: string;
+  id: number;
+  platform: string;
+  name?: string;
+  shop_id: string;
+  status?: string;
   status_import?: 'idle' | 'importing' | 'completed' | 'error';
   import_progress?: number;
   import_total?: number;
@@ -33,20 +35,21 @@ interface Marketplace {
 
 interface IDefaultBarang {
   id: number | string;
-  nama_barang: string;
+  nama: string;
   sku: string;
-  harga: number;
+  harga_jual: number;
   stok: number;
-  gambar?: string;
-  status_bind?: 'bound' | 'unbound' | 'pending';
+  imageUrl?: string;
+  binded?: boolean;
   status_import?: 'waiting' | 'processing' | 'completed' | 'error';
 }
 
 interface MarketplaceStatus {
-  id_ecommerce: number;
-  status: 'idle' | 'importing' | 'completed' | 'error';
-  progress: number;
-  total: number;
+  import_status: 'idle' | 'in_progress' | 'completed' | 'failed';
+  progress?: {
+    processed: number;
+    total: number;
+  };
   message?: string;
 }
 
@@ -84,10 +87,12 @@ const ImportBarangScreen: React.FC = () => {
   // Fetch marketplace list
   const fetchMarketplaces = useCallback(async () => {
     try {
-      const response = await ApiService.get('/list-shop');
+      const response = await ApiService.get('/get/ecommerce');
       if (response.data && Array.isArray(response.data)) {
-        setListShop(response.data);
-        if (response.data.length > 0 && currentMarketplaceIndex === -1) {
+        // Only get approved and non-pending names
+        const validShops = response.data.filter((shop: any) => shop.status === 'APPROVED' && shop.status !== 'PENDING_NAME');
+        setListShop(validShops);
+        if (validShops.length > 0 && currentMarketplaceIndex === -1) {
           setCurrentMarketplaceIndex(0);
         }
       }
@@ -114,24 +119,28 @@ const ImportBarangScreen: React.FC = () => {
     }
 
     try {
-      const params: any = {
-        id_ecommerce: currentMarketplace.id_ecommerce,
-        page,
-        limit: pageSize,
-      };
+      const params = new URLSearchParams();
+      params.append('id_ecommerce', String(currentMarketplace.id));
+      params.append('page', String(page));
+      params.append('pageSize', String(pageSize));
 
+      const filterItems = [];
       if (skuFilter) {
-        params.sku = skuFilter;
+        filterItems.push({ field: 'sku', value: skuFilter });
       }
 
       if (nameFilter) {
-        params.nama = nameFilter;
+        filterItems.push({ field: 'nama', value: nameFilter });
       }
 
-      const response = await ApiService.get(`/list-barang-ecommerce?${new URLSearchParams(params as any).toString()}`);
+      if (filterItems.length > 0) {
+        params.append('filter', JSON.stringify({ items: filterItems }));
+      }
+
+      const response = await ApiService.get(`/get/import_barang_paged?${params.toString()}`);
 
       if (response.data) {
-        setProducts(response.data.data || []);
+        setProducts(response.data.rows || []);
         setTotalCount(response.data.total || 0);
       }
     } catch (error) {
@@ -168,11 +177,11 @@ const ImportBarangScreen: React.FC = () => {
     const pollInterval = setInterval(async () => {
       for (const shop of listShop) {
         try {
-          const response = await ApiService.get(`/import-progress/${shop.id_ecommerce}`);
+          const response = await ApiService.get(`/get/ecommerce/import-progress/${shop.id}`);
           if (response.data) {
             setMarketplaceStatus(prev => {
               const newMap = new Map(prev);
-              newMap.set(shop.id_ecommerce, response.data);
+              newMap.set(shop.id, response.data);
               return newMap;
             });
           }
@@ -279,7 +288,7 @@ const ImportBarangScreen: React.FC = () => {
 
   // Get current marketplace
   const currentMarketplace = currentMarketplaceIndex !== -1 ? listShop[currentMarketplaceIndex] : null;
-  const currentStatus = currentMarketplace ? marketplaceStatus.get(currentMarketplace.id_ecommerce) : null;
+  const currentStatus = currentMarketplace ? marketplaceStatus.get(currentMarketplace.id) : null;
 
   // Calculate pagination
   const totalPages = Math.ceil(totalCount / pageSize);
@@ -366,7 +375,7 @@ const ImportBarangScreen: React.FC = () => {
       <BindMassalModal
         visible={showBindModal}
         selectedIds={selectedIds}
-        idEcommerce={currentMarketplace?.id_ecommerce || 0}
+        idEcommerce={currentMarketplace?.id || 0}
         onClose={() => setShowBindModal(false)}
         onSuccess={handleBindSuccess}
       />
@@ -375,8 +384,8 @@ const ImportBarangScreen: React.FC = () => {
       <MigrateModal
         visible={showMigrateModal}
         selectedIds={selectedIds}
-        sourceIdEcommerce={currentMarketplace?.id_ecommerce || 0}
-        marketplaces={listShop.filter(shop => shop.id_ecommerce !== currentMarketplace?.id_ecommerce)}
+        sourceIdEcommerce={currentMarketplace?.id || 0}
+        marketplaces={listShop.filter(shop => shop.id !== currentMarketplace?.id)}
         onClose={() => setShowMigrateModal(false)}
         onSuccess={handleMigrateSuccess}
       />

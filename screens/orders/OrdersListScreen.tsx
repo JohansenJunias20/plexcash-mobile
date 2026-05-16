@@ -114,7 +114,7 @@ export default function OrdersListScreen() {
 
           return {
             id: String(rd.id || rd.order_id || rd.ordersn || rd.order_sn || ''),
-            id_ecommerce: Number(rd.id_ecommerce || selectedShopId || 0),
+            id_ecommerce: Number(rd.id_ecommerce || rd.ecommerce_id || rd.shop_id || selectedShopId || 0),
             platform: String(rd.from || rd.platform || '').toUpperCase(),
             ecommerce_name: rd.ecommerce_name || shops.find(s => s.id === (rd.id_ecommerce || selectedShopId))?.name,
             date: rd.date || rd.tanggal_order || undefined,
