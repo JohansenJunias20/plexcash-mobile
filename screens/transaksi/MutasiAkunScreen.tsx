@@ -85,12 +85,11 @@ interface SearchModalProps {
 }
 const BaganAkunModal: React.FC<SearchModalProps> = ({ visible, onClose, onSelect }) => {
   const [query, setQuery] = useState('');
-  const [items, setItems] = useState<BaganAkun[]>([]);
+  const [allItems, setAllItems] = useState<BaganAkun[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const search = useCallback(async (q: string) => {
-    setQuery(q);
-    if (q.length < 1) { setItems([]); return; }
+  // Load semua data saat modal pertama kali dibuka
+  const loadAll = useCallback(async () => {
     try {
       setLoading(true);
       const token = await getTokenAuth();
@@ -99,18 +98,31 @@ const BaganAkunModal: React.FC<SearchModalProps> = ({ visible, onClose, onSelect
       });
       const data = await res.json();
       if (data.status) {
-        const ql = q.toLowerCase();
-        setItems(
-          (data.data as BaganAkun[]).filter(
-            i => i.kode.toLowerCase().includes(ql) || i.nama.toLowerCase().includes(ql)
-          ).slice(0, 50)
-        );
+        setAllItems(data.data as BaganAkun[]);
       }
     } catch { /* ignore */ }
     finally { setLoading(false); }
   }, []);
 
-  const handleClose = () => { setQuery(''); setItems([]); onClose(); };
+  // Fetch data setiap kali modal dibuka
+  React.useEffect(() => {
+    if (visible) {
+      setQuery('');
+      loadAll();
+    } else {
+      setAllItems([]);
+    }
+  }, [visible]);
+
+  // Filter client-side berdasarkan query
+  const filteredItems = query.length > 0
+    ? allItems.filter(i => {
+        const ql = query.toLowerCase();
+        return i.kode.toLowerCase().includes(ql) || i.nama.toLowerCase().includes(ql);
+      })
+    : allItems;
+
+  const handleClose = () => { setQuery(''); onClose(); };
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={handleClose}>
@@ -129,11 +141,10 @@ const BaganAkunModal: React.FC<SearchModalProps> = ({ visible, onClose, onSelect
               placeholder="Cari kode atau nama akun..."
               placeholderTextColor="#9CA3AF"
               value={query}
-              onChangeText={search}
-              autoFocus
+              onChangeText={setQuery}
             />
             {query.length > 0 && (
-              <TouchableOpacity onPress={() => search('')}>
+              <TouchableOpacity onPress={() => setQuery('')}>
                 <Ionicons name="close-circle" size={18} color="#9CA3AF" />
               </TouchableOpacity>
             )}
@@ -141,7 +152,7 @@ const BaganAkunModal: React.FC<SearchModalProps> = ({ visible, onClose, onSelect
           {loading
             ? <ActivityIndicator style={{ marginTop: 24 }} color="#f59e0b" />
             : <FlatList
-                data={items}
+                data={filteredItems}
                 keyExtractor={i => i.kode}
                 renderItem={({ item }) => (
                   <TouchableOpacity style={s.baganItem} onPress={() => { handleClose(); onSelect(item); }}>
@@ -151,8 +162,8 @@ const BaganAkunModal: React.FC<SearchModalProps> = ({ visible, onClose, onSelect
                 )}
                 ListEmptyComponent={
                   query.length > 0
-                    ? <Text style={s.emptyText}>Tidak ada hasil</Text>
-                    : <Text style={s.emptyText}>Ketik untuk mencari akun</Text>
+                    ? <Text style={s.emptyText}>Tidak ada hasil untuk "{query}"</Text>
+                    : <Text style={s.emptyText}>Tidak ada bagan akun tersedia</Text>
                 }
               />
           }

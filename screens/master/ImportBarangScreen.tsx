@@ -42,6 +42,8 @@ interface IDefaultBarang {
   imageUrl?: string;
   binded?: boolean;
   status_import?: 'waiting' | 'processing' | 'completed' | 'error';
+  row_type?: string;
+  variantCount?: number;
 }
 
 interface MarketplaceStatus {
@@ -137,10 +139,23 @@ const ImportBarangScreen: React.FC = () => {
         params.append('filter', JSON.stringify({ items: filterItems }));
       }
 
+      // Sort by name so VAR_PARENT items are interleaved with regular items alphabetically
+      // (default sort_id causes VAR_PARENT items to appear on page 7+ due to their ID range)
+      params.append('sort', JSON.stringify([{ field: 'nama', sort: 'asc' }]));
+
       const response = await ApiService.get(`/get/import_barang_paged?${params.toString()}`);
 
       if (response.data) {
-        setProducts(response.data.rows || []);
+        const rawRows = response.data.rows || [];
+        // Deduplicate by id to prevent 'Encountered two children with same key' error
+        const seen = new Set<string>();
+        const rows = rawRows.filter((r: any) => {
+          const key = String(r.id);
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+        setProducts(rows);
         setTotalCount(response.data.total || 0);
       }
     } catch (error) {

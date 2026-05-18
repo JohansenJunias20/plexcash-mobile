@@ -354,6 +354,7 @@ export default function BindingTab({ productId }: BindingTabProps): JSX.Element 
         url: product.product_url || '',
         id_parent: product.parent_id || undefined,
         category: product.category || { id: '', name: '' },
+        check: true, // ⚠️ WAJIB: server mencari platform dengan bp.check === true di /ecommerce/bind
       };
 
       const uploadPayload = {
@@ -366,9 +367,9 @@ export default function BindingTab({ productId }: BindingTabProps): JSX.Element 
         platforms: [newPlatformPayload],
       };
 
-      console.log('🔗 [BIND] Sending upload/bind request:', JSON.stringify(uploadPayload));
+      console.log('🔗 [BIND] Sending bind request:', JSON.stringify(uploadPayload));
 
-      const bindResponse = await ApiService.authenticatedRequest('/ecommerce/upload', {
+      const bindResponse = await ApiService.authenticatedRequest('/ecommerce/bind', {
         method: 'POST',
         body: JSON.stringify(uploadPayload),
       });
@@ -490,8 +491,19 @@ export default function BindingTab({ productId }: BindingTabProps): JSX.Element 
                     />
                   </View>
                   <View style={styles.platformDetails}>
-                    <Text style={styles.platformName}>{platform.platform}</Text>
-                    <Text style={styles.shopName}>{platform.shop_name}</Text>
+                    {/* Marketplace name badge */}
+                    <View style={[styles.marketplaceBadge, { backgroundColor: getPlatformColor(platform.platform) + '18' }]}>
+                      <Text style={[styles.marketplaceBadgeText, { color: getPlatformColor(platform.platform) }]}>
+                        {platform.platform}
+                      </Text>
+                    </View>
+                    {/* Nama toko */}
+                    <Text style={styles.shopName} numberOfLines={1}>
+                      {platform.shop_name
+                        || ecommerceList.find(e => e.id === platform.id_ecommerce)?.name
+                        || platform.name
+                        || '-'}
+                    </Text>
                   </View>
                 </View>
 
@@ -502,9 +514,13 @@ export default function BindingTab({ productId }: BindingTabProps): JSX.Element 
                 )}
               </View>
 
-              <Text style={styles.productNameText} numberOfLines={2}>
-                {platform.product_name || 'No product name'}
-              </Text>
+              {/* Nama produk di marketplace */}
+              <View style={styles.productNameContainer}>
+                <Text style={styles.productNameLabel}>Nama Produk:</Text>
+                <Text style={styles.productNameText} numberOfLines={3}>
+                  {platform.product_name || '(Nama produk belum tersedia)'}
+                </Text>
+              </View>
 
               {/* Badges */}
               <View style={styles.badgeContainer}>
@@ -921,18 +937,47 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#111827',
   },
+  marketplaceBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+    alignSelf: 'flex-start',
+    marginBottom: 4,
+  },
+  marketplaceBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
   shopName: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginTop: 2,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#374151',
+    marginTop: 1,
+  },
+  productNameContainer: {
+    marginTop: 4,
+    marginBottom: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#f3f4f6',
+  },
+  productNameLabel: {
+    fontSize: 10,
+    color: '#9CA3AF',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 3,
   },
   checkIcon: {
     marginLeft: 8,
   },
   productNameText: {
-    fontSize: 14,
-    color: '#374151',
-    marginBottom: 8,
+    fontSize: 13,
+    color: '#1F2937',
+    lineHeight: 19,
+    fontWeight: '500',
   },
   badgeContainer: {
     flexDirection: 'row',

@@ -81,22 +81,10 @@ export default function ScanInScreen(): JSX.Element {
     setHasPermission(status === 'granted');
   };
 
-  const isOrderNumber = (data: string): boolean => {
-    // Check if it's a no pesanan (order number) format:
-    // - Length is 14 digits
-    // - First 6 digits are YYYYMM (year + month)
-    if (data.length === 14 && /^\d{14}$/.test(data)) {
-      const yearMonth = data.substring(0, 6);
-      const year = parseInt(yearMonth.substring(0, 4));
-      const month = parseInt(yearMonth.substring(4, 6));
-
-      // Validate year (2020-2099) and month (01-12)
-      if (year >= 2020 && year <= 2099 && month >= 1 && month <= 12) {
-        return true; // This is a no pesanan (order number)
-      }
-    }
-    return false; // This is likely a resi (tracking number)
-  };
+  // CATATAN: Filter isOrderNumber() dihapus karena ekspedisi GTL menggunakan
+  // id_online (nomor pesanan, 14 digit) sebagai barcode fisik di label paketnya.
+  // Backend /scanin/scan sudah mendukung pencarian berdasarkan no_resi MAUPUN id_online,
+  // sehingga semua format barcode bisa langsung dikirim ke backend untuk divalidasi.
 
   const handleManualSubmit = () => {
     const trimmedInput = manualInput.trim();
@@ -118,39 +106,6 @@ export default function ScanInScreen(): JSX.Element {
     setScanning(false);
     setProcessing(true);
     setCurrentScan(data);
-
-    // Filter out order numbers (no pesanan), only accept resi (tracking numbers)
-    if (isOrderNumber(data)) {
-      // Trigger HEAVY error vibration (stronger and more noticeable)
-      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-      await playSound('error');
-
-      // Add to list as error for visual feedback
-      const errorOrder: ScannedOrder = {
-        orderNumber: data,
-        timestamp: new Date(),
-        status: 'error',
-        message: 'Nomor Pesanan - Bukan Resi',
-      };
-      setScannedOrders(prev => [errorOrder, ...prev]);
-
-      Alert.alert(
-        '⚠️ Nomor Pesanan Terdeteksi',
-        'Ini adalah nomor pesanan. Silakan scan barcode RESI (nomor resi) sebagai gantinya.',
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              setCurrentScan(null);
-              setProcessing(false);
-              // Re-enable scanning after 1 second cooldown
-              setTimeout(() => setScanning(true), 1000);
-            }
-          }
-        ]
-      );
-      return;
-    }
 
     // Add to pending scans to prevent duplicates while waiting for backend
     setPendingScans(prev => new Set(prev).add(data));

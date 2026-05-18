@@ -19,6 +19,8 @@ interface IDefaultBarang {
   imageUrl?: string;
   binded?: boolean;
   status_import?: 'waiting' | 'processing' | 'completed' | 'error';
+  row_type?: string;
+  variantCount?: number;
 }
 
 interface ProductListProps {
@@ -75,7 +77,7 @@ const ProductList: React.FC<ProductListProps> = ({
     );
   };
 
-  const keyExtractor = (item: IDefaultBarang) => String(item.id);
+  const keyExtractor = (item: IDefaultBarang, index: number) => `${String(item.id)}_${index}`;
 
   return (
     <FlatList
