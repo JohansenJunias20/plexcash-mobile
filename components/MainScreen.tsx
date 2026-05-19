@@ -16,7 +16,7 @@ const STORAGE_KEY = '@quick_actions_config';
 
 const MainScreen = (): React.JSX.Element => {
   const { user } = useAuth();
-  const { access } = useAccess();
+  const { access, role } = useAccess();
   const [showSettings, setShowSettings] = useState(false);
   const [currentDatabase, setCurrentDatabase] = useState<string>('');
   const [databases, setDatabases] = useState<string[]>([]);
@@ -35,6 +35,7 @@ const MainScreen = (): React.JSX.Element => {
 
   const ADMIN_EMAILS = ['johansen.junias17@gmail.com', 'josoft.josoft@gmail.com'];
   const isAdmin = ADMIN_EMAILS.includes((user as any)?.email);
+  const isAdminRole = isAdmin || role === 'admin';
 
   const handleOpenSettings = () => setShowSettings(true);
   const handleCloseSettings = () => setShowSettings(false);
@@ -49,7 +50,7 @@ const MainScreen = (): React.JSX.Element => {
           const loadedActions = savedIds
             .map(id => AVAILABLE_MENUS.find(menu => menu.id === id))
             .filter((menu): menu is MenuItem => menu !== undefined)
-            .filter(menu => resolveAccessKey(access as any, menu.accessKey));
+            .filter(menu => resolveAccessKey(access as any, menu.accessKey, isAdminRole));
           setQuickActions(loadedActions);
           setSelectedMenuIds(new Set(loadedActions.map(m => m.id)));
         } else {
@@ -57,13 +58,13 @@ const MainScreen = (): React.JSX.Element => {
           const defaultActions = DEFAULT_QUICK_ACTIONS
             .map(id => AVAILABLE_MENUS.find(menu => menu.id === id))
             .filter((menu): menu is MenuItem => menu !== undefined)
-            .filter(menu => resolveAccessKey(access as any, menu.accessKey));
+            .filter(menu => resolveAccessKey(access as any, menu.accessKey, isAdminRole));
           setQuickActions(defaultActions);
           setSelectedMenuIds(new Set(defaultActions.map(m => m.id)));
         }
         // Only show menus that the user has access to in the available list
         const accessibleMenus = AVAILABLE_MENUS.filter(menu =>
-          resolveAccessKey(access as any, menu.accessKey)
+          resolveAccessKey(access as any, menu.accessKey, isAdminRole)
         );
         setAvailableMenus(accessibleMenus);
       } catch (error) {
@@ -72,11 +73,11 @@ const MainScreen = (): React.JSX.Element => {
         const defaultActions = DEFAULT_QUICK_ACTIONS
           .map(id => AVAILABLE_MENUS.find(menu => menu.id === id))
           .filter((menu): menu is MenuItem => menu !== undefined)
-          .filter(menu => resolveAccessKey(access as any, menu.accessKey));
+          .filter(menu => resolveAccessKey(access as any, menu.accessKey, isAdminRole));
         setQuickActions(defaultActions);
         setSelectedMenuIds(new Set(defaultActions.map(m => m.id)));
         const accessibleMenus = AVAILABLE_MENUS.filter(menu =>
-          resolveAccessKey(access as any, menu.accessKey)
+          resolveAccessKey(access as any, menu.accessKey, isAdminRole)
         );
         setAvailableMenus(accessibleMenus);
       }

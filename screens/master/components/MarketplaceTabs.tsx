@@ -34,6 +34,7 @@ interface MarketplaceTabsProps {
   currentIndex: number;
   onSelectMarketplace: (index: number) => void;
   marketplaceStatus: Map<number, MarketplaceStatus>;
+  onRefreshMarketplace?: (marketplace: Marketplace) => void;
 }
 
 const MarketplaceTabs: React.FC<MarketplaceTabsProps> = ({
@@ -41,6 +42,7 @@ const MarketplaceTabs: React.FC<MarketplaceTabsProps> = ({
   currentIndex,
   onSelectMarketplace,
   marketplaceStatus,
+  onRefreshMarketplace,
 }) => {
   const getStatusIcon = (status?: string) => {
     switch (status) {
@@ -104,6 +106,17 @@ const MarketplaceTabs: React.FC<MarketplaceTabsProps> = ({
                     {marketplace.platform}
                   </Text>
                   {status && getStatusIcon(status.import_status)}
+                  {onRefreshMarketplace && (
+                    <TouchableOpacity
+                      style={styles.refreshIcon}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        onRefreshMarketplace(marketplace);
+                      }}
+                    >
+                      <Ionicons name="refresh" size={14} color={isActive ? "#1f2937" : "#6b7280"} />
+                    </TouchableOpacity>
+                  )}
                 </View>
                 <Text style={[styles.tabSubtitle, isActive && styles.tabSubtitleActive]}>
                   {marketplace.name || marketplace.shop_id}
@@ -172,6 +185,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+  },
+  refreshIcon: {
+    padding: 2,
   },
   tabTitle: {
     fontSize: 14,

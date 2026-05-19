@@ -85,6 +85,7 @@ interface AccessPermissions {
 
 interface AccessContextValue {
   access: AccessPermissions;
+  role?: string;
   isLoading: boolean;
   refreshAccess: () => Promise<void>;
 }
@@ -101,6 +102,7 @@ export const useAccess = (): AccessContextValue => {
 
 export const AccessProvider = ({ children }: { children: ReactNode }) => {
   const [access, setAccess] = useState<AccessPermissions>({});
+  const [role, setRole] = useState<string | undefined>(undefined);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const { isAuthenticated } = useAuth();
 
@@ -134,14 +136,23 @@ export const AccessProvider = ({ children }: { children: ReactNode }) => {
         };
         
         setAccess(deepParseJson(response.access));
+        
+        let userRole = response.role || response.access?.role || response.user?.role;
+        if (typeof userRole === 'string') {
+          setRole(userRole.toLowerCase());
+        } else {
+          setRole(undefined);
+        }
       } else {
         console.warn('Failed to fetch user access:', response.reason);
         // Set default empty access
         setAccess({});
+        setRole(undefined);
       }
     } catch (error) {
       console.error('Error fetching user access:', error);
       setAccess({});
+      setRole(undefined);
     } finally {
       setIsLoading(false);
     }
@@ -152,6 +163,7 @@ export const AccessProvider = ({ children }: { children: ReactNode }) => {
       fetchAccess();
     } else {
       setAccess({});
+      setRole(undefined);
       setIsLoading(false);
     }
   }, [isAuthenticated]);
@@ -162,6 +174,7 @@ export const AccessProvider = ({ children }: { children: ReactNode }) => {
 
   const value: AccessContextValue = {
     access,
+    role,
     isLoading,
     refreshAccess,
   };

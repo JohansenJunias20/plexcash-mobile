@@ -18,21 +18,6 @@ import { useAuth } from '../context/AuthContext';
 import { useAccess } from '../context/AccessContext';
 import ApiService from '../services/api';
 
-/** Helper to strictly check boolean-like values */
-const checkAccess = (val: any): boolean => {
-  if (val === undefined || val === null || val === false || val === 0 || val === '0' || val === '') return false;
-  if (typeof val === 'string' && val.toLowerCase() === 'false') return false;
-  return !!val;
-};
-
-/** Mirror of web Sidebar's hasAnyTrue — returns true if obj or any nested value is true */
-const hasAnyTrue = (obj: any): boolean => {
-  if (!obj) return false;
-  if (typeof obj === 'object') {
-    return Object.values(obj).some((val) => hasAnyTrue(val));
-  }
-  return checkAccess(obj);
-};
 
 interface DrawerItemProps {
   label: string;
@@ -126,7 +111,7 @@ interface CustomDrawerContentProps {
 
 const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ navigation, state }) => {
   const { user } = useAuth();
-  const { access, isLoading: accessLoading } = useAccess();
+  const { access, role, isLoading: accessLoading } = useAccess();
   const a = access as any;
   const [currentDatabase, setCurrentDatabase] = useState<string>('');
   const [databases, setDatabases] = useState<string[]>([]);
@@ -137,7 +122,26 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ navigation, s
 
   const ADMIN_EMAILS = ['johansen.junias17@gmail.com', 'josoft.josoft@gmail.com'];
   const isAdmin = ADMIN_EMAILS.includes((user as any)?.email);
+  const isAdminRole = isAdmin || role === 'admin';
   const currentRoute = state.routes[state.index]?.name;
+
+  /** Helper to strictly check boolean-like values */
+  const checkAccess = (val: any): boolean => {
+    if (isAdminRole) return true;
+    if (val === undefined || val === null || val === false || val === 0 || val === '0' || val === '') return false;
+    if (typeof val === 'string' && val.toLowerCase() === 'false') return false;
+    return !!val;
+  };
+
+  /** Mirror of web Sidebar's hasAnyTrue — returns true if obj or any nested value is true */
+  const hasAnyTrue = (obj: any): boolean => {
+    if (isAdminRole) return true;
+    if (!obj) return false;
+    if (typeof obj === 'object') {
+      return Object.values(obj).some((val) => hasAnyTrue(val));
+    }
+    return checkAccess(obj);
+  };
 
   useEffect(() => {
     const fetchDatabaseInfo = async () => {

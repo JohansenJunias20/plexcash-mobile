@@ -225,6 +225,37 @@ const ImportBarangScreen: React.FC = () => {
     setNameFilter('');
   }, []);
 
+  const handleMarketplaceRefresh = useCallback(async (shop: Marketplace) => {
+    try {
+      showMessage({
+        message: 'Info',
+        description: `Memulai sinkronisasi toko ${shop.name || shop.shop_id}...`,
+        type: 'info',
+      });
+      const response = await ApiService.get(`/ecommerce/import-barang?shop_id=${shop.shop_id}&platform=${shop.platform}&id_ecommerce=${shop.id}`);
+      if (!response.status) {
+        showMessage({
+          message: 'Error',
+          description: response.reason || 'Gagal memulai sinkronisasi',
+          type: 'danger',
+        });
+      } else {
+        showMessage({
+          message: 'Sukses',
+          description: 'Sinkronisasi berjalan. Anda bisa memantau progress di tab.',
+          type: 'success',
+        });
+      }
+    } catch (error) {
+      console.error('Error refreshing marketplace:', error);
+      showMessage({
+        message: 'Error',
+        description: 'Terjadi kesalahan jaringan saat sinkronisasi',
+        type: 'danger',
+      });
+    }
+  }, []);
+
   const handleToggleSelection = useCallback((id: number | string) => {
     setSelectedIds(prev => {
       if (prev.includes(id)) {
@@ -327,6 +358,7 @@ const ImportBarangScreen: React.FC = () => {
         currentIndex={currentMarketplaceIndex}
         onSelectMarketplace={handleMarketplaceChange}
         marketplaceStatus={marketplaceStatus}
+        onRefreshMarketplace={handleMarketplaceRefresh}
       />
 
       {/* Filter Bar */}

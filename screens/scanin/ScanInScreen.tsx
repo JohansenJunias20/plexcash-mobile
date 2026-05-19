@@ -26,6 +26,7 @@ export default function ScanInScreen(): JSX.Element {
   const [pendingScans, setPendingScans] = useState<Set<string>>(new Set()); // Track pending backend requests
   const [manualInput, setManualInput] = useState('');
   const [isCameraActive, setIsCameraActive] = useState(true);
+  const [lastRawScan, setLastRawScan] = useState<string | null>(null); // DEBUG: nilai mentah yang terbaca kamera
   const inputRef = useRef<TextInput>(null);
   const device = useCameraDevice('back');
 
@@ -33,7 +34,19 @@ export default function ScanInScreen(): JSX.Element {
     codeTypes: ['qr', 'code-128', 'code-39', 'ean-13', 'ean-8'],
     onCodeScanned: (codes) => {
       if (codes.length > 0 && codes[0].value) {
-        handleBarcodeScanned({ data: codes[0].value });
+        const rawValue = codes[0].value;
+        // Normalisasi agresif: hapus karakter kontrol & non-printable
+        // Karakter tak terlihat (\r \n \t \0 dll) sering menyebabkan mismatch antara scan kamera vs ketik manual
+        const normalizedValue = rawValue
+          .replace(/[\x00-\x1F\x7F]/g, '') // hapus semua control characters (termasuk \r \n \t)
+          .replace(/[\u200B-\u200D\uFEFF]/g, '') // hapus zero-width spaces
+          .trim();
+        console.log(`[ScanIn] Kamera membaca raw: "${rawValue}" (len=${rawValue.length}), normalized: "${normalizedValue}" (len=${normalizedValue.length})`);
+        // Tampilkan juga karakter code point untuk debugging karakter tersembunyi
+        const hexDump = [...rawValue].map(c => `${c}(${c.charCodeAt(0)})`).join(' ');
+        console.log(`[ScanIn] Hex dump: ${hexDump}`);
+        setLastRawScan(rawValue); // simpan raw untuk ditampilkan di UI debug
+        handleBarcodeScanned({ data: normalizedValue });
       }
     },
   });
@@ -410,6 +423,31 @@ export default function ScanInScreen(): JSX.Element {
           <Ionicons name="checkmark" size={20} color="white" />
         </TouchableOpacity>
       </View>
+
+      {/* DEBUG: Tampilkan nilai mentah yang terbaca kamera */}
+      {lastRawScan !== null && (
+        <View style={styles.debugContainer}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+            <Ionicons name="bug-outline" size={14} color="#6B7280" />
+            <Text style={styles.debugLabel}>  Kamera terbaca (raw):</Text>
+          </View>
+          <Text style={styles.debugValue} selectable>
+            "{lastRawScan}"
+          </Text>
+          <Text style={styles.debugMeta}>
+            panjang: {lastRawScan.length} karakter | 
+            codes: {[...lastRawScan].map(c => c.charCodeAt(0)).join(',')}
+          </Text>
+          <TouchableOpacity
+            style={styles.debugCopyButton}
+            onPress={() => {
+              setManualInput(lastRawScan.replace(/[\x00-\x1F\x7F]/g, '').trim());
+            }}
+          >
+            <Text style={styles.debugCopyText}>→ Salin ke input manual</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Scanned Orders List */}
       <View style={styles.listContainer}>
@@ -809,6 +847,49 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
+  // Debug panel styles
+  debugContainer: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    backgroundColor: '#FEF9C3',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FDE047',
+    padding: 10,
+  },
+  debugLabel: {
+    fontSize: 11,
+    color: '#6B7280',
+    fontWeight: '600',
+  },
+  debugValue: {
+    fontSize: 13,
+    color: '#1F2937',
+    fontFamily: 'monospace',
+    fontWeight: '700',
+    marginVertical: 4,
+    flexWrap: 'wrap',
+  },
+  debugMeta: {
+    fontSize: 10,
+    color: '#9CA3AF',
+    fontFamily: 'monospace',
+    flexWrap: 'wrap',
+  },
+  debugCopyButton: {
+    marginTop: 6,
+    alignSelf: 'flex-start',
+    backgroundColor: '#F59E0B',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  debugCopyText: {
+    color: 'white',
+    fontSize: 11,
+    fontWeight: '600',
+  },
 });
+
 
 

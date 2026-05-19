@@ -98,7 +98,8 @@ export const MAX_QUICK_ACTIONS = 8;
  * Resolve a dot-notation access key against the access object.
  * e.g. "master.barang" → access?.master?.barang
  */
-export const resolveAccessKey = (access: Record<string, any>, key: string | undefined): boolean => {
+export const resolveAccessKey = (access: Record<string, any>, key: string | undefined, isAdminRole: boolean = false): boolean => {
+  if (isAdminRole) return true;
   if (!key) return true; // No access key = always visible
   const parts = key.split('.');
   let current: any = access;
