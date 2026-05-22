@@ -18,6 +18,7 @@ interface ItemBelumPesan {
   merk: string;
   kategori: string;
   id_supplier: number;
+  supplier_nama?: string;
   minstok: number;
   stok: number;
   qty_pesan: number;
@@ -90,7 +91,7 @@ export default function BelumPesanTab({
     console.log('[BelumPesanTab] Showing confirmation dialog for item:', item.id);
     Alert.alert(
       'Confirm Order',
-      `Mark "${item.nama}" as ordered?\nQuantity: ${item.qty_pesan}\nSupplier ID: ${item.id_supplier}`,
+      `Mark "${item.nama}" as ordered?\nQuantity: ${item.qty_pesan}\nSupplier : ${item.supplier_nama || 'Tidak diketahui'}`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -137,9 +138,9 @@ export default function BelumPesanTab({
             </View>
           )}
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Supplier ID:</Text>
-            <Text style={[styles.infoValue, item.id_supplier ? styles.supplierSelected : styles.supplierNotSelected]}>
-              {item.id_supplier || 'Not Selected'}
+            <Text style={styles.infoLabel}>Supplier:</Text>
+            <Text style={[styles.infoValue, item.supplier_nama ? styles.supplierSelected : styles.supplierNotSelected]}>
+              {item.supplier_nama || 'Not Selected'}
             </Text>
           </View>
           <View style={styles.infoRow}>

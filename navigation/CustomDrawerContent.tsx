@@ -290,7 +290,7 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ navigation, s
         <CollapsibleSection title="Jurnal" icon="book">
           {checkAccess(a?.transaksi?.jurnal?.tambah) && <DrawerItem label="Tambah" icon="add-circle" onPress={() => navigation.navigate('JurnalTambah')} active={currentRoute === 'JurnalTambah'} nested />}
           {checkAccess(a?.transaksi?.jurnal?.search) && <DrawerItem label="Search" icon="search" onPress={() => navigation.navigate('JurnalSearch')} active={currentRoute === 'JurnalSearch'} nested />}
-          {checkAccess(a?.transaksi?.jurnal?.biaya) && <DrawerItem label="Biaya" icon="cash" onPress={() => Alert.alert('Segera Hadir', 'Fitur Jurnal Biaya sedang dalam tahap pengembangan untuk aplikasi mobile.')} active={false} nested badge="Soon" />}
+          {checkAccess(a?.transaksi?.jurnal?.biaya) && <DrawerItem label="Biaya" icon="cash" onPress={() => navigation.navigate('JurnalBiaya')} active={currentRoute === 'JurnalBiaya'} nested />}
         </CollapsibleSection>
       )}
 

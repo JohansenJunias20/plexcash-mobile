@@ -27,11 +27,13 @@ export default function ScanOutScreen(): JSX.Element {
   const [manualInput, setManualInput] = useState('');
   const [isCameraActive, setIsCameraActive] = useState(true);
   const inputRef = useRef<TextInput>(null);
+  const isCooldownRef = useRef(false);
   const device = useCameraDevice('back');
 
   const codeScanner = useCodeScanner({
     codeTypes: ['qr', 'code-128', 'code-39', 'ean-13', 'ean-8'],
     onCodeScanned: (codes) => {
+      if (isCooldownRef.current) return;
       if (codes.length > 0 && codes[0].value) {
         handleBarcodeScanned({ data: codes[0].value });
       }
@@ -107,7 +109,7 @@ export default function ScanOutScreen(): JSX.Element {
   };
 
   const handleBarcodeScanned = async ({ data }: { data: string }) => {
-    if (processing) return;
+    if (processing || isCooldownRef.current) return;
 
     // Check if this resi is already being processed (prevent duplicate scans)
     if (pendingScans.has(data)) {
@@ -144,7 +146,7 @@ export default function ScanOutScreen(): JSX.Element {
               setCurrentScan(null);
               setProcessing(false);
               // Re-enable scanning after 1 second cooldown
-              setTimeout(() => setScanning(true), 1000);
+              setTimeout(() => { setScanning(true); isCooldownRef.current = false; }, );
             }
           }
         ]
@@ -188,7 +190,7 @@ export default function ScanOutScreen(): JSX.Element {
         setCurrentScan(null);
         setProcessing(false);
         // Re-enable scanning after 1 second cooldown
-        setTimeout(() => setScanning(true), 1000);
+        setTimeout(() => { setScanning(true); isCooldownRef.current = false; }, );
       } else {
         // Trigger HEAVY error vibration (stronger and more noticeable)
         await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
@@ -229,7 +231,7 @@ export default function ScanOutScreen(): JSX.Element {
                 setCurrentScan(null);
                 setProcessing(false);
                 // Re-enable scanning after 1 second cooldown
-                setTimeout(() => setScanning(true), 1000);
+                setTimeout(() => { setScanning(true); isCooldownRef.current = false; }, );
               }
             }
           ]
@@ -268,7 +270,7 @@ export default function ScanOutScreen(): JSX.Element {
               setCurrentScan(null);
               setProcessing(false);
               // Re-enable scanning after 1 second cooldown
-              setTimeout(() => setScanning(true), 1000);
+              setTimeout(() => { setScanning(true); isCooldownRef.current = false; }, );
             }
           }
         ]
@@ -309,15 +311,6 @@ export default function ScanOutScreen(): JSX.Element {
           </TouchableOpacity>
         </View>
       </LinearGradient>
-    );
-  }
-
-  if (device == null) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#f59e0b" />
-        <Text style={styles.loadingText}>Loading camera...</Text>
-      </View>
     );
   }
 
@@ -398,10 +391,16 @@ export default function ScanOutScreen(): JSX.Element {
         {/* Camera View */}
         <View style={styles.cameraContainer}>
           {isCameraActive ? (
+            device == null ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#f59e0b" />
+                <Text style={styles.loadingText}>Loading camera...</Text>
+              </View>
+            ) : (
             <Camera
               style={styles.camera}
               device={device}
-              isActive={scanning}
+              isActive={isCameraActive}
               codeScanner={codeScanner}
             >
               <View style={styles.overlay}>
@@ -422,6 +421,7 @@ export default function ScanOutScreen(): JSX.Element {
                 )}
               </View>
             </Camera>
+            )
           ) : (
             <View style={[styles.camera, styles.cameraDisabledOverlay]}>
               <Ionicons name="videocam-off" size={64} color="rgba(255,255,255,0.5)" />

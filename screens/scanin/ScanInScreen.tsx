@@ -28,11 +28,13 @@ export default function ScanInScreen(): JSX.Element {
   const [isCameraActive, setIsCameraActive] = useState(true);
   const [lastRawScan, setLastRawScan] = useState<string | null>(null); // DEBUG: nilai mentah yang terbaca kamera
   const inputRef = useRef<TextInput>(null);
+  const isCooldownRef = useRef(false);
   const device = useCameraDevice('back');
 
   const codeScanner = useCodeScanner({
     codeTypes: ['qr', 'code-128', 'code-39', 'ean-13', 'ean-8'],
     onCodeScanned: (codes) => {
+      if (isCooldownRef.current) return;
       if (codes.length > 0 && codes[0].value) {
         const rawValue = codes[0].value;
         // Normalisasi agresif: hapus karakter kontrol & non-printable
@@ -108,7 +110,7 @@ export default function ScanInScreen(): JSX.Element {
   };
 
   const handleBarcodeScanned = async ({ data }: { data: string }) => {
-    if (processing) return;
+    if (processing || isCooldownRef.current) return;
 
     // Check if this resi is already being processed (prevent duplicate scans)
     if (pendingScans.has(data)) {
@@ -156,7 +158,7 @@ export default function ScanInScreen(): JSX.Element {
         setCurrentScan(null);
         setProcessing(false);
         // Re-enable scanning after 1 second cooldown
-        setTimeout(() => setScanning(true), 1000);
+        setTimeout(() => { setScanning(true); isCooldownRef.current = false; }, );
       } else {
         // Trigger HEAVY error vibration (stronger and more noticeable)
         await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
@@ -182,7 +184,7 @@ export default function ScanInScreen(): JSX.Element {
                 setCurrentScan(null);
                 setProcessing(false);
                 // Re-enable scanning after 1 second cooldown
-                setTimeout(() => setScanning(true), 1000);
+                setTimeout(() => { setScanning(true); isCooldownRef.current = false; }, );
               }
             }
           ]
@@ -221,7 +223,7 @@ export default function ScanInScreen(): JSX.Element {
               setCurrentScan(null);
               setProcessing(false);
               // Re-enable scanning after 1 second cooldown
-              setTimeout(() => setScanning(true), 1000);
+              setTimeout(() => { setScanning(true); isCooldownRef.current = false; }, );
             }
           }
         ]
@@ -264,15 +266,6 @@ export default function ScanInScreen(): JSX.Element {
       </LinearGradient>
     );
   };
-
-  if (device == null) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#f59e0b" />
-        <Text style={styles.loadingText}>Memuat kamera...</Text>
-      </View>
-    );
-  }
 
   const renderScannedOrder = ({ item, index }: { item: ScannedOrder; index: number }) => (
     <View style={[
@@ -351,10 +344,16 @@ export default function ScanInScreen(): JSX.Element {
         {/* Camera View */}
         <View style={styles.cameraContainer}>
           {isCameraActive ? (
+            device == null ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#f59e0b" />
+                <Text style={styles.loadingText}>Memuat kamera...</Text>
+              </View>
+            ) : (
             <Camera
               style={styles.camera}
               device={device}
-              isActive={scanning}
+              isActive={isCameraActive}
               codeScanner={codeScanner}
             >
               <View style={styles.overlay}>
@@ -375,6 +374,7 @@ export default function ScanInScreen(): JSX.Element {
                 )}
               </View>
             </Camera>
+            )
           ) : (
             <View style={[styles.camera, styles.cameraDisabledOverlay]}>
               <Ionicons name="videocam-off" size={64} color="rgba(255,255,255,0.5)" />

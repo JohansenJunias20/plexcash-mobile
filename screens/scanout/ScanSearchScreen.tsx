@@ -32,6 +32,7 @@ export default function ScanSearchScreen() {
   const [manualInput, setManualInput] = useState('');
   const [isCameraActive, setIsCameraActive] = useState(true);
   const inputRef = useRef<TextInput>(null);
+  const isCooldownRef = useRef(false);
   const device = useCameraDevice('back');
 
   // Normalisasi resi dari berbagai format barcode.
@@ -98,6 +99,7 @@ export default function ScanSearchScreen() {
     // - code-93: varian code-39
     codeTypes: ['qr', 'code-128', 'code-39', 'code-93', 'ean-13', 'ean-8', 'pdf-417', 'data-matrix', 'aztec', 'itf'],
     onCodeScanned: (codes) => {
+      if (isCooldownRef.current) return;
       if (codes.length > 0 && codes[0].value) {
         const normalized = normalizeResi(codes[0].value);
         handleBarcodeScanned({ data: normalized });
@@ -149,7 +151,7 @@ export default function ScanSearchScreen() {
   };
 
   const handleBarcodeScanned = async ({ data }: { data: string }) => {
-    if (processing) return;
+    if (processing || isCooldownRef.current) return;
 
     // Normalisasi resi sebelum diproses (kalau belum dinormalisasi dari codeScanner)
     const resi = normalizeResi(data);
@@ -199,7 +201,7 @@ export default function ScanSearchScreen() {
         setResults(prev => [newResult, ...prev]);
         setCurrentScan(null);
         setProcessing(false);
-        setTimeout(() => setScanning(true), 500);
+        setTimeout(() => { setScanning(true); isCooldownRef.current = false; }, );
 
         // Auto-navigate to order detail (dalam ScanSearchStack)
         navigation.navigate('OrderDetail', {
@@ -229,7 +231,7 @@ export default function ScanSearchScreen() {
               onPress: () => {
                 setCurrentScan(null);
                 setProcessing(false);
-                setTimeout(() => setScanning(true), 1000);
+                setTimeout(() => { setScanning(true); isCooldownRef.current = false; }, );
               }
             }
           ]
@@ -263,7 +265,7 @@ export default function ScanSearchScreen() {
             onPress: () => {
               setCurrentScan(null);
               setProcessing(false);
-              setTimeout(() => setScanning(true), 1000);
+              setTimeout(() => { setScanning(true); isCooldownRef.current = false; }, );
             }
           }
         ]
@@ -309,15 +311,6 @@ export default function ScanSearchScreen() {
           </TouchableOpacity>
         </View>
       </LinearGradient>
-    );
-  }
-
-  if (device == null) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#3B82F6" />
-        <Text style={styles.loadingText}>Memuat kamera...</Text>
-      </View>
     );
   }
 
@@ -434,10 +427,16 @@ export default function ScanSearchScreen() {
         {/* Camera View */}
         <View style={styles.cameraContainer}>
           {isCameraActive ? (
+            device == null ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#3B82F6" />
+                <Text style={styles.loadingText}>Memuat kamera...</Text>
+              </View>
+            ) : (
             <Camera
               style={styles.camera}
               device={device}
-              isActive={scanning}
+              isActive={isCameraActive}
               codeScanner={codeScanner}
             >
               <View style={styles.overlay}>
@@ -458,6 +457,7 @@ export default function ScanSearchScreen() {
                 )}
               </View>
             </Camera>
+            )
           ) : (
             <View style={[styles.camera, styles.cameraDisabledOverlay]}>
               <Ionicons name="videocam-off" size={64} color="rgba(255,255,255,0.5)" />

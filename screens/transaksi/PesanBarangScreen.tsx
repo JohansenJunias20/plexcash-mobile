@@ -25,6 +25,7 @@ interface ItemBelumPesan {
   merk: string;
   kategori: string;
   id_supplier: number;
+  supplier_nama?: string;
   minstok: number;
   stok: number;
   qty_pesan: number;
@@ -79,7 +80,19 @@ export default function PesanBarangScreen() {
   const fetchBelumPesan = async () => {
     try {
       setLoadingBelum(true);
-      const response = await ApiService.get('/get/masterbarang/items-needing-order');
+      
+      // Fetch both items and suppliers in parallel
+      const [response, suppliersRes] = await Promise.all([
+        ApiService.get('/get/masterbarang/items-needing-order'),
+        ApiService.get('/get/supplier')
+      ]);
+
+      let suppliersMap = new Map();
+      if (suppliersRes.status && suppliersRes.data) {
+        suppliersRes.data.forEach((s: any) => {
+          suppliersMap.set(String(s.id), s.nama);
+        });
+      }
 
       if (response.status) {
         // Filter to only show items where pesan = 0 (not yet marked as ordered)
@@ -88,6 +101,7 @@ export default function PesanBarangScreen() {
         const processedData = filteredData.map((item: any) => ({
           ...item,
           qty_pesan: item.qty_pesan || 0,
+          supplier_nama: item.supplier_nama || suppliersMap.get(String(item.id_supplier)),
         }));
 
         setItemsBelumPesan(processedData);

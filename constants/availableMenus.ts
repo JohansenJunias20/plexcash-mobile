@@ -48,6 +48,7 @@ export const AVAILABLE_MENUS: MenuItem[] = [
   // TRANSAKSI - Jurnal
   { id: 'JurnalTambah', label: 'Jurnal Tambah', subtitle: 'Tambah Jurnal', icon: 'add-circle-outline', route: 'JurnalTambah', category: 'TRANSAKSI', accessKey: 'transaksi.jurnal.tambah' },
   { id: 'JurnalSearch', label: 'Jurnal Search', subtitle: 'Cari Jurnal', icon: 'search-outline', route: 'JurnalSearch', category: 'TRANSAKSI', accessKey: 'transaksi.jurnal.search' },
+  { id: 'JurnalBiaya', label: 'Biaya Operasional', subtitle: 'Biaya Operasional', icon: 'cash-outline', route: 'JurnalBiaya', category: 'TRANSAKSI', accessKey: 'transaksi.jurnal.biaya' },
 
   // TRANSAKSI - Others
   { id: 'MutasiAkun', label: 'Mutasi Akun', subtitle: 'Account Mutation', icon: 'swap-horizontal-outline', route: 'MutasiAkun', category: 'TRANSAKSI', accessKey: 'transaksi.detailbaganakun' },
@@ -90,6 +91,8 @@ export const DEFAULT_QUICK_ACTIONS: string[] = [
   'BundlingList',
   'StokOpname',
   'Setting',
+  'JurnalSearch',
+  'JurnalBiaya',
 ];
 
 export const MAX_QUICK_ACTIONS = 8;

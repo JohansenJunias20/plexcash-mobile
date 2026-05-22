@@ -9,6 +9,10 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Modal,
+  Dimensions,
+  StatusBar,
+  Pressable,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -17,6 +21,8 @@ import ApiService from '../../services/api';
 interface EditTabProps {
   productId: number | null;
 }
+
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export default function EditTab({ productId }: EditTabProps): JSX.Element {
   const [loading, setLoading] = useState(true);
@@ -27,6 +33,8 @@ export default function EditTab({ productId }: EditTabProps): JSX.Element {
   const [sku, setSku] = useState('');
   const [weight, setWeight] = useState('');
   const [description, setDescription] = useState('');
+  const [lightboxVisible, setLightboxVisible] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
 
   useEffect(() => {
     if (productId) {
@@ -103,6 +111,23 @@ export default function EditTab({ productId }: EditTabProps): JSX.Element {
     setImages(images.filter((_, i) => i !== index));
   };
 
+  const openLightbox = (index: number) => {
+    setLightboxIndex(index);
+    setLightboxVisible(true);
+  };
+
+  const closeLightbox = () => {
+    setLightboxVisible(false);
+  };
+
+  const goToPrev = () => {
+    setLightboxIndex(prev => (prev > 0 ? prev - 1 : images.length - 1));
+  };
+
+  const goToNext = () => {
+    setLightboxIndex(prev => (prev < images.length - 1 ? prev + 1 : 0));
+  };
+
   const handleUpdate = () => {
     if (!name || !sku) {
       Alert.alert('Validation Error', 'Please fill in required fields');
@@ -132,7 +157,8 @@ export default function EditTab({ productId }: EditTabProps): JSX.Element {
   }
 
   return (
-    <ScrollView style={styles.container}>
+    <>
+      <ScrollView style={styles.container}>
       {/* Platform Selector */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Select Platform</Text>
@@ -167,7 +193,12 @@ export default function EditTab({ productId }: EditTabProps): JSX.Element {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imageScroll}>
           {images.map((uri, index) => (
             <View key={index} style={styles.imageContainer}>
-              <Image source={{ uri }} style={styles.image} />
+              <TouchableOpacity activeOpacity={0.85} onPress={() => openLightbox(index)}>
+                <Image source={{ uri }} style={styles.image} />
+                <View style={styles.zoomHint}>
+                  <Ionicons name="expand-outline" size={14} color="white" />
+                </View>
+              </TouchableOpacity>
               <TouchableOpacity
                 style={styles.removeButton}
                 onPress={() => removeImage(index)}
@@ -245,6 +276,80 @@ export default function EditTab({ productId }: EditTabProps): JSX.Element {
         </TouchableOpacity>
       </View>
     </ScrollView>
+
+    {/* Lightbox Modal */}
+    <Modal
+      visible={lightboxVisible}
+      transparent
+      animationType="fade"
+      onRequestClose={closeLightbox}
+      statusBarTranslucent
+    >
+      <StatusBar backgroundColor="rgba(0,0,0,0.95)" barStyle="light-content" />
+      <Pressable style={styles.lightboxOverlay} onPress={closeLightbox}>
+        {/* Close Button */}
+        <TouchableOpacity
+          style={styles.lightboxCloseBtn}
+          onPress={closeLightbox}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Ionicons name="close" size={28} color="white" />
+        </TouchableOpacity>
+
+        {/* Image Counter */}
+        {images.length > 1 && (
+          <View style={styles.lightboxCounter}>
+            <Text style={styles.lightboxCounterText}>
+              {lightboxIndex + 1} / {images.length}
+            </Text>
+          </View>
+        )}
+
+        {/* Main Image */}
+        <Pressable onPress={(e) => e.stopPropagation()}>
+          <Image
+            source={{ uri: images[lightboxIndex] }}
+            style={styles.lightboxImage}
+            resizeMode="contain"
+          />
+        </Pressable>
+
+        {/* Navigation Buttons */}
+        {images.length > 1 && (
+          <>
+            <TouchableOpacity
+              style={[styles.lightboxNavBtn, styles.lightboxNavLeft]}
+              onPress={(e) => { (e as any).stopPropagation?.(); goToPrev(); }}
+            >
+              <Ionicons name="chevron-back" size={32} color="white" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.lightboxNavBtn, styles.lightboxNavRight]}
+              onPress={(e) => { (e as any).stopPropagation?.(); goToNext(); }}
+            >
+              <Ionicons name="chevron-forward" size={32} color="white" />
+            </TouchableOpacity>
+          </>
+        )}
+
+        {/* Dot Indicators */}
+        {images.length > 1 && (
+          <View style={styles.lightboxDots}>
+            {images.map((_, i) => (
+              <TouchableOpacity
+                key={i}
+                onPress={() => setLightboxIndex(i)}
+                style={[
+                  styles.lightboxDot,
+                  i === lightboxIndex && styles.lightboxDotActive,
+                ]}
+              />
+            ))}
+          </View>
+        )}
+      </Pressable>
+    </Modal>
+    </>
   );
 }
 
@@ -333,12 +438,87 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: '#f3f4f6',
   },
+  zoomHint: {
+    position: 'absolute',
+    bottom: 6,
+    right: 6,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 4,
+    padding: 3,
+  },
   removeButton: {
     position: 'absolute',
     top: -8,
     right: -8,
     backgroundColor: 'white',
     borderRadius: 12,
+  },
+  // Lightbox styles
+  lightboxOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  lightboxImage: {
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT * 0.75,
+  },
+  lightboxCloseBtn: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 24,
+    padding: 8,
+  },
+  lightboxCounter: {
+    position: 'absolute',
+    top: 56,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+    borderRadius: 20,
+    zIndex: 10,
+  },
+  lightboxCounterText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  lightboxNavBtn: {
+    position: 'absolute',
+    top: '50%',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 30,
+    padding: 10,
+    zIndex: 10,
+  },
+  lightboxNavLeft: {
+    left: 16,
+  },
+  lightboxNavRight: {
+    right: 16,
+  },
+  lightboxDots: {
+    position: 'absolute',
+    bottom: 60,
+    flexDirection: 'row',
+    gap: 8,
+    alignSelf: 'center',
+  },
+  lightboxDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255,255,255,0.4)',
+  },
+  lightboxDotActive: {
+    backgroundColor: 'white',
+    width: 20,
+    borderRadius: 4,
   },
   addImageButton: {
     width: 120,

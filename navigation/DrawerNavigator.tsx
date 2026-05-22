@@ -57,6 +57,8 @@ import PenjualanReturScreen from '../screens/transaksi/penjualan/PenjualanReturS
 // TRANSAKSI Section - Jurnal
 import JurnalTambahScreen from '../screens/transaksi/jurnal/JurnalTambahScreen';
 import JurnalSearchScreen from '../screens/transaksi/jurnal/JurnalSearchScreen';
+import JurnalRincianScreen from '../screens/transaksi/jurnal/JurnalRincianScreen';
+import JurnalBiayaScreen from '../screens/transaksi/jurnal/JurnalBiayaScreen';
 
 // TRANSAKSI Section - Others
 import MutasiAkunScreen from '../screens/transaksi/MutasiAkunScreen';
@@ -102,6 +104,7 @@ const ProsesOtomatisStack = createNativeStackNavigator();
 const PerangkatStack = createNativeStackNavigator();
 const PembelianStack = createNativeStackNavigator();
 const PenjualanStack = createNativeStackNavigator();
+const JurnalStack = createNativeStackNavigator();
 
 const ScanSearchStack = createNativeStackNavigator();
 
@@ -283,6 +286,17 @@ const PenjualanStackScreen = () => (
   </PenjualanStack.Navigator>
 );
 
+const JurnalStackScreen = () => (
+  <JurnalStack.Navigator
+    screenOptions={{
+      headerShown: false,
+    }}
+  >
+    <JurnalStack.Screen name="JurnalSearchMain" component={JurnalSearchScreen} />
+    <JurnalStack.Screen name="JurnalRincian" component={JurnalRincianScreen} />
+  </JurnalStack.Navigator>
+);
+
 const DrawerNavigatorContent = () => {
   return (
     <Drawer.Navigator
@@ -328,7 +342,8 @@ const DrawerNavigatorContent = () => {
 
       {/* TRANSAKSI Section - Jurnal */}
       <Drawer.Screen name="JurnalTambah" component={JurnalTambahScreen} />
-      <Drawer.Screen name="JurnalSearch" component={JurnalSearchScreen} />
+      <Drawer.Screen name="JurnalSearch" component={JurnalStackScreen} />
+      <Drawer.Screen name="JurnalBiaya" component={JurnalBiayaScreen} />
 
       {/* TRANSAKSI Section - Others */}
       <Drawer.Screen name="MutasiAkun" component={MutasiAkunScreen} />

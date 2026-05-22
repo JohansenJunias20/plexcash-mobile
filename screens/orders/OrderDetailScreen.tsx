@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, RefreshControl, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, RefreshControl, Image, Modal, Dimensions, StatusBar, Pressable } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const SHOW_IMAGES_KEY = '@order_detail_show_images';
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export type OrderDetail = {
   id: string;
@@ -38,6 +39,12 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [showImages, setShowImages] = useState(false);
   const [imagesLoaded, setImagesLoaded] = useState(false);
+  const [lightboxVisible, setLightboxVisible] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+
+  const lightboxImages = useMemo(() => {
+    return (detail?.items || []).filter(it => !!it.image_url).map(it => it.image_url as string);
+  }, [detail]);
 
   useEffect(() => {
     navigation.setOptions({
@@ -438,11 +445,26 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
                 <View style={styles.itemHeader}>
                   {/* Product image (shown when toggle is ON and image_url exists) */}
                   {showImages && it.image_url ? (
-                    <Image
-                      source={{ uri: it.image_url }}
-                      style={styles.productImage}
-                      resizeMode="cover"
-                    />
+                    <TouchableOpacity
+                      activeOpacity={0.85}
+                      onPress={() => {
+                        const idx = lightboxImages.indexOf(it.image_url as string);
+                        if (idx !== -1) {
+                          setLightboxIndex(idx);
+                          setLightboxVisible(true);
+                        }
+                      }}
+                      style={styles.productImageContainer}
+                    >
+                      <Image
+                        source={{ uri: it.image_url }}
+                        style={styles.productImage}
+                        resizeMode="cover"
+                      />
+                      <View style={styles.zoomHint}>
+                        <Ionicons name="expand-outline" size={14} color="white" />
+                      </View>
+                    </TouchableOpacity>
                   ) : (
                     <View style={styles.itemIconBadge}>
                       <Ionicons name="cube" size={16} color="#f59e0b" />
@@ -503,6 +525,85 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
           <Text style={styles.secondaryButtonText}>Print</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Lightbox Modal */}
+      <Modal
+        visible={lightboxVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setLightboxVisible(false)}
+        statusBarTranslucent
+      >
+        <StatusBar backgroundColor="rgba(0,0,0,0.95)" barStyle="light-content" />
+        <Pressable style={styles.lightboxOverlay} onPress={() => setLightboxVisible(false)}>
+          {/* Close Button */}
+          <TouchableOpacity
+            style={styles.lightboxCloseBtn}
+            onPress={() => setLightboxVisible(false)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="close" size={28} color="white" />
+          </TouchableOpacity>
+
+          {/* Image Counter */}
+          {lightboxImages.length > 1 && (
+            <View style={styles.lightboxCounter}>
+              <Text style={styles.lightboxCounterText}>
+                {lightboxIndex + 1} / {lightboxImages.length}
+              </Text>
+            </View>
+          )}
+
+          {/* Main Image */}
+          <Pressable onPress={(e) => e.stopPropagation()}>
+            <Image
+              source={{ uri: lightboxImages[lightboxIndex] }}
+              style={styles.lightboxImage}
+              resizeMode="contain"
+            />
+          </Pressable>
+
+          {/* Navigation Buttons */}
+          {lightboxImages.length > 1 && (
+            <>
+              <TouchableOpacity
+                style={[styles.lightboxNavBtn, styles.lightboxNavLeft]}
+                onPress={(e) => {
+                  (e as any).stopPropagation?.();
+                  setLightboxIndex(prev => (prev > 0 ? prev - 1 : lightboxImages.length - 1));
+                }}
+              >
+                <Ionicons name="chevron-back" size={32} color="white" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.lightboxNavBtn, styles.lightboxNavRight]}
+                onPress={(e) => {
+                  (e as any).stopPropagation?.();
+                  setLightboxIndex(prev => (prev < lightboxImages.length - 1 ? prev + 1 : 0));
+                }}
+              >
+                <Ionicons name="chevron-forward" size={32} color="white" />
+              </TouchableOpacity>
+            </>
+          )}
+
+          {/* Dot Indicators */}
+          {lightboxImages.length > 1 && (
+            <View style={styles.lightboxDots}>
+              {lightboxImages.map((_, i) => (
+                <TouchableOpacity
+                  key={i}
+                  onPress={() => setLightboxIndex(i)}
+                  style={[
+                    styles.lightboxDot,
+                    i === lightboxIndex && styles.lightboxDotActive,
+                  ]}
+                />
+              ))}
+            </View>
+          )}
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -755,14 +856,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 12,
   },
+  productImageContainer: {
+    marginRight: 12,
+    position: 'relative',
+  },
   productImage: {
     width: 64,
     height: 64,
     borderRadius: 10,
-    marginRight: 12,
     backgroundColor: '#F3F4F6',
     borderWidth: 1,
     borderColor: '#E5E7EB',
+  },
+  zoomHint: {
+    position: 'absolute',
+    bottom: 4,
+    right: 4,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 4,
+    padding: 3,
   },
   itemName: {
     flex: 1,
@@ -824,9 +936,76 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14,
-    borderRadius: 12,
+    paddingVertical: 12,
+    borderRadius: 8,
+    gap: 6,
+  },
+  // Lightbox styles
+  lightboxOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  lightboxImage: {
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT * 0.75,
+  },
+  lightboxCloseBtn: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 24,
+    padding: 8,
+  },
+  lightboxCounter: {
+    position: 'absolute',
+    top: 56,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+    borderRadius: 20,
+    zIndex: 10,
+  },
+  lightboxCounterText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  lightboxNavBtn: {
+    position: 'absolute',
+    top: '50%',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 30,
+    padding: 10,
+    zIndex: 10,
+  },
+  lightboxNavLeft: {
+    left: 16,
+  },
+  lightboxNavRight: {
+    right: 16,
+  },
+  lightboxDots: {
+    position: 'absolute',
+    bottom: 60,
+    flexDirection: 'row',
     gap: 8,
+    alignSelf: 'center',
+  },
+  lightboxDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255,255,255,0.4)',
+  },
+  lightboxDotActive: {
+    backgroundColor: 'white',
+    width: 20,
+    borderRadius: 4,
   },
   primaryButton: {
     backgroundColor: '#f59e0b',
