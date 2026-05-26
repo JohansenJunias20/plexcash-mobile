@@ -11,6 +11,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import KartuStokModal from '../../../components/KartuStokModal';
 
 interface ItemSudahPesan {
   id: number;
@@ -65,6 +66,15 @@ export default function SudahPesanTab({
   onTransferToPreOrder,
 }: SudahPesanTabProps) {
   const [editingQty, setEditingQty] = useState<{ [key: number]: string }>({});
+  const [kartuStokItemId, setKartuStokItemId] = useState<number | null>(null);
+  const [kartuStokItemNama, setKartuStokItemNama] = useState<string>('');
+  const [showKartuStok, setShowKartuStok] = useState(false);
+
+  const openKartuStok = (item: ItemSudahPesan) => {
+    setKartuStokItemId(item.id);
+    setKartuStokItemNama(item.nama);
+    setShowKartuStok(true);
+  };
 
   // Filter items based on supplier and PO status
   const filteredItems = useMemo(() => {
@@ -274,6 +284,13 @@ export default function SudahPesanTab({
           <Text style={styles.productName} numberOfLines={2}>
             {item.nama}
           </Text>
+          {/* Kartu Stok info button */}
+          <TouchableOpacity
+            style={styles.infoBtn}
+            onPress={() => openKartuStok(item)}
+          >
+            <Ionicons name="information-circle" size={22} color="#3b82f6" />
+          </TouchableOpacity>
         </View>
 
         <View style={styles.cardBody}>
@@ -371,6 +388,13 @@ export default function SudahPesanTab({
           />
         }
         showsVerticalScrollIndicator={false}
+      />
+
+      <KartuStokModal
+        visible={showKartuStok}
+        itemId={kartuStokItemId}
+        itemNama={kartuStokItemNama}
+        onClose={() => setShowKartuStok(false)}
       />
     </View>
   );
@@ -539,6 +563,10 @@ const styles = StyleSheet.create({
   },
   checkbox: {
     marginRight: 12,
+  },
+  infoBtn: {
+    padding: 2,
+    marginLeft: 6,
   },
   productName: {
     flex: 1,

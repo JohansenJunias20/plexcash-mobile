@@ -67,6 +67,8 @@ class ApiService {
   static setAuthErrorHandler(handler: () => void) {
     this.authErrorHandler = handler;
   }
+
+  // getFirebaseUser removed since persistent tokens are used instead
   /**
    * Get comprehensive device information
    */
@@ -574,6 +576,12 @@ class ApiService {
   static async getAuthHeader(): Promise<{ Authorization: string }> {
     console.log('🔑 [AUTH-HEADER] Building auth header...');
 
+    const authMethod = await AsyncStorage.getItem('authMethod');
+
+    // For Firebase (email login), the backend already returns a long-lived persistent JWT (valid for 365 days).
+    // We should NOT override it with short-lived Firebase ID tokens.
+    // Both 'firebase' and 'device' auth methods rely on the persistent authToken in SecureStore/AsyncStorage.
+
     // Prefer device token stored via QR authorization
     let deviceToken = await getTokenAuth();
 
@@ -704,7 +712,7 @@ class ApiService {
               console.error('❌ [AUTH-REQ] Error during token refresh:', refreshError);
             }
           } else {
-            console.log('❌ [AUTH-REQ] Firebase auth - cannot refresh, clearing token');
+            console.log('❌ [AUTH-REQ] Firebase/Other auth - no auto-refresh mechanism for persistent tokens.');
           }
         } else {
           console.log('❌ [AUTH-REQ] Already retried once, not retrying again');

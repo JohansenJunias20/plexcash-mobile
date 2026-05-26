@@ -9,6 +9,7 @@ import { API_BASE_URL } from '../../services/api';
 import { getTokenAuth } from '../../services/token';
 import { useAuth } from '../../context/AuthContext';
 import NewOnlineModal from '../../components/NewOnlineModal';
+import KartuStokModal from '../../components/KartuStokModal';
 
 // Types aligned with web Item interface (subset used for list)
 export interface Item {
@@ -43,6 +44,9 @@ export default function BarangListScreen(): JSX.Element {
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [showActionSheet, setShowActionSheet] = useState(false);
   const [showOnlineModal, setShowOnlineModal] = useState(false);
+  const [showKartuStok, setShowKartuStok] = useState(false);
+  const [kartuStokItemId, setKartuStokItemId] = useState<number | null>(null);
+  const [kartuStokItemNama, setKartuStokItemNama] = useState<string>('');
   const PAGE_SIZE = 30;
 
   const fetchItems = async (reset = false) => {
@@ -164,6 +168,12 @@ export default function BarangListScreen(): JSX.Element {
     }
   };
 
+  const openKartuStokInline = (item: Item) => {
+    setKartuStokItemId(item.id);
+    setKartuStokItemNama(item.nama);
+    setShowKartuStok(true);
+  };
+
   const handleOnline = () => {
     if (selectedItem) {
       setShowActionSheet(false);
@@ -197,9 +207,18 @@ export default function BarangListScreen(): JSX.Element {
           <Text style={styles.badge}>HJ2: {formatCurrency(item.hargajual2)}</Text>
         </View>
       </View>
-      <TouchableOpacity style={styles.kebab} onPress={() => handleActionSheet(item)}>
-        <Ionicons name="ellipsis-vertical" size={18} color="#6B7280" />
-      </TouchableOpacity>
+      <View style={styles.cardActions}>
+        {/* Kartu Stok info button */}
+        <TouchableOpacity
+          style={styles.infoBtn}
+          onPress={() => openKartuStokInline(item)}
+        >
+          <Ionicons name="information-circle" size={22} color="#3b82f6" />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.kebab} onPress={() => handleActionSheet(item)}>
+          <Ionicons name="ellipsis-vertical" size={18} color="#6B7280" />
+        </TouchableOpacity>
+      </View>
     </TouchableOpacity>
   );
 
@@ -301,6 +320,14 @@ export default function BarangListScreen(): JSX.Element {
         productId={selectedItem?.id || null}
         onClose={() => setShowOnlineModal(false)}
       />
+
+      {/* Kartu Stok Inline Modal */}
+      <KartuStokModal
+        visible={showKartuStok}
+        itemId={kartuStokItemId}
+        itemNama={kartuStokItemNama}
+        onClose={() => setShowKartuStok(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -314,7 +341,9 @@ const styles = StyleSheet.create({
   searchBar: { flexDirection: 'row', alignItems: 'center', gap: 8 as any, padding: 12, backgroundColor: 'white' },
   input: { flex: 1, paddingHorizontal: 8, height: 40 },
   toggle: { marginHorizontal: 8, color: '#6B7280', fontWeight: '600' },
-  card: { flexDirection: 'row', backgroundColor: 'white', marginHorizontal: 12, marginVertical: 6, padding: 12, borderRadius: 10, elevation: 2 },
+  card: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', marginHorizontal: 12, marginVertical: 6, padding: 12, borderRadius: 10, elevation: 2 },
+  cardActions: { flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4 as any },
+  infoBtn: { padding: 4 },
   title: { fontSize: 16, fontWeight: '600', color: '#111827' },
   subtitle: { fontSize: 12, color: '#6B7280', marginTop: 2 },
   row: { flexDirection: 'row', gap: 8 as any, marginTop: 6, flexWrap: 'wrap' },

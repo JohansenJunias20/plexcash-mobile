@@ -128,11 +128,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             } else {
               logError('Backend response status is false', { context: 'AUTH' });
               console.log('❌ [AUTH-STATE-CHANGED] Backend response status is false');
-              logStateChange('Clearing authentication state');
-              setUser(null);
-              setIsAuthenticated(false);
-              await AsyncStorage.removeItem('isAuthenticated');
-              await AsyncStorage.removeItem('userEmail');
+              
+              const authToken = await AsyncStorage.getItem('authToken');
+              if (authToken) {
+                console.log('⚠️ [AUTH-STATE-CHANGED] Backend response status is false but stored auth exists - maintaining session');
+              } else {
+                logStateChange('Clearing authentication state');
+                setUser(null);
+                setIsAuthenticated(false);
+                await AsyncStorage.removeItem('isAuthenticated');
+                await AsyncStorage.removeItem('userEmail');
+              }
             }
           } catch (error) {
             logError('Authentication error in onAuthStateChanged', {
@@ -140,11 +146,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               data: error
             });
             console.error('❌ [AUTH-STATE-CHANGED] Authentication error:', error);
-            logStateChange('Clearing authentication state due to error');
-            setUser(null);
-            setIsAuthenticated(false);
-            await AsyncStorage.removeItem('isAuthenticated');
-            await AsyncStorage.removeItem('userEmail');
+            
+            const authToken = await AsyncStorage.getItem('authToken');
+            if (authToken) {
+              console.log('⚠️ [AUTH-STATE-CHANGED] Network error but stored auth exists - maintaining session');
+            } else {
+              logStateChange('Clearing authentication state due to error');
+              setUser(null);
+              setIsAuthenticated(false);
+              await AsyncStorage.removeItem('isAuthenticated');
+              await AsyncStorage.removeItem('userEmail');
+            }
           }
         } else {
           // PERSISTENT AUTH FIX: Don't clear auth state if Firebase user is null

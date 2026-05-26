@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -8,9 +8,11 @@ import {
   TouchableOpacity,
   RefreshControl,
   Alert,
+  ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import SearchSupplierModal, { SupplierItem } from '../../../components/pembelian/SearchSupplierModal';
+import KartuStokModal from '../../../components/KartuStokModal';
 
 interface ItemBelumPesan {
   id: number;
@@ -48,6 +50,37 @@ export default function BelumPesanTab({
 }: BelumPesanTabProps) {
   const [showSupplierModal, setShowSupplierModal] = useState(false);
   const [currentItemId, setCurrentItemId] = useState<number | null>(null);
+  const [kartuStokItemId, setKartuStokItemId] = useState<number | null>(null);
+  const [kartuStokItemNama, setKartuStokItemNama] = useState<string>('');
+  const [showKartuStok, setShowKartuStok] = useState(false);
+  const [supplierFilter, setSupplierFilter] = useState<string>('ALL');
+
+  // Collect unique suppliers from items
+  const uniqueSuppliers = useMemo(() => {
+    const seen = new Set<string>();
+    const result: { id: string; nama: string }[] = [{ id: 'ALL', nama: 'Semua' }];
+    items.forEach((item) => {
+      const key = String(item.id_supplier || '');
+      const nama = item.supplier_nama || 'Tanpa Supplier';
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push({ id: key, nama });
+      }
+    });
+    return result;
+  }, [items]);
+
+  // Filtered items by selected supplier
+  const filteredItems = useMemo(() => {
+    if (supplierFilter === 'ALL') return items;
+    return items.filter((item) => String(item.id_supplier || '') === supplierFilter);
+  }, [items, supplierFilter]);
+
+  const openKartuStok = (item: ItemBelumPesan) => {
+    setKartuStokItemId(item.id);
+    setKartuStokItemNama(item.nama);
+    setShowKartuStok(true);
+  };
 
   const handleChangeSupplier = (itemId: number, currentSupplierId: number) => {
     console.log('[BelumPesanTab] Opening supplier modal for item:', itemId, 'current supplier:', currentSupplierId);
@@ -112,6 +145,13 @@ export default function BelumPesanTab({
           <Text style={styles.productName} numberOfLines={2}>
             {item.nama}
           </Text>
+          {/* Info / Kartu Stok button */}
+          <TouchableOpacity
+            style={styles.infoBtn}
+            onPress={() => openKartuStok(item)}
+          >
+            <Ionicons name="information-circle" size={22} color="#3b82f6" />
+          </TouchableOpacity>
         </View>
 
         <View style={styles.cardBody}>
@@ -203,13 +243,44 @@ export default function BelumPesanTab({
 
   return (
     <View style={styles.container}>
+      {/* Supplier Filter */}
+      {uniqueSuppliers.length > 2 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.supplierFilterBar}
+          contentContainerStyle={styles.supplierFilterContent}
+        >
+          {uniqueSuppliers.map((s) => (
+            <TouchableOpacity
+              key={s.id}
+              style={[
+                styles.supplierFilterChip,
+                supplierFilter === s.id && styles.supplierFilterChipActive,
+              ]}
+              onPress={() => setSupplierFilter(s.id)}
+            >
+              <Text
+                style={[
+                  styles.supplierFilterText,
+                  supplierFilter === s.id && styles.supplierFilterTextActive,
+                ]}
+                numberOfLines={1}
+              >
+                {s.nama}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
+
       <FlatList
-        data={items}
+        data={filteredItems}
         renderItem={renderItem}
         keyExtractor={(item) => item.id.toString()}
         contentContainerStyle={[
           styles.listContent,
-          items.length === 0 && styles.listContentEmpty,
+          filteredItems.length === 0 && styles.listContentEmpty,
         ]}
         ListEmptyComponent={renderEmpty}
         refreshControl={
@@ -228,6 +299,13 @@ export default function BelumPesanTab({
         onClose={() => setShowSupplierModal(false)}
         onSelect={handleSupplierSelect}
         title="Select Supplier"
+      />
+
+      <KartuStokModal
+        visible={showKartuStok}
+        itemId={kartuStokItemId}
+        itemNama={kartuStokItemNama}
+        onClose={() => setShowKartuStok(false)}
       />
     </View>
   );
@@ -255,15 +333,55 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     marginBottom: 12,
   },
   productName: {
+    flex: 1,
     fontSize: 16,
     fontWeight: '600',
     color: '#1f2937',
   },
+  infoBtn: {
+    padding: 2,
+    marginLeft: 6,
+  },
   cardBody: {
     marginBottom: 12,
+  },
+  supplierFilterBar: {
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    maxHeight: 52,
+  },
+  supplierFilterContent: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  supplierFilterChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    marginRight: 8,
+  },
+  supplierFilterChipActive: {
+    backgroundColor: '#f59e0b',
+    borderColor: '#f59e0b',
+  },
+  supplierFilterText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#6b7280',
+  },
+  supplierFilterTextActive: {
+    color: '#ffffff',
+    fontWeight: '600',
   },
   infoRow: {
     flexDirection: 'row',

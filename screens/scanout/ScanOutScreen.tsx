@@ -5,7 +5,7 @@ import { Camera, useCameraDevice, useCodeScanner } from 'react-native-vision-cam
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
-import { useNavigation, DrawerActions } from '@react-navigation/native';
+import { useNavigation, DrawerActions, useIsFocused } from '@react-navigation/native';
 import ApiService from '../../services/api';
 import { Audio } from 'expo-av';
 
@@ -29,6 +29,7 @@ export default function ScanOutScreen(): JSX.Element {
   const inputRef = useRef<TextInput>(null);
   const isCooldownRef = useRef(false);
   const device = useCameraDevice('back');
+  const isFocused = useIsFocused();
 
   const codeScanner = useCodeScanner({
     codeTypes: ['qr', 'code-128', 'code-39', 'ean-13', 'ean-8'],
@@ -297,24 +298,7 @@ export default function ScanOutScreen(): JSX.Element {
     setScannedOrders(prev => prev.filter((_, i) => i !== index));
   };
 
-  if (!hasPermission) {
-    return (
-      <LinearGradient colors={['#fbbf24', '#f59e0b', '#d97706']} style={styles.container}>
-        <View style={styles.permissionContainer}>
-          <Ionicons name="camera-outline" size={64} color="white" />
-          <Text style={styles.permissionTitle}>Camera Permission Required</Text>
-          <Text style={styles.permissionText}>
-            We need access to your camera to scan order numbers from shipping labels.
-          </Text>
-          <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
-            <Text style={styles.permissionButtonText}>Grant Permission</Text>
-          </TouchableOpacity>
-        </View>
-      </LinearGradient>
-    );
-  }
-
-  const renderScannedOrder = ({ item, index }: { item: ScannedOrder; index: number }) => (
+const renderScannedOrder = ({ item, index }: { item: ScannedOrder; index: number }) => (
     <View style={[
       styles.orderCard,
       item.status === 'error' ? styles.errorCard : styles.successCard
@@ -387,6 +371,20 @@ export default function ScanOutScreen(): JSX.Element {
         <View style={styles.headerRight} />
       </View>
 
+      {!hasPermission ? (
+        <LinearGradient colors={['#fbbf24', '#f59e0b', '#d97706']} style={styles.container}>
+          <View style={styles.permissionContainer}>
+            <Ionicons name="camera-outline" size={64} color="white" />
+            <Text style={styles.permissionTitle}>Camera Permission Required</Text>
+            <Text style={styles.permissionText}>
+            We need access to your camera to scan order numbers from shipping labels.
+          </Text>
+            <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
+              <Text style={styles.permissionButtonText}>Grant Permission</Text>
+            </TouchableOpacity>
+          </View>
+        </LinearGradient>
+      ) : (
       <View style={styles.container}>
         {/* Camera View */}
         <View style={styles.cameraContainer}>
@@ -400,7 +398,7 @@ export default function ScanOutScreen(): JSX.Element {
             <Camera
               style={styles.camera}
               device={device}
-              isActive={isCameraActive}
+              isActive={isCameraActive && isFocused}
               codeScanner={codeScanner}
             >
               <View style={styles.overlay}>
@@ -526,6 +524,7 @@ export default function ScanOutScreen(): JSX.Element {
         )}
       </View>
     </View>
+      )}
     </SafeAreaView>
   );
 }

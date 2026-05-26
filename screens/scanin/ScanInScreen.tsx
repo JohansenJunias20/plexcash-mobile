@@ -5,7 +5,7 @@ import { Camera, useCameraDevice, useCodeScanner } from 'react-native-vision-cam
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
-import { useNavigation, DrawerActions } from '@react-navigation/native';
+import { useNavigation, DrawerActions, useIsFocused } from '@react-navigation/native';
 import ApiService from '../../services/api';
 import { Audio } from 'expo-av';
 
@@ -30,6 +30,7 @@ export default function ScanInScreen(): JSX.Element {
   const inputRef = useRef<TextInput>(null);
   const isCooldownRef = useRef(false);
   const device = useCameraDevice('back');
+  const isFocused = useIsFocused();
 
   const codeScanner = useCodeScanner({
     codeTypes: ['qr', 'code-128', 'code-39', 'ean-13', 'ean-8'],
@@ -250,22 +251,7 @@ export default function ScanInScreen(): JSX.Element {
     setScannedOrders(prev => prev.filter((_, i) => i !== index));
   };
 
-  if (!hasPermission) {
-    return (
-      <LinearGradient colors={['#fbbf24', '#f59e0b', '#d97706']} style={styles.container}>
-        <View style={styles.permissionContainer}>
-          <Ionicons name="camera-outline" size={64} color="white" />
-          <Text style={styles.permissionTitle}>Izin Kamera Diperlukan</Text>
-          <Text style={styles.permissionText}>
-            Kami memerlukan akses kamera untuk scan nomor resi dari paket retur.
-          </Text>
-          <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
-            <Text style={styles.permissionButtonText}>Berikan Izin</Text>
-          </TouchableOpacity>
-        </View>
-      </LinearGradient>
-    );
-  };
+
 
   const renderScannedOrder = ({ item, index }: { item: ScannedOrder; index: number }) => (
     <View style={[
@@ -340,6 +326,20 @@ export default function ScanInScreen(): JSX.Element {
         <View style={styles.headerRight} />
       </View>
 
+      {!hasPermission ? (
+        <LinearGradient colors={['#fbbf24', '#f59e0b', '#d97706']} style={styles.container}>
+          <View style={styles.permissionContainer}>
+            <Ionicons name="camera-outline" size={64} color="white" />
+            <Text style={styles.permissionTitle}>Izin Kamera Diperlukan</Text>
+            <Text style={styles.permissionText}>
+            Kami memerlukan akses kamera untuk scan nomor resi dari paket retur.
+          </Text>
+            <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
+              <Text style={styles.permissionButtonText}>Berikan Izin</Text>
+            </TouchableOpacity>
+          </View>
+        </LinearGradient>
+      ) : (
       <View style={styles.container}>
         {/* Camera View */}
         <View style={styles.cameraContainer}>
@@ -353,7 +353,7 @@ export default function ScanInScreen(): JSX.Element {
             <Camera
               style={styles.camera}
               device={device}
-              isActive={isCameraActive}
+              isActive={isCameraActive && isFocused}
               codeScanner={codeScanner}
             >
               <View style={styles.overlay}>
@@ -504,6 +504,7 @@ export default function ScanInScreen(): JSX.Element {
         )}
       </View>
     </View>
+      )}
     </SafeAreaView>
   );
 }

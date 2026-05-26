@@ -5,7 +5,7 @@ import { Camera, useCameraDevice, useCodeScanner } from 'react-native-vision-cam
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
-import { useNavigation, DrawerActions } from '@react-navigation/native';
+import { useNavigation, DrawerActions, useIsFocused } from '@react-navigation/native';
 import ApiService from '../../services/api';
 import { Audio } from 'expo-av';
 
@@ -34,6 +34,7 @@ export default function ScanSearchScreen() {
   const inputRef = useRef<TextInput>(null);
   const isCooldownRef = useRef(false);
   const device = useCameraDevice('back');
+  const isFocused = useIsFocused();
 
   // Normalisasi resi dari berbagai format barcode.
   // Label Gojek/GoSend sering menggunakan QR code yang berisi URL tracking
@@ -297,22 +298,7 @@ export default function ScanSearchScreen() {
     setResults(prev => prev.filter((_, i) => i !== index));
   };
 
-  if (!hasPermission) {
-    return (
-      <LinearGradient colors={['#3B82F6', '#1D4ED8', '#1E3A8A']} style={styles.container}>
-        <View style={styles.permissionContainer}>
-          <Ionicons name="camera-outline" size={64} color="white" />
-          <Text style={styles.permissionTitle}>Izin Kamera Diperlukan</Text>
-          <Text style={styles.permissionText}>
-            Diperlukan akses kamera untuk scan barcode resi dan mencari pesanan terkait.
-          </Text>
-          <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
-            <Text style={styles.permissionButtonText}>Berikan Izin</Text>
-          </TouchableOpacity>
-        </View>
-      </LinearGradient>
-    );
-  }
+
 
   const renderResult = ({ item, index }: { item: ScanResult; index: number }) => (
     <TouchableOpacity
@@ -415,6 +401,20 @@ export default function ScanSearchScreen() {
         <View style={styles.headerRight} />
       </View>
 
+      {!hasPermission ? (
+        <LinearGradient colors={['#3B82F6', '#1D4ED8', '#1E3A8A']} style={styles.container}>
+          <View style={styles.permissionContainer}>
+            <Ionicons name="camera-outline" size={64} color="white" />
+            <Text style={styles.permissionTitle}>Izin Kamera Diperlukan</Text>
+            <Text style={styles.permissionText}>
+            Diperlukan akses kamera untuk scan barcode resi dan mencari pesanan terkait.
+          </Text>
+            <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
+              <Text style={styles.permissionButtonText}>Berikan Izin</Text>
+            </TouchableOpacity>
+          </View>
+        </LinearGradient>
+      ) : (
       <View style={styles.container}>
         {/* Info banner */}
         <View style={styles.infoBanner}>
@@ -436,7 +436,7 @@ export default function ScanSearchScreen() {
             <Camera
               style={styles.camera}
               device={device}
-              isActive={isCameraActive}
+              isActive={isCameraActive && isFocused}
               codeScanner={codeScanner}
             >
               <View style={styles.overlay}>
@@ -568,6 +568,7 @@ export default function ScanSearchScreen() {
           )}
         </View>
       </View>
+      )}
     </SafeAreaView>
   );
 }
