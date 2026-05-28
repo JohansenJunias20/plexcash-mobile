@@ -39,3 +39,6 @@ yarn-error.*
 
 # typescript
 *.tsbuildinfo
+
+# Google Play API service account key - JANGAN COMMIT!
+service-account-key.json
