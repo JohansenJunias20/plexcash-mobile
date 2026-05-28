@@ -379,19 +379,21 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
             </View>
           )}
 
-          {detail.scan_timestamp && (
-            <View style={styles.infoRow}>
-              <View style={styles.infoIconContainer}>
-                <Ionicons name="scan-outline" size={20} color="#6B7280" />
-              </View>
-              <View style={styles.infoContent}>
-                <Text style={styles.infoLabel}>Scanned</Text>
+          <View style={styles.infoRow}>
+            <View style={styles.infoIconContainer}>
+              <Ionicons name="scan-outline" size={20} color="#6B7280" />
+            </View>
+            <View style={styles.infoContent}>
+              <Text style={styles.infoLabel}>Scan Date</Text>
+              {detail.scan_timestamp ? (
                 <Text style={[styles.infoValue, styles.scanTimestampHighlight]}>
                   {formatDate(detail.scan_timestamp)}
                 </Text>
-              </View>
+              ) : (
+                <Text style={[styles.infoValue, { color: '#EF4444' }]}>Belum Scan</Text>
+              )}
             </View>
-          )}
+          </View>
         </View>
 
         {/* Items Card */}

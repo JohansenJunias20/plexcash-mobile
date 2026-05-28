@@ -349,7 +349,7 @@ const renderScannedOrder = ({ item, index }: { item: ScannedOrder; index: number
 
   return (
     <SafeAreaView style={styles.safeContainer}>
-      {/* Header with Hamburger Menu */}
+      {/* Header with Hamburger Menu - ALWAYS VISIBLE */}
       <View style={styles.topHeader}>
         <TouchableOpacity
           style={styles.hamburgerButton}
@@ -360,7 +360,7 @@ const renderScannedOrder = ({ item, index }: { item: ScannedOrder; index: number
         <Text style={styles.topHeaderTitle}>Scan Out</Text>
         <TouchableOpacity
           style={styles.cameraToggleButton}
-          onPress={() => setIsCameraActive(!isCameraActive)}
+          onPress={() => setIsCameraActive(prev => !prev)}
         >
           <Ionicons 
             name={isCameraActive ? "videocam" : "videocam-off"} 
@@ -371,159 +371,160 @@ const renderScannedOrder = ({ item, index }: { item: ScannedOrder; index: number
         <View style={styles.headerRight} />
       </View>
 
+      {/* Body Content */}
       {!hasPermission ? (
         <LinearGradient colors={['#fbbf24', '#f59e0b', '#d97706']} style={styles.container}>
           <View style={styles.permissionContainer}>
             <Ionicons name="camera-outline" size={64} color="white" />
             <Text style={styles.permissionTitle}>Camera Permission Required</Text>
             <Text style={styles.permissionText}>
-            We need access to your camera to scan order numbers from shipping labels.
-          </Text>
+              We need access to your camera to scan order numbers from shipping labels.
+            </Text>
             <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
               <Text style={styles.permissionButtonText}>Grant Permission</Text>
             </TouchableOpacity>
           </View>
         </LinearGradient>
       ) : (
-      <View style={styles.container}>
-        {/* Camera View */}
-        <View style={styles.cameraContainer}>
-          {isCameraActive ? (
-            device == null ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#f59e0b" />
-                <Text style={styles.loadingText}>Loading camera...</Text>
+        <View style={styles.container}>
+          {/* Camera View */}
+          <View style={styles.cameraContainer}>
+            {isCameraActive ? (
+              device == null ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color="#f59e0b" />
+                  <Text style={styles.loadingText}>Loading camera...</Text>
+                </View>
+              ) : (
+                <Camera
+                  style={styles.camera}
+                  device={device}
+                  isActive={isCameraActive && isFocused}
+                  codeScanner={codeScanner}
+                >
+                  <View style={styles.overlay}>
+                    <View style={styles.scanArea}>
+                      <View style={[styles.corner, styles.topLeft]} />
+                      <View style={[styles.corner, styles.topRight]} />
+                      <View style={[styles.corner, styles.bottomLeft]} />
+                      <View style={[styles.corner, styles.bottomRight]} />
+                    </View>
+                    <Text style={styles.instructionText}>
+                      Scan order number from shipping label
+                    </Text>
+                    {currentScan && (
+                      <View style={styles.scanFeedback}>
+                        <Ionicons name="checkmark-circle" size={48} color="#10B981" />
+                        <Text style={styles.scanFeedbackText}>Scanned!</Text>
+                      </View>
+                    )}
+                  </View>
+                </Camera>
+              )
+            ) : (
+              <View style={[styles.camera, styles.cameraDisabledOverlay]}>
+                <Ionicons name="videocam-off" size={64} color="rgba(255,255,255,0.5)" />
+                <Text style={styles.cameraDisabledText}>Kamera Dinonaktifkan</Text>
+                <TouchableOpacity
+                  style={styles.enableCameraButton}
+                  onPress={() => setIsCameraActive(true)}
+                >
+                  <Text style={styles.enableCameraButtonText}>Aktifkan Kamera</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+
+          {/* Manual Input Section for Bluetooth Scanner */}
+          <View style={styles.manualInputContainer}>
+            <View style={styles.inputWrapper}>
+              <Ionicons name="barcode-outline" size={24} color="#6B7280" style={styles.inputIcon} />
+              <TextInput
+                ref={inputRef}
+                style={styles.manualInput}
+                value={manualInput}
+                onChangeText={setManualInput}
+                onSubmitEditing={handleManualSubmit}
+                placeholder="Scan with Bluetooth scanner or type manually"
+                placeholderTextColor="#9CA3AF"
+                returnKeyType="done"
+                autoCapitalize="none"
+                autoCorrect={false}
+                blurOnSubmit={false}
+              />
+              {manualInput.length > 0 && (
+                <TouchableOpacity
+                  style={styles.clearInputButton}
+                  onPress={() => setManualInput('')}
+                >
+                  <Ionicons name="close-circle" size={20} color="#9CA3AF" />
+                </TouchableOpacity>
+              )}
+            </View>
+            <TouchableOpacity
+              style={[styles.submitButton, !manualInput.trim() && styles.submitButtonDisabled]}
+              onPress={handleManualSubmit}
+              disabled={!manualInput.trim() || processing}
+            >
+              <Ionicons name="checkmark" size={20} color="white" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Scanned Orders List */}
+          <View style={styles.listContainer}>
+            <View style={styles.listHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Ionicons name="list" size={20} color="#111827" />
+                <Text style={styles.listTitle}>Scanned Orders ({scannedOrders.length})</Text>
+              </View>
+              {scannedOrders.length > 0 && (
+                <TouchableOpacity onPress={clearScans}>
+                  <Text style={styles.clearButton}>Clear All</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {scannedOrders.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Ionicons name="scan-outline" size={48} color="#9CA3AF" />
+                <Text style={styles.emptyText}>No orders scanned yet</Text>
+                <Text style={styles.emptySubtext}>
+                  Point your camera at a barcode or QR code on the shipping label
+                </Text>
               </View>
             ) : (
-            <Camera
-              style={styles.camera}
-              device={device}
-              isActive={isCameraActive && isFocused}
-              codeScanner={codeScanner}
-            >
-              <View style={styles.overlay}>
-                <View style={styles.scanArea}>
-                  <View style={[styles.corner, styles.topLeft]} />
-                  <View style={[styles.corner, styles.topRight]} />
-                  <View style={[styles.corner, styles.bottomLeft]} />
-                  <View style={[styles.corner, styles.bottomRight]} />
-                </View>
-                <Text style={styles.instructionText}>
-                  Scan order number from shipping label
-                </Text>
-                {currentScan && (
-                  <View style={styles.scanFeedback}>
-                    <Ionicons name="checkmark-circle" size={48} color="#10B981" />
-                    <Text style={styles.scanFeedbackText}>Scanned!</Text>
-                  </View>
-                )}
-              </View>
-            </Camera>
-            )
-          ) : (
-            <View style={[styles.camera, styles.cameraDisabledOverlay]}>
-              <Ionicons name="videocam-off" size={64} color="rgba(255,255,255,0.5)" />
-              <Text style={styles.cameraDisabledText}>Kamera Dinonaktifkan</Text>
-              <TouchableOpacity
-                style={styles.enableCameraButton}
-                onPress={() => setIsCameraActive(true)}
-              >
-                <Text style={styles.enableCameraButtonText}>Aktifkan Kamera</Text>
-              </TouchableOpacity>
+              <FlatList
+                data={scannedOrders}
+                keyExtractor={(item, index) => `${item.orderNumber}-${index}`}
+                renderItem={renderScannedOrder}
+                contentContainerStyle={styles.listContent}
+              />
+            )}
+          </View>
+
+          {/* Status Indicator */}
+          <View style={styles.statusBar}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+              <View style={[styles.statusDot, { backgroundColor: processing ? '#F59E0B' : (scanning ? '#10B981' : '#EF4444') }]} />
+              <Text style={styles.statusText}>
+                {processing ? 'Menyimpan ke database...' : (scanning ? 'Siap scan' : 'Kamera dijeda')}
+              </Text>
             </View>
-          )}
-        </View>
-
-      {/* Manual Input Section for Bluetooth Scanner */}
-      <View style={styles.manualInputContainer}>
-        <View style={styles.inputWrapper}>
-          <Ionicons name="barcode-outline" size={24} color="#6B7280" style={styles.inputIcon} />
-          <TextInput
-            ref={inputRef}
-            style={styles.manualInput}
-            value={manualInput}
-            onChangeText={setManualInput}
-            onSubmitEditing={handleManualSubmit}
-            placeholder="Scan with Bluetooth scanner or type manually"
-            placeholderTextColor="#9CA3AF"
-            returnKeyType="done"
-            autoCapitalize="none"
-            autoCorrect={false}
-            blurOnSubmit={false}
-          />
-          {manualInput.length > 0 && (
-            <TouchableOpacity
-              style={styles.clearInputButton}
-              onPress={() => setManualInput('')}
-            >
-              <Ionicons name="close-circle" size={20} color="#9CA3AF" />
-            </TouchableOpacity>
-          )}
-        </View>
-        <TouchableOpacity
-          style={[styles.submitButton, !manualInput.trim() && styles.submitButtonDisabled]}
-          onPress={handleManualSubmit}
-          disabled={!manualInput.trim() || processing}
-        >
-          <Ionicons name="checkmark" size={20} color="white" />
-        </TouchableOpacity>
-      </View>
-
-      {/* Scanned Orders List */}
-      <View style={styles.listContainer}>
-        <View style={styles.listHeader}>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Ionicons name="list" size={20} color="#111827" />
-            <Text style={styles.listTitle}>Scanned Orders ({scannedOrders.length})</Text>
+            {processing && <ActivityIndicator size="small" color="#F59E0B" style={{ marginLeft: 8 }} />}
+            {!processing && !scanning && (
+              <TouchableOpacity
+                style={styles.scanAgainButton}
+                onPress={() => {
+                  setCurrentScan(null);
+                  setScanning(true);
+                }}
+              >
+                <Ionicons name="scan-outline" size={16} color="white" />
+                <Text style={styles.scanAgainText}>Scan Lagi</Text>
+              </TouchableOpacity>
+            )}
           </View>
-          {scannedOrders.length > 0 && (
-            <TouchableOpacity onPress={clearScans}>
-              <Text style={styles.clearButton}>Clear All</Text>
-            </TouchableOpacity>
-          )}
         </View>
-
-        {scannedOrders.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Ionicons name="scan-outline" size={48} color="#9CA3AF" />
-            <Text style={styles.emptyText}>No orders scanned yet</Text>
-            <Text style={styles.emptySubtext}>
-              Point your camera at a barcode or QR code on the shipping label
-            </Text>
-          </View>
-        ) : (
-          <FlatList
-            data={scannedOrders}
-            keyExtractor={(item, index) => `${item.orderNumber}-${index}`}
-            renderItem={renderScannedOrder}
-            contentContainerStyle={styles.listContent}
-          />
-        )}
-      </View>
-
-      {/* Status Indicator */}
-      <View style={styles.statusBar}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-          <View style={[styles.statusDot, { backgroundColor: processing ? '#F59E0B' : (scanning ? '#10B981' : '#EF4444') }]} />
-          <Text style={styles.statusText}>
-            {processing ? 'Menyimpan ke database...' : (scanning ? 'Siap scan' : 'Kamera dijeda')}
-          </Text>
-        </View>
-        {processing && <ActivityIndicator size="small" color="#F59E0B" style={{ marginLeft: 8 }} />}
-        {!processing && !scanning && (
-          <TouchableOpacity
-            style={styles.scanAgainButton}
-            onPress={() => {
-              setCurrentScan(null);
-              setScanning(true);
-            }}
-          >
-            <Ionicons name="scan-outline" size={16} color="white" />
-            <Text style={styles.scanAgainText}>Scan Lagi</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    </View>
       )}
     </SafeAreaView>
   );

@@ -674,14 +674,14 @@ export default function PembelianRincianScreen() {
                     <Text style={styles.itemDetailLabel}>Qty Print:</Text>
                     <Text style={styles.itemDetailValue}>{item.qty_print}</Text>
                   </View>
-                  <View style={styles.itemDetailRow}>
-                    <Text style={styles.itemDetailLabel}>
-                      {data.useppn ? 'DPP:' : 'Price List:'}
-                    </Text>
-                    <Text style={styles.itemDetailValue}>
-                      Rp {formatCurrency(data.useppn ? item.hargabeli_exppn : item.price_list)}
-                    </Text>
-                  </View>
+                  {!data.useppn && (
+                    <View style={styles.itemDetailRow}>
+                      <Text style={styles.itemDetailLabel}>Price List:</Text>
+                      <Text style={styles.itemDetailValue}>
+                        Rp {formatCurrency(item.price_list)}
+                      </Text>
+                    </View>
+                  )}
                   <View style={styles.itemDetailRow}>
                     <Text style={styles.itemDetailLabel}>Harga Beli:</Text>
                     <Text style={[styles.itemDetailValue, styles.itemSubtotal]}>

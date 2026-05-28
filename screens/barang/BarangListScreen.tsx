@@ -202,7 +202,7 @@ export default function BarangListScreen(): JSX.Element {
         <View style={styles.row}>
           <Text style={styles.badge}>Stok: {item.stok}</Text>
           <Text style={styles.badgeHpp}>HPP: {formatCurrency(item.hpp)}</Text>
-          <Text style={styles.badgeDpp}>DPP: {formatCurrency(item.dpp)}</Text>
+          {/* DPP Hidden as requested */}
           <Text style={styles.badge}>HJ1: {formatCurrency(item.hargajual)}</Text>
           <Text style={styles.badge}>HJ2: {formatCurrency(item.hargajual2)}</Text>
         </View>

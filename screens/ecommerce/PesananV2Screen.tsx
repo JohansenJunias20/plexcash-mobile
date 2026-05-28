@@ -159,12 +159,36 @@ export default function PesananV2Screen() {
         let dbOrders: any[] = [];
         let newPagination = { page: effectivePage, per_page: effectivePerPage, total_records: 0, total_pages: 1 };
         
+        let sudahScanCount = 0;
+        let belumScanCount = 0;
+        let dbResFilterCounts = { penjualan: { sudah: 0, belum: 0 }, kurir: {}, toko: {}, cetak: { sudah: 0, belum: 0 }, scan: { sudah: 0, belum: 0 } };
+
         if (dbRes && dbRes.status) {
-            dbOrders = dbRes.data || [];
+            let rawDbOrders = dbRes.data || [];
+            
+            // Count scan out locally based on raw data
+            rawDbOrders.forEach((o: any) => {
+                const isScanned = !!o.scan_timestamp || o.scanned;
+                if (isScanned) sudahScanCount++;
+                else belumScanCount++;
+            });
+            
+            // Local filter for scan out (since backend might not support it yet)
+            const effectiveFilterScan = params?.filter_scan ?? filterScan;
+            if (effectiveFilterScan !== 'semua') {
+                rawDbOrders = rawDbOrders.filter((o: any) => {
+                    const isScanned = !!o.scan_timestamp || o.scanned;
+                    if (effectiveFilterScan === 'sudah') return isScanned;
+                    if (effectiveFilterScan === 'belum') return !isScanned;
+                    return true;
+                });
+            }
+            dbOrders = rawDbOrders;
+            
             newPagination.total_records = dbRes.pagination?.total_records || 0;
             newPagination.total_pages = Math.max(1, dbRes.pagination?.total_pages || 1);
             if (dbRes.tab_counts) setTabCounts(dbRes.tab_counts);
-            if (dbRes.filter_counts) setFilterCounts(dbRes.filter_counts);
+            if (dbRes.filter_counts) dbResFilterCounts = { ...dbRes.filter_counts };
         } else if (dbRes && !dbRes.status) {
             Alert.alert('Error', dbRes.reason || 'Gagal memuat pesanan');
         }
@@ -204,7 +228,16 @@ export default function PesananV2Screen() {
                 }
             };
 
-            const filteredKilat = cachedKilat
+            const filterScanLocal = (o: any) => {
+                const effectiveFilterScan = params?.filter_scan ?? filterScan;
+                if (effectiveFilterScan === 'semua') return true;
+                const isScanned = !!o.scan_timestamp || o.scanned;
+                if (effectiveFilterScan === 'sudah') return isScanned;
+                if (effectiveFilterScan === 'belum') return !isScanned;
+                return true;
+            };
+
+            let preFilteredKilat = cachedKilat
                 .map(o => ({
                     ...o,
                     isBookingOrder: true,
@@ -230,6 +263,15 @@ export default function PesananV2Screen() {
                 }))
                 .filter(o => filterTab(o) && filterSearch(o));
                 
+            // Count kilat orders for scan out
+            preFilteredKilat.forEach((o: any) => {
+                const isScanned = !!o.scan_timestamp || o.scanned;
+                if (isScanned) sudahScanCount++;
+                else belumScanCount++;
+            });
+            
+            const filteredKilat = preFilteredKilat.filter(o => filterScanLocal(o));
+                
             const startIdx = (effectivePage - 1) * effectivePerPage;
             const paginatedKilat = filteredKilat.slice(startIdx, startIdx + effectivePerPage);
 
@@ -250,6 +292,10 @@ export default function PesananV2Screen() {
             setOrders(prev => [...prev, ...dbOrders]);
         }
         setPagination(newPagination);
+        
+        // Update the filter counts with our locally computed scan counts
+        dbResFilterCounts.scan = { sudah: sudahScanCount, belum: belumScanCount };
+        setFilterCounts(dbResFilterCounts);
         
         // We handle selection clear slightly differently in mobile to preserve UX if wanted,
         // but to match web we clear on filter change.
