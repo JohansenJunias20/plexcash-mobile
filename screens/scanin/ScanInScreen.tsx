@@ -304,7 +304,7 @@ export default function ScanInScreen(): JSX.Element {
 
   return (
     <SafeAreaView style={styles.safeContainer}>
-      {/* Header with Hamburger Menu */}
+      {/* Header with Hamburger Menu - ALWAYS VISIBLE */}
       <View style={styles.topHeader}>
         <TouchableOpacity
           style={styles.hamburgerButton}
@@ -315,7 +315,7 @@ export default function ScanInScreen(): JSX.Element {
         <Text style={styles.topHeaderTitle}>Scan In</Text>
         <TouchableOpacity
           style={styles.cameraToggleButton}
-          onPress={() => setIsCameraActive(!isCameraActive)}
+          onPress={() => setIsCameraActive(prev => !prev)}
         >
           <Ionicons 
             name={isCameraActive ? "videocam" : "videocam-off"} 
@@ -326,184 +326,185 @@ export default function ScanInScreen(): JSX.Element {
         <View style={styles.headerRight} />
       </View>
 
+      {/* Body Content */}
       {!hasPermission ? (
         <LinearGradient colors={['#fbbf24', '#f59e0b', '#d97706']} style={styles.container}>
           <View style={styles.permissionContainer}>
             <Ionicons name="camera-outline" size={64} color="white" />
             <Text style={styles.permissionTitle}>Izin Kamera Diperlukan</Text>
             <Text style={styles.permissionText}>
-            Kami memerlukan akses kamera untuk scan nomor resi dari paket retur.
-          </Text>
+              Kami memerlukan akses kamera untuk scan nomor resi dari paket retur.
+            </Text>
             <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
               <Text style={styles.permissionButtonText}>Berikan Izin</Text>
             </TouchableOpacity>
           </View>
         </LinearGradient>
       ) : (
-      <View style={styles.container}>
-        {/* Camera View */}
-        <View style={styles.cameraContainer}>
-          {isCameraActive ? (
-            device == null ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#f59e0b" />
-                <Text style={styles.loadingText}>Memuat kamera...</Text>
-              </View>
-            ) : (
-            <Camera
-              style={styles.camera}
-              device={device}
-              isActive={isCameraActive && isFocused}
-              codeScanner={codeScanner}
-            >
-              <View style={styles.overlay}>
-                <View style={styles.scanArea}>
-                  <View style={[styles.corner, styles.topLeft]} />
-                  <View style={[styles.corner, styles.topRight]} />
-                  <View style={[styles.corner, styles.bottomLeft]} />
-                  <View style={[styles.corner, styles.bottomRight]} />
+        <View style={styles.container}>
+          {/* Camera View */}
+          <View style={styles.cameraContainer}>
+            {isCameraActive ? (
+              device == null ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color="#f59e0b" />
+                  <Text style={styles.loadingText}>Memuat kamera...</Text>
                 </View>
-                <Text style={styles.instructionText}>
-                  Scan nomor resi dari paket retur
-                </Text>
-                {currentScan && (
-                  <View style={styles.scanFeedback}>
-                    <Ionicons name="checkmark-circle" size={48} color="#10B981" />
-                    <Text style={styles.scanFeedbackText}>Berhasil di-scan!</Text>
+              ) : (
+                <Camera
+                  style={styles.camera}
+                  device={device}
+                  isActive={isCameraActive && isFocused}
+                  codeScanner={codeScanner}
+                >
+                  <View style={styles.overlay}>
+                    <View style={styles.scanArea}>
+                      <View style={[styles.corner, styles.topLeft]} />
+                      <View style={[styles.corner, styles.topRight]} />
+                      <View style={[styles.corner, styles.bottomLeft]} />
+                      <View style={[styles.corner, styles.bottomRight]} />
+                    </View>
+                    <Text style={styles.instructionText}>
+                      Scan nomor resi dari paket retur
+                    </Text>
+                    {currentScan && (
+                      <View style={styles.scanFeedback}>
+                        <Ionicons name="checkmark-circle" size={48} color="#10B981" />
+                        <Text style={styles.scanFeedbackText}>Berhasil di-scan!</Text>
+                      </View>
+                    )}
                   </View>
-                )}
+                </Camera>
+              )
+            ) : (
+              <View style={[styles.camera, styles.cameraDisabledOverlay]}>
+                <Ionicons name="videocam-off" size={64} color="rgba(255,255,255,0.5)" />
+                <Text style={styles.cameraDisabledText}>Kamera Dinonaktifkan</Text>
+                <TouchableOpacity
+                  style={styles.enableCameraButton}
+                  onPress={() => setIsCameraActive(true)}
+                >
+                  <Text style={styles.enableCameraButtonText}>Aktifkan Kamera</Text>
+                </TouchableOpacity>
               </View>
-            </Camera>
-            )
-          ) : (
-            <View style={[styles.camera, styles.cameraDisabledOverlay]}>
-              <Ionicons name="videocam-off" size={64} color="rgba(255,255,255,0.5)" />
-              <Text style={styles.cameraDisabledText}>Kamera Dinonaktifkan</Text>
+            )}
+          </View>
+
+          {/* Manual Input Section for Bluetooth Scanner */}
+          <View style={styles.manualInputContainer}>
+            <View style={styles.inputWrapper}>
+              <Ionicons name="barcode-outline" size={24} color="#6B7280" style={styles.inputIcon} />
+              <TextInput
+                ref={inputRef}
+                style={styles.manualInput}
+                value={manualInput}
+                onChangeText={setManualInput}
+                onSubmitEditing={handleManualSubmit}
+                placeholder="Scan dengan Bluetooth scanner atau ketik manual"
+                placeholderTextColor="#9CA3AF"
+                returnKeyType="done"
+                autoCapitalize="none"
+                autoCorrect={false}
+                blurOnSubmit={false}
+              />
+              {manualInput.length > 0 && (
+                <TouchableOpacity
+                  style={styles.clearInputButton}
+                  onPress={() => setManualInput('')}
+                >
+                  <Ionicons name="close-circle" size={20} color="#9CA3AF" />
+                </TouchableOpacity>
+              )}
+            </View>
+            <TouchableOpacity
+              style={[styles.submitButton, !manualInput.trim() && styles.submitButtonDisabled]}
+              onPress={handleManualSubmit}
+              disabled={!manualInput.trim() || processing}
+            >
+              <Ionicons name="checkmark" size={20} color="white" />
+            </TouchableOpacity>
+          </View>
+
+          {/* DEBUG: Tampilkan nilai mentah yang terbaca kamera */}
+          {lastRawScan !== null && (
+            <View style={styles.debugContainer}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                <Ionicons name="bug-outline" size={14} color="#6B7280" />
+                <Text style={styles.debugLabel}>  Kamera terbaca (raw):</Text>
+              </View>
+              <Text style={styles.debugValue} selectable>
+                "{lastRawScan}"
+              </Text>
+              <Text style={styles.debugMeta}>
+                panjang: {lastRawScan.length} karakter | 
+                codes: {[...lastRawScan].map(c => c.charCodeAt(0)).join(',')}
+              </Text>
               <TouchableOpacity
-                style={styles.enableCameraButton}
-                onPress={() => setIsCameraActive(true)}
+                style={styles.debugCopyButton}
+                onPress={() => {
+                  setManualInput(lastRawScan.replace(/[\x00-\x1F\x7F]/g, '').trim());
+                }}
               >
-                <Text style={styles.enableCameraButtonText}>Aktifkan Kamera</Text>
+                <Text style={styles.debugCopyText}>→ Salin ke input manual</Text>
               </TouchableOpacity>
             </View>
           )}
-        </View>
 
-      {/* Manual Input Section for Bluetooth Scanner */}
-      <View style={styles.manualInputContainer}>
-        <View style={styles.inputWrapper}>
-          <Ionicons name="barcode-outline" size={24} color="#6B7280" style={styles.inputIcon} />
-          <TextInput
-            ref={inputRef}
-            style={styles.manualInput}
-            value={manualInput}
-            onChangeText={setManualInput}
-            onSubmitEditing={handleManualSubmit}
-            placeholder="Scan dengan Bluetooth scanner atau ketik manual"
-            placeholderTextColor="#9CA3AF"
-            returnKeyType="done"
-            autoCapitalize="none"
-            autoCorrect={false}
-            blurOnSubmit={false}
-          />
-          {manualInput.length > 0 && (
-            <TouchableOpacity
-              style={styles.clearInputButton}
-              onPress={() => setManualInput('')}
-            >
-              <Ionicons name="close-circle" size={20} color="#9CA3AF" />
-            </TouchableOpacity>
-          )}
-        </View>
-        <TouchableOpacity
-          style={[styles.submitButton, !manualInput.trim() && styles.submitButtonDisabled]}
-          onPress={handleManualSubmit}
-          disabled={!manualInput.trim() || processing}
-        >
-          <Ionicons name="checkmark" size={20} color="white" />
-        </TouchableOpacity>
-      </View>
+          {/* Scanned Orders List */}
+          <View style={styles.listContainer}>
+            <View style={styles.listHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Ionicons name="list" size={20} color="#111827" />
+                <Text style={styles.listTitle}>Resi yang Di-scan ({scannedOrders.length})</Text>
+              </View>
+              {scannedOrders.length > 0 && (
+                <TouchableOpacity onPress={clearScans}>
+                  <Text style={styles.clearButton}>Hapus Semua</Text>
+                </TouchableOpacity>
+              )}
+            </View>
 
-      {/* DEBUG: Tampilkan nilai mentah yang terbaca kamera */}
-      {lastRawScan !== null && (
-        <View style={styles.debugContainer}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
-            <Ionicons name="bug-outline" size={14} color="#6B7280" />
-            <Text style={styles.debugLabel}>  Kamera terbaca (raw):</Text>
+            {scannedOrders.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Ionicons name="scan-outline" size={48} color="#9CA3AF" />
+                <Text style={styles.emptyText}>Belum ada resi yang di-scan</Text>
+                <Text style={styles.emptySubtext}>
+                  Arahkan kamera ke barcode atau QR code pada paket retur
+                </Text>
+              </View>
+            ) : (
+              <FlatList
+                data={scannedOrders}
+                keyExtractor={(item, index) => `${item.orderNumber}-${index}`}
+                renderItem={renderScannedOrder}
+                contentContainerStyle={styles.listContent}
+              />
+            )}
           </View>
-          <Text style={styles.debugValue} selectable>
-            "{lastRawScan}"
-          </Text>
-          <Text style={styles.debugMeta}>
-            panjang: {lastRawScan.length} karakter | 
-            codes: {[...lastRawScan].map(c => c.charCodeAt(0)).join(',')}
-          </Text>
-          <TouchableOpacity
-            style={styles.debugCopyButton}
-            onPress={() => {
-              setManualInput(lastRawScan.replace(/[\x00-\x1F\x7F]/g, '').trim());
-            }}
-          >
-            <Text style={styles.debugCopyText}>→ Salin ke input manual</Text>
-          </TouchableOpacity>
-        </View>
-      )}
 
-      {/* Scanned Orders List */}
-      <View style={styles.listContainer}>
-        <View style={styles.listHeader}>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Ionicons name="list" size={20} color="#111827" />
-            <Text style={styles.listTitle}>Resi yang Di-scan ({scannedOrders.length})</Text>
+          {/* Status Indicator */}
+          <View style={styles.statusBar}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+              <View style={[styles.statusDot, { backgroundColor: processing ? '#F59E0B' : (scanning ? '#10B981' : '#EF4444') }]} />
+              <Text style={styles.statusText}>
+                {processing ? 'Menyimpan ke database...' : (scanning ? 'Siap scan' : 'Kamera dijeda')}
+              </Text>
+            </View>
+            {processing && <ActivityIndicator size="small" color="#F59E0B" style={{ marginLeft: 8 }} />}
+            {!processing && !scanning && (
+              <TouchableOpacity
+                style={styles.scanAgainButton}
+                onPress={() => {
+                  setCurrentScan(null);
+                  setScanning(true);
+                }}
+              >
+                <Ionicons name="scan-outline" size={16} color="white" />
+                <Text style={styles.scanAgainText}>Scan Lagi</Text>
+              </TouchableOpacity>
+            )}
           </View>
-          {scannedOrders.length > 0 && (
-            <TouchableOpacity onPress={clearScans}>
-              <Text style={styles.clearButton}>Hapus Semua</Text>
-            </TouchableOpacity>
-          )}
         </View>
-
-        {scannedOrders.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Ionicons name="scan-outline" size={48} color="#9CA3AF" />
-            <Text style={styles.emptyText}>Belum ada resi yang di-scan</Text>
-            <Text style={styles.emptySubtext}>
-              Arahkan kamera ke barcode atau QR code pada paket retur
-            </Text>
-          </View>
-        ) : (
-          <FlatList
-            data={scannedOrders}
-            keyExtractor={(item, index) => `${item.orderNumber}-${index}`}
-            renderItem={renderScannedOrder}
-            contentContainerStyle={styles.listContent}
-          />
-        )}
-      </View>
-
-      {/* Status Indicator */}
-      <View style={styles.statusBar}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-          <View style={[styles.statusDot, { backgroundColor: processing ? '#F59E0B' : (scanning ? '#10B981' : '#EF4444') }]} />
-          <Text style={styles.statusText}>
-            {processing ? 'Menyimpan ke database...' : (scanning ? 'Siap scan' : 'Kamera dijeda')}
-          </Text>
-        </View>
-        {processing && <ActivityIndicator size="small" color="#F59E0B" style={{ marginLeft: 8 }} />}
-        {!processing && !scanning && (
-          <TouchableOpacity
-            style={styles.scanAgainButton}
-            onPress={() => {
-              setCurrentScan(null);
-              setScanning(true);
-            }}
-          >
-            <Ionicons name="scan-outline" size={16} color="white" />
-            <Text style={styles.scanAgainText}>Scan Lagi</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    </View>
       )}
     </SafeAreaView>
   );

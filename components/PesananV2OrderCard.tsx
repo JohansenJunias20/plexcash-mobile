@@ -115,6 +115,11 @@ export default function PesananV2OrderCard({ order, isSelected, onToggleSelect, 
             <View style={styles.badgesRow}>
                 {order.has_penjualan && <View style={[styles.miniBadge, { backgroundColor: '#D1FAE5' }]}><Text style={[styles.miniBadgeText, { color: '#065F46' }]}>DIBUAT</Text></View>}
                 {order.print && <View style={[styles.miniBadge, { backgroundColor: '#E0E7FF' }]}><Text style={[styles.miniBadgeText, { color: '#3730A3' }]}>PRINTED</Text></View>}
+                {order.scanned ? (
+                    <View style={[styles.miniBadge, { backgroundColor: '#D1FAE5' }]}><Text style={[styles.miniBadgeText, { color: '#065F46' }]}>SUDAH SCAN</Text></View>
+                ) : (
+                    <View style={[styles.miniBadge, { backgroundColor: '#FEE2E2' }]}><Text style={[styles.miniBadgeText, { color: '#991B1B' }]}>BELUM SCAN</Text></View>
+                )}
             </View>
             <Text style={styles.totalText}>Rp {(order.total_harga || 0).toLocaleString('id-ID')}</Text>
         </View>

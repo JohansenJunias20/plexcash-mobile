@@ -14,6 +14,7 @@ import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import moment from 'moment';
 import { useChatMessages } from './chat/hooks/useChatMessages';
 import { useWebSocket } from './chat/hooks/useWebSocket';
+import { useGlobalChat } from '../../context/ChatContext';
 import ChatHeader from './chat/components/ChatHeader';
 import ChatMessage from './chat/components/ChatMessage';
 import ChatInput from './chat/components/ChatInput';
@@ -44,6 +45,7 @@ export default function EcommerceChatDetailScreen() {
   const route = useRoute<RouteProp<{ params: ChatDetailRouteParams }, 'params'>>();
   const navigation = useNavigation();
   const flatListRef = useRef<FlatList>(null);
+  const { setCurrentActiveChatMsgId } = useGlobalChat();
 
   const { msgId, idEcommerce, buyer, platform } = route.params;
 
@@ -110,7 +112,12 @@ export default function EcommerceChatDetailScreen() {
   // Fetch messages on mount
   useEffect(() => {
     refresh();
-  }, [msgId, idEcommerce]);
+    setCurrentActiveChatMsgId(msgId);
+    
+    return () => {
+      setCurrentActiveChatMsgId(null);
+    };
+  }, [msgId, idEcommerce, setCurrentActiveChatMsgId]);
 
   // Auto-scroll to bottom ONLY when:
   // 1. Initial load (first time opening chat)

@@ -3,6 +3,7 @@ import { View, ActivityIndicator } from 'react-native';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
+import { ChatProvider } from '../context/ChatContext';
 import CustomDrawerContent from './CustomDrawerContent';
 import LoginScreen from '../components/LoginScreen';
 import MainScreen from '../components/MainScreen';
@@ -402,5 +403,9 @@ export default function DrawerNavigator() {
   }
 
   console.log('🧭 [DRAWER-NAVIGATOR] User IS authenticated - showing DrawerNavigator');
-  return <DrawerNavigatorContent />;
+  return (
+    <ChatProvider>
+      <DrawerNavigatorContent />
+    </ChatProvider>
+  );
 }

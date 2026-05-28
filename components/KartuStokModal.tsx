@@ -67,92 +67,106 @@ const formatDate = (value: any): string => {
 // ─── Per-tab table renderers ───────────────────────────────────────────────
 
 function PembelianTable({ data }: { data: any[] }) {
+  const renderItem = ({ item, index }: { item: any; index: number }) => (
+    <View style={[tableStyles.row, index % 2 === 0 && tableStyles.rowEven]}>
+      <Text style={[tableStyles.td, { flex: 0.5 }]}>{item.id ?? '-'}</Text>
+      <Text style={[tableStyles.td, { flex: 1.2 }]}>{formatDate(item.tanggal)}</Text>
+      <Text style={[tableStyles.td, { flex: 0.7 }]}>{item.qty ?? '-'}</Text>
+      <Text style={[tableStyles.td, { flex: 1.6 }]}>{formatCurrency(item.harga_beli)}</Text>
+    </View>
+  );
   return (
-    <View style={tableStyles.container}>
+    <View style={[tableStyles.container, { flex: 1 }]}>
       <View style={tableStyles.headerRow}>
         <Text style={[tableStyles.th, { flex: 0.5 }]}>ID</Text>
         <Text style={[tableStyles.th, { flex: 1.2 }]}>Tanggal</Text>
         <Text style={[tableStyles.th, { flex: 0.7 }]}>Qty</Text>
         <Text style={[tableStyles.th, { flex: 1.6 }]}>Harga Beli</Text>
       </View>
-      {data.map((item, i) => (
-        <View key={i} style={[tableStyles.row, i % 2 === 0 && tableStyles.rowEven]}>
-          <Text style={[tableStyles.td, { flex: 0.5 }]}>{item.id ?? '-'}</Text>
-          <Text style={[tableStyles.td, { flex: 1.2 }]}>{formatDate(item.tanggal)}</Text>
-          <Text style={[tableStyles.td, { flex: 0.7 }]}>{item.qty ?? '-'}</Text>
-          <Text style={[tableStyles.td, { flex: 1.6 }]}>{formatCurrency(item.harga_beli)}</Text>
-        </View>
-      ))}
+      <FlatList data={data} keyExtractor={(_, i) => i.toString()} renderItem={renderItem} contentContainerStyle={{ paddingBottom: 16 }} />
     </View>
   );
 }
 
 function ReturPembelianTable({ data }: { data: any[] }) {
+  const renderItem = ({ item, index }: { item: any; index: number }) => (
+    <View style={[tableStyles.row, index % 2 === 0 && tableStyles.rowEven]}>
+      <Text style={[tableStyles.td, { flex: 0.5 }]}>{item.id ?? '-'}</Text>
+      <Text style={[tableStyles.td, { flex: 1.2 }]}>{formatDate(item.tanggal)}</Text>
+      <Text style={[tableStyles.td, { flex: 0.7 }]}>{item.qty_retur ?? '-'}</Text>
+      <Text style={[tableStyles.td, { flex: 1.6 }]}>{formatCurrency(item.harga_beli)}</Text>
+    </View>
+  );
   return (
-    <View style={tableStyles.container}>
+    <View style={[tableStyles.container, { flex: 1 }]}>
       <View style={tableStyles.headerRow}>
         <Text style={[tableStyles.th, { flex: 0.5 }]}>ID</Text>
         <Text style={[tableStyles.th, { flex: 1.2 }]}>Tanggal</Text>
         <Text style={[tableStyles.th, { flex: 0.7 }]}>Qty Retur</Text>
         <Text style={[tableStyles.th, { flex: 1.6 }]}>Harga Beli</Text>
       </View>
-      {data.map((item, i) => (
-        <View key={i} style={[tableStyles.row, i % 2 === 0 && tableStyles.rowEven]}>
-          <Text style={[tableStyles.td, { flex: 0.5 }]}>{item.id ?? '-'}</Text>
-          <Text style={[tableStyles.td, { flex: 1.2 }]}>{formatDate(item.tanggal)}</Text>
-          <Text style={[tableStyles.td, { flex: 0.7 }]}>{item.qty_retur ?? '-'}</Text>
-          <Text style={[tableStyles.td, { flex: 1.6 }]}>{formatCurrency(item.harga_beli)}</Text>
-        </View>
-      ))}
+      <FlatList data={data} keyExtractor={(_, i) => i.toString()} renderItem={renderItem} contentContainerStyle={{ paddingBottom: 16 }} />
     </View>
   );
 }
 
 function PenjualanTable({ data }: { data: any[] }) {
+  const renderItem = ({ item, index }: { item: any; index: number }) => (
+    <View style={[tableStyles.row, index % 2 === 0 && tableStyles.rowEven]}>
+      <Text style={[tableStyles.td, { flex: 0.5 }]}>{item.id ?? '-'}</Text>
+      <Text style={[tableStyles.td, { flex: 1.2 }]}>{formatDate(item.tanggal)}</Text>
+      <Text style={[tableStyles.td, { flex: 0.7 }]}>{item.qty ?? '-'}</Text>
+      <Text style={[tableStyles.td, { flex: 1.6 }]}>{formatCurrency(item.harga_jual)}</Text>
+    </View>
+  );
   return (
-    <View style={tableStyles.container}>
+    <View style={[tableStyles.container, { flex: 1 }]}>
       <View style={tableStyles.headerRow}>
         <Text style={[tableStyles.th, { flex: 0.5 }]}>ID</Text>
         <Text style={[tableStyles.th, { flex: 1.2 }]}>Tanggal</Text>
         <Text style={[tableStyles.th, { flex: 0.7 }]}>Qty</Text>
         <Text style={[tableStyles.th, { flex: 1.6 }]}>Harga Jual</Text>
       </View>
-      {data.map((item, i) => (
-        <View key={i} style={[tableStyles.row, i % 2 === 0 && tableStyles.rowEven]}>
-          <Text style={[tableStyles.td, { flex: 0.5 }]}>{item.id ?? '-'}</Text>
-          <Text style={[tableStyles.td, { flex: 1.2 }]}>{formatDate(item.tanggal)}</Text>
-          <Text style={[tableStyles.td, { flex: 0.7 }]}>{item.qty ?? '-'}</Text>
-          <Text style={[tableStyles.td, { flex: 1.6 }]}>{formatCurrency(item.harga_jual)}</Text>
-        </View>
-      ))}
+      <FlatList data={data} keyExtractor={(_, i) => i.toString()} renderItem={renderItem} contentContainerStyle={{ paddingBottom: 16 }} />
     </View>
   );
 }
 
 function ReturPenjualanTable({ data }: { data: any[] }) {
+  const renderItem = ({ item, index }: { item: any; index: number }) => (
+    <View style={[tableStyles.row, index % 2 === 0 && tableStyles.rowEven]}>
+      <Text style={[tableStyles.td, { flex: 0.5 }]}>{item.id ?? '-'}</Text>
+      <Text style={[tableStyles.td, { flex: 1.2 }]}>{formatDate(item.tanggal)}</Text>
+      <Text style={[tableStyles.td, { flex: 0.7 }]}>{item.qty_retur ?? '-'}</Text>
+      <Text style={[tableStyles.td, { flex: 1.6 }]}>{formatCurrency(item.harga_jual)}</Text>
+    </View>
+  );
   return (
-    <View style={tableStyles.container}>
+    <View style={[tableStyles.container, { flex: 1 }]}>
       <View style={tableStyles.headerRow}>
         <Text style={[tableStyles.th, { flex: 0.5 }]}>ID</Text>
         <Text style={[tableStyles.th, { flex: 1.2 }]}>Tanggal</Text>
         <Text style={[tableStyles.th, { flex: 0.7 }]}>Qty Retur</Text>
         <Text style={[tableStyles.th, { flex: 1.6 }]}>Harga Jual</Text>
       </View>
-      {data.map((item, i) => (
-        <View key={i} style={[tableStyles.row, i % 2 === 0 && tableStyles.rowEven]}>
-          <Text style={[tableStyles.td, { flex: 0.5 }]}>{item.id ?? '-'}</Text>
-          <Text style={[tableStyles.td, { flex: 1.2 }]}>{formatDate(item.tanggal)}</Text>
-          <Text style={[tableStyles.td, { flex: 0.7 }]}>{item.qty_retur ?? '-'}</Text>
-          <Text style={[tableStyles.td, { flex: 1.6 }]}>{formatCurrency(item.harga_jual)}</Text>
-        </View>
-      ))}
+      <FlatList data={data} keyExtractor={(_, i) => i.toString()} renderItem={renderItem} contentContainerStyle={{ paddingBottom: 16 }} />
     </View>
   );
 }
 
 function BookingTable({ data }: { data: any[] }) {
+  const renderItem = ({ item, index }: { item: any; index: number }) => (
+    <View style={[tableStyles.row, index % 2 === 0 && tableStyles.rowEven]}>
+      <Text style={[tableStyles.td, { flex: 1.2 }]}>{formatDate(item.tanggal)}</Text>
+      <Text style={[tableStyles.td, { flex: 1 }]}>{item.movement ?? '-'}</Text>
+      <Text style={[tableStyles.td, { flex: 0.6 }]}>{item.qty_out ?? '-'}</Text>
+      <Text style={[tableStyles.td, { flex: 0.6 }]}>{item.qty_in ?? '-'}</Text>
+      <Text style={[tableStyles.td, { flex: 0.8 }]}>{item.booking_id ?? '-'}</Text>
+      <Text style={[tableStyles.td, { flex: 0.8 }]}>{item.platform ?? '-'}</Text>
+    </View>
+  );
   return (
-    <View style={tableStyles.container}>
+    <View style={[tableStyles.container, { flex: 1 }]}>
       <View style={tableStyles.headerRow}>
         <Text style={[tableStyles.th, { flex: 1.2 }]}>Tanggal</Text>
         <Text style={[tableStyles.th, { flex: 1 }]}>Movement</Text>
@@ -161,23 +175,25 @@ function BookingTable({ data }: { data: any[] }) {
         <Text style={[tableStyles.th, { flex: 0.8 }]}>Booking ID</Text>
         <Text style={[tableStyles.th, { flex: 0.8 }]}>Platform</Text>
       </View>
-      {data.map((item, i) => (
-        <View key={i} style={[tableStyles.row, i % 2 === 0 && tableStyles.rowEven]}>
-          <Text style={[tableStyles.td, { flex: 1.2 }]}>{formatDate(item.tanggal)}</Text>
-          <Text style={[tableStyles.td, { flex: 1 }]}>{item.movement ?? '-'}</Text>
-          <Text style={[tableStyles.td, { flex: 0.6 }]}>{item.qty_out ?? '-'}</Text>
-          <Text style={[tableStyles.td, { flex: 0.6 }]}>{item.qty_in ?? '-'}</Text>
-          <Text style={[tableStyles.td, { flex: 0.8 }]}>{item.booking_id ?? '-'}</Text>
-          <Text style={[tableStyles.td, { flex: 0.8 }]}>{item.platform ?? '-'}</Text>
-        </View>
-      ))}
+      <FlatList data={data} keyExtractor={(_, i) => i.toString()} renderItem={renderItem} contentContainerStyle={{ paddingBottom: 16 }} />
     </View>
   );
 }
 
 function GabunganTable({ data }: { data: any[] }) {
+  const renderItem = ({ item, index }: { item: any; index: number }) => (
+    <View style={[tableStyles.row, index % 2 === 0 && tableStyles.rowEven]}>
+      <Text style={[tableStyles.td, { flex: 1.1 }]}>{formatDate(item.tanggal)}</Text>
+      <Text style={[tableStyles.td, { flex: 0.8 }]}>{item.from ?? '-'}</Text>
+      <Text style={[tableStyles.td, { flex: 0.5 }]}>{item.id ?? '-'}</Text>
+      <Text style={[tableStyles.td, { flex: 0.6 }]}>{item.masuk ?? '-'}</Text>
+      <Text style={[tableStyles.td, { flex: 0.6 }]}>{item.keluar ?? '-'}</Text>
+      <Text style={[tableStyles.td, { flex: 0.7 }]}>{item.totalqty ?? '-'}</Text>
+      <Text style={[tableStyles.td, { flex: 1.3 }]}>{formatCurrency(item.harga)}</Text>
+    </View>
+  );
   return (
-    <View style={tableStyles.container}>
+    <View style={[tableStyles.container, { flex: 1 }]}>
       <View style={tableStyles.headerRow}>
         <Text style={[tableStyles.th, { flex: 1.1 }]}>Tanggal</Text>
         <Text style={[tableStyles.th, { flex: 0.8 }]}>From</Text>
@@ -187,17 +203,7 @@ function GabunganTable({ data }: { data: any[] }) {
         <Text style={[tableStyles.th, { flex: 0.7 }]}>Total Qty</Text>
         <Text style={[tableStyles.th, { flex: 1.3 }]}>Harga</Text>
       </View>
-      {data.map((item, i) => (
-        <View key={i} style={[tableStyles.row, i % 2 === 0 && tableStyles.rowEven]}>
-          <Text style={[tableStyles.td, { flex: 1.1 }]}>{formatDate(item.tanggal)}</Text>
-          <Text style={[tableStyles.td, { flex: 0.8 }]}>{item.from ?? '-'}</Text>
-          <Text style={[tableStyles.td, { flex: 0.5 }]}>{item.id ?? '-'}</Text>
-          <Text style={[tableStyles.td, { flex: 0.6 }]}>{item.masuk ?? '-'}</Text>
-          <Text style={[tableStyles.td, { flex: 0.6 }]}>{item.keluar ?? '-'}</Text>
-          <Text style={[tableStyles.td, { flex: 0.7 }]}>{item.totalqty ?? '-'}</Text>
-          <Text style={[tableStyles.td, { flex: 1.3 }]}>{formatCurrency(item.harga)}</Text>
-        </View>
-      ))}
+      <FlatList data={data} keyExtractor={(_, i) => i.toString()} renderItem={renderItem} contentContainerStyle={{ paddingBottom: 16 }} />
     </View>
   );
 }
@@ -365,15 +371,9 @@ export default function KartuStokModal({ visible, itemId, itemNama, onClose }: K
               <Text style={styles.emptyText}>Tidak ada data</Text>
             </View>
           ) : (
-            <ScrollView
-              style={{ flex: 1 }}
-              horizontal
-              contentContainerStyle={{ minWidth: '100%' }}
-            >
-              <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 16 }}>
-                {renderTable()}
-              </ScrollView>
-            </ScrollView>
+            <View style={{ flex: 1, width: '100%' }}>
+              {renderTable()}
+            </View>
           )}
 
         </Pressable>

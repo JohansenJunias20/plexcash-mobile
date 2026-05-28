@@ -126,10 +126,10 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
               />
             </View>
 
-            {/* Price List / DPP */}
+            {/* Price List / Harga Exc PPN */}
             {usePPN ? (
               <View style={styles.formGroup}>
-                <Text style={styles.label}>DPP (Exclude PPN)</Text>
+                <Text style={styles.label}>Harga (Exclude PPN)</Text>
                 <TextInput
                   style={styles.input}
                   value={editedItem.hargabeli_exppn}

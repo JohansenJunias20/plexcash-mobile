@@ -197,7 +197,7 @@ export default function KartustokScreen(): JSX.Element {
             <Text style={[tStyles.th, { width: 60 }]}>Keluar</Text>
             <Text style={[tStyles.th, { width: 70 }]}>Total Qty</Text>
             <Text style={[tStyles.th, { width: 110 }]}>Harga</Text>
-            <Text style={[tStyles.th, { width: 110 }]}>DPP</Text>
+            {/* DPP Hidden */}
             <Text style={[tStyles.th, { width: 110 }]}>HPP</Text>
           </View>
           {rows.map((item, i) => (
@@ -209,7 +209,7 @@ export default function KartustokScreen(): JSX.Element {
               <Text style={[tStyles.td, { width: 60 }]}>{item.keluar ?? '-'}</Text>
               <Text style={[tStyles.td, { width: 70 }]}>{item.totalqty ?? '-'}</Text>
               <Text style={[tStyles.td, { width: 110 }]}>{formatCurrency(item.harga)}</Text>
-              <Text style={[tStyles.td, { width: 110 }]}>{formatCurrency(item.dpp)}</Text>
+              {/* DPP Hidden */}
               <Text style={[tStyles.td, { width: 110 }]}>{formatCurrency(item.hpp)}</Text>
             </View>
           ))}

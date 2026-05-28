@@ -240,7 +240,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         // This prevents automatic logouts when token validation fails.
         // We do NOT check `isAuth === 'true'` because device auth does not store this key.
         if (authToken && userEmail) {
-          console.log(`✅ [AUTH] Found ${authMethod} auth token, restoring session (no validation)`);
+          console.log(`✅ [AUTH] Found ${authMethod} auth token, restoring session...`);
 
           // Ensure the token is also present in SecureStore.
           // SecureStore may be cleared on some devices (e.g. after OS update or full wipe)
@@ -253,6 +253,49 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             }
           } catch (secureRestoreError) {
             console.error('❌ [AUTH] Failed to restore token to SecureStore:', secureRestoreError);
+          }
+
+          // For Firebase auth: proactively wait for Firebase to restore session, then
+          // silently refresh the token so API calls don't hit 401 errors.
+          // We still allow the user into the app immediately (optimistic restore), but
+          // run a background refresh so the token is up-to-date.
+          if (authMethod === 'firebase') {
+            console.log('🔥 [AUTH] Firebase auth detected - restoring session optimistically and refreshing token in background...');
+            setUser({ email: userEmail, authMethod: 'firebase', deviceAuthorized: false });
+            setIsAuthenticated(true);
+            setIsLoading(false);
+
+            // Background token refresh: wait for Firebase to initialize, then re-exchange token
+            (async () => {
+              try {
+                console.log('⏳ [AUTH-STARTUP] Waiting for Firebase to restore session (up to 15s)...');
+                const firebaseUser = await ApiService.waitForFirebaseUser(15000);
+                if (firebaseUser) {
+                  console.log('🔥 [AUTH-STARTUP] Firebase user ready:', firebaseUser.email, '- refreshing token...');
+                  const freshToken = await firebaseUser.getIdToken(true);
+                  const backendResponse = await ApiService.exchangeFirebaseToken(freshToken);
+                  if (backendResponse.status) {
+                    const tokenToStore = backendResponse.persistentToken || freshToken;
+                    await ApiService.storeDeviceTokens({
+                      authToken: tokenToStore,
+                      token: tokenToStore,
+                      deviceId: await ApiService.getOrCreateDeviceId(),
+                      user: { email: firebaseUser.email ?? '' },
+                      authMethod: 'firebase',
+                    });
+                    console.log('✅ [AUTH-STARTUP] Firebase token refreshed and stored successfully!');
+                  } else {
+                    console.log('⚠️ [AUTH-STARTUP] Backend exchange failed, keeping existing token:', backendResponse.message);
+                  }
+                } else {
+                  console.log('⚠️ [AUTH-STARTUP] Firebase user still null after 15s - keeping stored token as fallback');
+                }
+              } catch (bgError) {
+                console.error('❌ [AUTH-STARTUP] Background token refresh failed (session kept):', bgError);
+              }
+            })();
+
+            return; // User is already set as authenticated above
           }
 
           // PERMANENT AUTH: Skip token validation to prevent automatic logout

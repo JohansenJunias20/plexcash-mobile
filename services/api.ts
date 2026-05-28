@@ -570,6 +570,44 @@ class ApiService {
   }
 
   /**
+   * Wait for Firebase auth to initialize and return the current user.
+   * Firebase restores auth session asynchronously after app restarts, so
+   * auth.currentUser can be null for a few seconds even if the user is logged in.
+   * This waits up to `timeoutMs` ms for the user to be available.
+   */
+  static async waitForFirebaseUser(timeoutMs: number = 10000): Promise<any> {
+    const { auth } = require('../config/firebase');
+    const { onAuthStateChanged } = require('firebase/auth');
+
+    // If already available, return immediately
+    if (auth.currentUser) {
+      return auth.currentUser;
+    }
+
+    return new Promise((resolve) => {
+      let resolved = false;
+      const timer = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          unsubscribe();
+          console.log('⏰ [FIREBASE-WAIT] Timed out waiting for Firebase user');
+          resolve(null);
+        }
+      }, timeoutMs);
+
+      const unsubscribe = onAuthStateChanged(auth, (user: any) => {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timer);
+          unsubscribe();
+          console.log('✅ [FIREBASE-WAIT] Firebase user resolved:', user ? user.email : 'null');
+          resolve(user);
+        }
+      });
+    });
+  }
+
+  /**
    * Build Authorization header preferring device token; fallback to Firebase ID token
    * Backend now supports both Firebase ID tokens and custom JWTs in Authorization header
    */
@@ -633,7 +671,7 @@ class ApiService {
    * @param options - Fetch options
    * @param retryCount - Internal retry counter (default: 0)
    */
-  static async authenticatedRequest(endpoint: string, options: any = {}, retryCount: number = 0) {
+  static async authenticatedRequest(endpoint: string, options: any = {}, retryCount: number = 0): Promise<any> {
     try {
       console.log(`🌐 [AUTH-REQ] Making authenticated request to: ${endpoint}`);
 
@@ -711,8 +749,44 @@ class ApiService {
             } catch (refreshError) {
               console.error('❌ [AUTH-REQ] Error during token refresh:', refreshError);
             }
+          } else if (authMethod === 'firebase') {
+            console.log('🔄 [AUTH-REQ] Attempting Firebase token refresh after 401 error...');
+            try {
+              // Firebase restores auth session asynchronously after app restarts.
+              // auth.currentUser can be null for a few seconds — we must WAIT for it.
+              console.log('⏳ [AUTH-REQ] Waiting for Firebase to restore auth session (up to 10s)...');
+              const user = await this.waitForFirebaseUser(10000);
+              if (user) {
+                console.log('🔄 [AUTH-REQ] Firebase user available:', user.email, '— forcing token refresh...');
+                const newFirebaseToken = await user.getIdToken(true); // force refresh
+                console.log('🔄 [AUTH-REQ] Exchanging new Firebase token with backend...');
+                const backendResponse = await this.exchangeFirebaseToken(newFirebaseToken);
+                
+                if (backendResponse.status) {
+                  const tokenToStore = backendResponse.persistentToken || newFirebaseToken;
+                  console.log('✅ [AUTH-REQ] Token refreshed successfully, saving...');
+                  
+                  await this.storeDeviceTokens({
+                    authToken: tokenToStore,
+                    token: tokenToStore,
+                    deviceId: await this.getOrCreateDeviceId(),
+                    user: { email: user.email || '' },
+                    authMethod: 'firebase'
+                  });
+                  
+                  console.log('✅ [AUTH-REQ] Retrying request with refreshed token...');
+                  return this.authenticatedRequest(endpoint, options, retryCount + 1);
+                } else {
+                  console.log('❌ [AUTH-REQ] Backend exchange failed:', backendResponse.message);
+                }
+              } else {
+                console.log('❌ [AUTH-REQ] Firebase user still null after waiting — session may truly be expired');
+              }
+            } catch (refreshError) {
+              console.error('❌ [AUTH-REQ] Error during Firebase token refresh:', refreshError);
+            }
           } else {
-            console.log('❌ [AUTH-REQ] Firebase/Other auth - no auto-refresh mechanism for persistent tokens.');
+            console.log(`❌ [AUTH-REQ] Unknown auth method (${authMethod}), no auto-refresh mechanism.`);
           }
         } else {
           console.log('❌ [AUTH-REQ] Already retried once, not retrying again');
