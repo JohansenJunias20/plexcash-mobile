@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert, ActivityIndicator, Linking, TextInput } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Camera, useCameraDevice, useCodeScanner } from 'react-native-vision-camera';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -18,6 +18,7 @@ interface ScannedOrder {
 
 export default function ScanOutScreen(): JSX.Element {
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const [hasPermission, setHasPermission] = useState(false);
   const [scannedOrders, setScannedOrders] = useState<ScannedOrder[]>([]);
   const [scanning, setScanning] = useState(true);
@@ -348,7 +349,7 @@ const renderScannedOrder = ({ item, index }: { item: ScannedOrder; index: number
   );
 
   return (
-    <SafeAreaView style={styles.safeContainer}>
+    <View style={[styles.safeContainer, { paddingTop: insets.top }]}>
       {/* Header with Hamburger Menu - ALWAYS VISIBLE */}
       <View style={styles.topHeader}>
         <TouchableOpacity
@@ -387,42 +388,42 @@ const renderScannedOrder = ({ item, index }: { item: ScannedOrder; index: number
         </LinearGradient>
       ) : (
         <View style={styles.container}>
-          {/* Camera View */}
+          {/* Camera View - Camera always stays mounted to prevent layout recalculation */}
           <View style={styles.cameraContainer}>
-            {isCameraActive ? (
-              device == null ? (
-                <View style={styles.loadingContainer}>
-                  <ActivityIndicator size="large" color="#f59e0b" />
-                  <Text style={styles.loadingText}>Loading camera...</Text>
-                </View>
-              ) : (
-                <Camera
-                  style={styles.camera}
-                  device={device}
-                  isActive={isCameraActive && isFocused}
-                  codeScanner={codeScanner}
-                >
-                  <View style={styles.overlay}>
-                    <View style={styles.scanArea}>
-                      <View style={[styles.corner, styles.topLeft]} />
-                      <View style={[styles.corner, styles.topRight]} />
-                      <View style={[styles.corner, styles.bottomLeft]} />
-                      <View style={[styles.corner, styles.bottomRight]} />
-                    </View>
-                    <Text style={styles.instructionText}>
-                      Scan order number from shipping label
-                    </Text>
-                    {currentScan && (
-                      <View style={styles.scanFeedback}>
-                        <Ionicons name="checkmark-circle" size={48} color="#10B981" />
-                        <Text style={styles.scanFeedbackText}>Scanned!</Text>
-                      </View>
-                    )}
-                  </View>
-                </Camera>
-              )
+            {device == null ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#f59e0b" />
+                <Text style={styles.loadingText}>Loading camera...</Text>
+              </View>
             ) : (
-              <View style={[styles.camera, styles.cameraDisabledOverlay]}>
+              <Camera
+                style={styles.camera}
+                device={device}
+                isActive={isCameraActive && isFocused}
+                codeScanner={codeScanner}
+              >
+                <View style={styles.overlay}>
+                  <View style={styles.scanArea}>
+                    <View style={[styles.corner, styles.topLeft]} />
+                    <View style={[styles.corner, styles.topRight]} />
+                    <View style={[styles.corner, styles.bottomLeft]} />
+                    <View style={[styles.corner, styles.bottomRight]} />
+                  </View>
+                  <Text style={styles.instructionText}>
+                    Scan order number from shipping label
+                  </Text>
+                  {currentScan && (
+                    <View style={styles.scanFeedback}>
+                      <Ionicons name="checkmark-circle" size={48} color="#10B981" />
+                      <Text style={styles.scanFeedbackText}>Scanned!</Text>
+                    </View>
+                  )}
+                </View>
+              </Camera>
+            )}
+            {/* Disabled overlay - absolute positioned so Camera never unmounts */}
+            {!isCameraActive && (
+              <View style={styles.cameraDisabledOverlay}>
                 <Ionicons name="videocam-off" size={64} color="rgba(255,255,255,0.5)" />
                 <Text style={styles.cameraDisabledText}>Kamera Dinonaktifkan</Text>
                 <TouchableOpacity
@@ -526,7 +527,7 @@ const renderScannedOrder = ({ item, index }: { item: ScannedOrder; index: number
           </View>
         </View>
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -599,6 +600,7 @@ const styles = StyleSheet.create({
   cameraContainer: {
     height: 300,
     position: 'relative',
+    overflow: 'hidden',
   },
   camera: {
     flex: 1,
@@ -834,10 +836,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#D1D5DB',
   },
   cameraDisabledOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.8)',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.85)',
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 10,
   },
   cameraDisabledText: {
     color: 'rgba(255,255,255,0.7)',

@@ -15,7 +15,7 @@ import { AVAILABLE_MENUS, DEFAULT_QUICK_ACTIONS, MAX_QUICK_ACTIONS, MenuItem, re
 const STORAGE_KEY = '@quick_actions_config';
 
 const MainScreen = (): React.JSX.Element => {
-  const { user } = useAuth();
+  const { user, isTokenReady } = useAuth();
   const { access, role } = useAccess();
   const [showSettings, setShowSettings] = useState(false);
   const [currentDatabase, setCurrentDatabase] = useState<string>('');
@@ -99,11 +99,19 @@ const MainScreen = (): React.JSX.Element => {
     }
   };
 
-  // Fetch database information on mount
+  // Fetch database information — wait until token is confirmed ready
+  // isTokenReady becomes true only after Firebase token refresh completes on startup,
+  // preventing 401 errors when the stored token is expired after a long app closure.
   useEffect(() => {
+    if (!isTokenReady) {
+      console.log('⏳ [DB] Waiting for token to be ready before fetching database info...');
+      return;
+    }
+
     const fetchDatabaseInfo = async () => {
       try {
         setLoadingDatabase(true);
+        console.log('📑 [DB] Token ready, fetching database info...');
 
         // Fetch current database name
         const dbResponse = await ApiService.getCurrentDatabase();
@@ -124,7 +132,7 @@ const MainScreen = (): React.JSX.Element => {
     };
 
     fetchDatabaseInfo();
-  }, [isAdmin]);
+  }, [isTokenReady, isAdmin]);
 
   const handleDatabaseSwitch = async (newDatabase: string) => {
     if (newDatabase === currentDatabase) {

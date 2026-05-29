@@ -54,7 +54,12 @@ export default function DiskonScreen({ navigation }: any) {
     setLoadingLokal(true);
     try {
       const res = await ApiService.get('/get/promo_marketplace');
-      if (res.success) setPromos(res.data);
+      let items = [];
+      if (Array.isArray(res)) items = res;
+      else if (res && Array.isArray(res.data)) items = res.data;
+      else if (res && res.data && Array.isArray(res.data.rows)) items = res.data.rows;
+      else if (res && res.data && Array.isArray(res.data.data)) items = res.data.data;
+      setPromos(items);
     } catch (e) {
       console.error(e);
     } finally {
@@ -66,7 +71,12 @@ export default function DiskonScreen({ navigation }: any) {
     setLoadingAktif(true);
     try {
       const res = await ApiService.get('/get/live_promo_shopee?status=ongoing,upcoming');
-      if (res.success) setLivePromos(res.data);
+      let items = [];
+      if (Array.isArray(res)) items = res;
+      else if (res && Array.isArray(res.data)) items = res.data;
+      else if (res && res.data && Array.isArray(res.data.rows)) items = res.data.rows;
+      else if (res && res.data && Array.isArray(res.data.data)) items = res.data.data;
+      setLivePromos(items);
     } catch (e) {
       console.error(e);
     } finally {
@@ -78,7 +88,12 @@ export default function DiskonScreen({ navigation }: any) {
     setLoadingRiwayat(true);
     try {
       const res = await ApiService.get('/get/live_promo_shopee?status=expired');
-      if (res.success) setHistoryPromos(res.data);
+      let items = [];
+      if (Array.isArray(res)) items = res;
+      else if (res && Array.isArray(res.data)) items = res.data;
+      else if (res && res.data && Array.isArray(res.data.rows)) items = res.data.rows;
+      else if (res && res.data && Array.isArray(res.data.data)) items = res.data.data;
+      setHistoryPromos(items);
     } catch (e) {
       console.error(e);
     } finally {
@@ -89,10 +104,25 @@ export default function DiskonScreen({ navigation }: any) {
   const fetchAnalisis = async () => {
     setLoadingAnalisis(true);
     try {
-      const res = await ApiService.get('/get/analisis_produk_masterbarang');
-      if (res.success) setAnalisisItems(res.data);
-    } catch (e) {
+      // Mimic web behavior: fetch shops first and use the first shop's ID if available
+      const shopRes = await ApiService.get('/get/shopee_shops');
+      let shopId = '';
+      if (shopRes && shopRes.data && shopRes.data.length > 0) {
+        shopId = shopRes.data[0].id || shopRes.data[0].ID;
+      }
+      
+      const shopParam = shopId ? `&id_ecommerce=${shopId}` : '';
+      const res = await ApiService.get(`/get/analisis_produk_masterbarang?search=${shopParam}`);
+      let items = [];
+      if (Array.isArray(res)) items = res;
+      else if (res && Array.isArray(res.data)) items = res.data;
+      else if (res && res.data && Array.isArray(res.data.rows)) items = res.data.rows;
+      else if (res && res.data && Array.isArray(res.data.data)) items = res.data.data;
+      else if (res && Array.isArray(res.result)) items = res.result;
+      setAnalisisItems(items);
+    } catch (e: any) {
       console.error(e);
+      Alert.alert('Error API Analisis', e?.message || String(e));
     } finally {
       setLoadingAnalisis(false);
     }
@@ -254,7 +284,7 @@ export default function DiskonScreen({ navigation }: any) {
     if (analisisFilterEtalase === 'ada') filtered = filtered.filter((i: any) => i.jumlah_etalase_harga_coret > 0);
     if (analisisFilterEtalase === 'tidak') filtered = filtered.filter((i: any) => !(i.jumlah_etalase_harga_coret > 0));
 
-    const allIds = filtered.map((i: any) => i.id);
+    const allIds = filtered.map((i: any) => i.id || i.id_masterbarang || i.id_produk);
     const allSelected = allIds.length > 0 && allIds.every((id: number) => analisisSelected.has(id));
     const selectedCount = analisisSelected.size;
 
@@ -271,9 +301,9 @@ export default function DiskonScreen({ navigation }: any) {
 
     const buildPromoItems = (ids: Set<number>) =>
       (analisisItems as any[])
-        .filter((i: any) => ids.has(i.id))
+        .filter((i: any) => ids.has(i.id || i.id_masterbarang || i.id_produk))
         .map((i: any) => ({
-          id_masterbarang: i.id,
+          id_masterbarang: i.id || i.id_masterbarang || i.id_produk,
           nama: i.nama,
           sku: i.sku,
           merk: i.merk,
@@ -340,17 +370,18 @@ export default function DiskonScreen({ navigation }: any) {
           : (
           <FlatList
             data={filtered}
-            keyExtractor={(item: any) => item.id.toString()}
+            keyExtractor={(item: any, index: number) => String(item.id || item.id_masterbarang || item.id_produk || index)}
             refreshControl={<RefreshControl refreshing={loadingAnalisis} onRefresh={fetchAnalisis} />}
             renderItem={({ item }: any) => {
-              const isChecked = analisisSelected.has(item.id);
+              const currentId = item.id || item.id_masterbarang || item.id_produk;
+              const isChecked = analisisSelected.has(currentId);
               const hasEtalase = item.jumlah_etalase_harga_coret > 0;
               return (
                 <TouchableOpacity
                   style={[styles.card, isChecked && styles.cardSelected]}
-                  onPress={() => toggleOne(item.id)}
+                  onPress={() => toggleOne(currentId)}
                   onLongPress={() => {
-                    openAddModalWithItems(buildPromoItems(new Set([item.id])));
+                    openAddModalWithItems(buildPromoItems(new Set([currentId])));
                   }}
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>

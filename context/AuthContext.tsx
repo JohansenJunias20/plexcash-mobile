@@ -26,6 +26,7 @@ interface AuthContextValue {
   user: AuthUser | (User & { authMethod?: 'firebase' }) | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  isTokenReady: boolean; // true when token is confirmed fresh and safe for API calls
   signOut: () => Promise<void>;
   authenticateWithQRCode: (user: { email: string }, token: string) => Promise<{ success: boolean; error?: string }>;
   authorizeDeviceWithQRCode: (qrCodeData: string) => Promise<{ success: boolean; message?: string }>;
@@ -46,6 +47,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<AuthContextValue['user']>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [isTokenReady, setIsTokenReady] = useState<boolean>(false);
 
   useEffect(() => {
     logAuth('🔄 AuthProvider mounted, initializing authentication check...');
@@ -119,6 +121,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
               // Set state immediately
               setIsAuthenticated(true);
+              setIsTokenReady(true); // Token is confirmed fresh from Firebase exchange
 
               logStateChange('✅ isAuthenticated is now TRUE - RootNavigator should re-render!');
               console.log('🔐 [AUTH] isAuthenticated is now:', true);
@@ -215,6 +218,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 deviceAuthorized: true,
               });
               setIsAuthenticated(true);
+              setIsTokenReady(true); // Device token validated and fresh
               setIsLoading(false);
               return;
             } else {
@@ -292,6 +296,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 }
               } catch (bgError) {
                 console.error('❌ [AUTH-STARTUP] Background token refresh failed (session kept):', bgError);
+              } finally {
+                // Mark token as ready regardless of refresh outcome.
+                // The stored token (even if not refreshed) will be used, and
+                // the 401 retry mechanism in api.ts will handle any expiry.
+                console.log('✅ [AUTH-STARTUP] Token ready signal sent to app');
+                setIsTokenReady(true);
               }
             })();
 
@@ -302,6 +312,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           // Users will remain logged in until they manually sign out
           setUser({ email: userEmail, authMethod: (authMethod as any) || 'unknown', deviceAuthorized: isDeviceAuthorized });
           setIsAuthenticated(true);
+          setIsTokenReady(true); // Non-firebase auth token restored directly, safe to use immediately
           setIsLoading(false);
           return;
         }
@@ -482,12 +493,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       setUser(null);
       setIsAuthenticated(false);
+      setIsTokenReady(false);
       console.log('✅ [AUTH] User signed out successfully');
     } catch (error) {
       console.error('❌ [AUTH] Sign out error:', error);
       // Force state update anyway
       setUser(null);
       setIsAuthenticated(false);
+      setIsTokenReady(false);
     }
   };
 
@@ -506,6 +519,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     user,
     isLoading,
     isAuthenticated,
+    isTokenReady,
     signOut,
     authenticateWithQRCode,
     authorizeDeviceWithQRCode,
