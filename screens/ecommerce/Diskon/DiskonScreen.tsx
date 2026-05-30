@@ -14,7 +14,7 @@ export default function DiskonScreen({ navigation }: any) {
   const [index, setIndex] = useState(0);
   const [routes] = useState([
     { key: 'lokal', title: 'Promo Lokal' },
-    { key: 'aktif', title: 'Shopee Aktif' },
+    { key: 'aktif', title: 'Live Shopee' },
     { key: 'riwayat', title: 'Riwayat' },
     { key: 'analisis', title: 'Analisis' },
   ]);
@@ -28,6 +28,20 @@ export default function DiskonScreen({ navigation }: any) {
   const [loadingAktif, setLoadingAktif] = useState(false);
   const [loadingRiwayat, setLoadingRiwayat] = useState(false);
   const [loadingAnalisis, setLoadingAnalisis] = useState(false);
+
+  const [shops, setShops] = useState<any[]>([]);
+  const [analisisActiveShopId, setAnalisisActiveShopId] = useState<number>(0);
+  const [filterShopName, setFilterShopName] = useState<string>('all');
+
+  const [expandedVariants, setExpandedVariants] = useState<Set<number>>(new Set());
+  const [etalaseModalVisible, setEtalaseModalVisible] = useState(false);
+  const [etalaseModalItems, setEtalaseModalItems] = useState<any[]>([]);
+  const [etalaseModalProductName, setEtalaseModalProductName] = useState('');
+  
+  const [detailModalVisible, setDetailModalVisible] = useState(false);
+  const [detailPromo, setDetailPromo] = useState<any>(null);
+  const [shopeeDetailItems, setShopeeDetailItems] = useState<any[]>([]);
+  const [loadingShopeeDetail, setLoadingShopeeDetail] = useState(false);
 
   const [isAddModalVisible, setAddModalVisible] = useState(false);
   const [preselectedItems, setPreselectedItems] = useState<any[]>([]);
@@ -50,6 +64,18 @@ export default function DiskonScreen({ navigation }: any) {
   };
 
   // Fetching Data
+  const fetchShops = async () => {
+    try {
+      const res = await ApiService.get('/get/shopee_shops');
+      if (res && res.data && res.data.length > 0) {
+        setShops(res.data);
+        setAnalisisActiveShopId(res.data[0].id || res.data[0].ID);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const fetchPromos = async () => {
     setLoadingLokal(true);
     try {
@@ -104,14 +130,7 @@ export default function DiskonScreen({ navigation }: any) {
   const fetchAnalisis = async () => {
     setLoadingAnalisis(true);
     try {
-      // Mimic web behavior: fetch shops first and use the first shop's ID if available
-      const shopRes = await ApiService.get('/get/shopee_shops');
-      let shopId = '';
-      if (shopRes && shopRes.data && shopRes.data.length > 0) {
-        shopId = shopRes.data[0].id || shopRes.data[0].ID;
-      }
-      
-      const shopParam = shopId ? `&id_ecommerce=${shopId}` : '';
+      const shopParam = analisisActiveShopId ? `&id_ecommerce=${analisisActiveShopId}` : '';
       const res = await ApiService.get(`/get/analisis_produk_masterbarang?search=${shopParam}`);
       let items = [];
       if (Array.isArray(res)) items = res;
@@ -130,6 +149,7 @@ export default function DiskonScreen({ navigation }: any) {
 
   useFocusEffect(
     useCallback(() => {
+      fetchShops();
       fetchPromos();
       // Load others when tab changes or initially if needed
     }, [])
@@ -141,6 +161,12 @@ export default function DiskonScreen({ navigation }: any) {
     if (index === 2 && historyPromos.length === 0) fetchHistoryPromos();
     if (index === 3 && analisisItems.length === 0) fetchAnalisis();
   }, [index]);
+
+  useEffect(() => {
+    if (index === 3 && analisisActiveShopId !== 0) {
+      fetchAnalisis();
+    }
+  }, [analisisActiveShopId]);
 
   const handleDeletePromo = (id: number) => {
     Alert.alert("Konfirmasi", "Yakin ingin menghapus promo ini (Lokal)?", [
@@ -179,7 +205,74 @@ export default function DiskonScreen({ navigation }: any) {
     ]);
   };
 
+  const endLivePromo = (discount_id: number, id_ecommerce: number) => {
+    Alert.alert("Akhiri Promo", "Yakin ingin mengakhiri promo ini? Promo akan dihentikan di Shopee.", [
+      { text: "Batal", style: "cancel" },
+      { text: "Akhiri", style: "destructive", onPress: async () => {
+        try {
+          const res = await ApiService.post('/end/live_promo_shopee', { discount_id, id_ecommerce });
+          if (res.success || res.status) {
+            Alert.alert("Berhasil", "Promo berhasil diakhiri");
+            fetchLivePromos();
+          } else {
+            Alert.alert("Gagal", res.message || res.reason || "Gagal mengakhiri promo");
+          }
+        } catch (err: any) {
+          Alert.alert("Error", err.message || String(err));
+        }
+      }}
+    ]);
+  };
+
+  const openShopeeDetail = async (promo: any) => {
+    setDetailModalVisible(true);
+    setDetailPromo(promo);
+    setLoadingShopeeDetail(true);
+    setShopeeDetailItems([]);
+    try {
+      const res = await ApiService.get(`/get/promo_detail_shopee/${promo.discount_id}?id_ecommerce=${promo.id_ecommerce}`);
+      if (res && res.success) {
+        setShopeeDetailItems(res.data || []);
+      } else if (res && res.data) {
+        setShopeeDetailItems(res.data);
+      } else {
+        Alert.alert("Gagal", res?.message || "Gagal memuat detail produk");
+      }
+    } catch (e: any) {
+      Alert.alert("Error", e.message || String(e));
+    } finally {
+      setLoadingShopeeDetail(false);
+    }
+  };
+
   // Rendering Tabs
+  const renderShopTabs = (currentValue: any, onSelect: (val: any) => void, useName: boolean = false, allowAll: boolean = true) => {
+    const data = allowAll ? [{ id: 0, name: 'Semua Toko' }, ...shops] : shops;
+    return (
+      <View style={{ marginBottom: 12, marginTop: 8 }}>
+        <FlatList
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          data={data}
+          keyExtractor={item => item.id.toString()}
+          renderItem={({ item }) => {
+            const val = useName && item.id !== 0 ? item.name : item.id;
+            const isActive = currentValue === val || (currentValue === 'all' && item.id === 0);
+            return (
+              <TouchableOpacity
+                style={[styles.shopTab, isActive && styles.shopTabActive]}
+                onPress={() => onSelect(val === 0 && useName ? 'all' : val)}
+              >
+                <Text style={[styles.shopTabText, isActive && styles.shopTabTextActive]}>{item.name}</Text>
+              </TouchableOpacity>
+            );
+          }}
+          contentContainerStyle={{ paddingHorizontal: 16 }}
+        />
+      </View>
+    );
+  };
+
   const renderLokal = () => (
     <View style={styles.tabContent}>
       {loadingLokal ? <ActivityIndicator size="large" color="#f59e0b" style={styles.loader} /> : (
@@ -219,13 +312,14 @@ export default function DiskonScreen({ navigation }: any) {
 
   const renderAktif = () => (
     <View style={styles.tabContent}>
+      {renderShopTabs(filterShopName, setFilterShopName, true)}
       {loadingAktif ? <ActivityIndicator size="large" color="#f59e0b" style={styles.loader} /> : (
         <FlatList
-          data={livePromos}
+          data={livePromos.filter((p: any) => filterShopName === 'all' || p.shop_name === filterShopName)}
           keyExtractor={(item: any) => item.discount_id.toString() + item.id_ecommerce}
           refreshControl={<RefreshControl refreshing={loadingAktif} onRefresh={fetchLivePromos} />}
           renderItem={({ item }) => (
-            <View style={styles.card}>
+            <TouchableOpacity style={styles.card} onPress={() => openShopeeDetail(item)}>
               <Text style={styles.cardTitle}>{item.discount_name}</Text>
               <Text style={styles.cardShop}>{item.shop_name}</Text>
               <View style={{flexDirection: 'row', justifyContent: 'space-between', marginTop: 8}}>
@@ -235,7 +329,16 @@ export default function DiskonScreen({ navigation }: any) {
               <View style={[styles.statusBadge, { alignSelf: 'flex-start', marginTop: 8 }, item.status_api === 'ongoing' ? styles.statusActive : styles.statusUpcoming]}>
                   <Text style={styles.statusText}>{item.status_api.toUpperCase()}</Text>
               </View>
-            </View>
+              {item.status_api === 'ongoing' && (
+                <TouchableOpacity 
+                  style={{ position: 'absolute', right: 16, bottom: 16, flexDirection: 'row', alignItems: 'center', backgroundColor: '#fee2e2', padding: 6, borderRadius: 6 }}
+                  onPress={() => endLivePromo(item.discount_id, item.id_ecommerce)}
+                >
+                  <Ionicons name="trash-outline" size={16} color="#ef4444" />
+                  <Text style={{ color: '#ef4444', fontSize: 12, fontWeight: 'bold', marginLeft: 4 }}>Akhiri</Text>
+                </TouchableOpacity>
+              )}
+            </TouchableOpacity>
           )}
           ListEmptyComponent={<Text style={styles.emptyText}>Tidak ada promo Shopee aktif.</Text>}
         />
@@ -245,20 +348,21 @@ export default function DiskonScreen({ navigation }: any) {
 
   const renderRiwayat = () => (
     <View style={styles.tabContent}>
+      {renderShopTabs(filterShopName, setFilterShopName, true)}
       {loadingRiwayat ? <ActivityIndicator size="large" color="#f59e0b" style={styles.loader} /> : (
         <FlatList
-          data={historyPromos}
+          data={historyPromos.filter((p: any) => filterShopName === 'all' || p.shop_name === filterShopName)}
           keyExtractor={(item: any) => item.discount_id.toString() + item.id_ecommerce}
           refreshControl={<RefreshControl refreshing={loadingRiwayat} onRefresh={fetchHistoryPromos} />}
           renderItem={({ item }) => (
-            <View style={[styles.card, { opacity: 0.7 }]}>
+            <TouchableOpacity style={[styles.card, { opacity: 0.7 }]} onPress={() => openShopeeDetail(item)}>
               <Text style={styles.cardTitle}>{item.discount_name}</Text>
               <Text style={styles.cardShop}>{item.shop_name}</Text>
               <View style={{flexDirection: 'row', justifyContent: 'space-between', marginTop: 8}}>
                 <Text style={styles.cardDetail}>{moment(item.start_time * 1000).format('DD MMM YYYY')}</Text>
                 <Text style={styles.cardDetail}>sd {moment(item.end_time * 1000).format('DD MMM YYYY')}</Text>
               </View>
-            </View>
+            </TouchableOpacity>
           )}
           ListEmptyComponent={<Text style={styles.emptyText}>Tidak ada riwayat promo.</Text>}
         />
@@ -318,6 +422,8 @@ export default function DiskonScreen({ navigation }: any) {
 
     return (
       <View style={{ flex: 1 }}>
+        {renderShopTabs(analisisActiveShopId, setAnalisisActiveShopId, false, false)}
+        
         {/* Search bar */}
         <View style={[styles.searchBarRow]}>
           <TextInput
@@ -405,18 +511,61 @@ export default function DiskonScreen({ navigation }: any) {
                         <Text style={styles.cardDetail}>HPP: Rp {Number(item.hpp).toLocaleString('id-ID')}</Text>
                         <Text style={styles.cardDetail}>HJ2: Rp {Number(item.harga_jual_2).toLocaleString('id-ID')}</Text>
                       </View>
-                      <Text style={[styles.cardDetail, { fontWeight: 'bold', marginTop: 2 }]}>
-                        Shopee Bound: {item.jumlah_shopee_bound}
-                      </Text>
-                      {hasEtalase && (
-                        <View style={styles.etalaseContainer}>
-                          <Text style={styles.etalaseTitle}>Harga Coret Aktif:</Text>
-                          {item.etalase_harga_coret.map((et: any, idx: number) => (
-                            <Text key={idx} style={styles.etalaseText}>
-                              • {et.shop_name}: Rp {Number(et.harga_promo).toLocaleString('id-ID')}
-                              {et.diskon_pct ? ` (-${et.diskon_pct}%)` : ''}
+                      
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 2 }}>
+                        <Text style={[styles.cardDetail, { fontWeight: 'bold', marginBottom: 0 }]}>
+                          Shopee Bound: {item.jumlah_shopee_bound}
+                        </Text>
+                        {hasEtalase && (
+                          <TouchableOpacity 
+                            style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#e0f2fe', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 }}
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              setEtalaseModalItems(item.etalase_harga_coret);
+                              setEtalaseModalProductName(`${item.nama} (${item.sku})`);
+                              setEtalaseModalVisible(true);
+                            }}
+                          >
+                            <Ionicons name="information-circle" size={16} color="#0284c7" />
+                            <Text style={{ fontSize: 12, color: '#0284c7', fontWeight: 'bold', marginLeft: 4 }}>Detail Etalase</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+
+                      {item.variants && item.variants.length > 0 && !item.is_single_product && (
+                        <View style={{ marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#f3f4f6' }}>
+                          <TouchableOpacity 
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              setExpandedVariants(prev => {
+                                const next = new Set(prev);
+                                if (next.has(currentId)) next.delete(currentId);
+                                else next.add(currentId);
+                                return next;
+                              });
+                            }}
+                            style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 4 }}
+                          >
+                            <Text style={{ color: '#3b82f6', fontWeight: '600', fontSize: 13 }}>
+                              {item.variants.length} Varian
                             </Text>
-                          ))}
+                            <Ionicons name={expandedVariants.has(currentId) ? "chevron-up" : "chevron-down"} size={14} color="#3b82f6" style={{ marginLeft: 4 }} />
+                          </TouchableOpacity>
+                          
+                          {expandedVariants.has(currentId) && (
+                            <View style={{ marginTop: 4, backgroundColor: '#f8fafc', padding: 8, borderRadius: 6 }}>
+                              {item.variants.map((v: any, vIdx: number) => (
+                                <View key={vIdx} style={{ marginBottom: vIdx < item.variants.length - 1 ? 8 : 0, paddingBottom: vIdx < item.variants.length - 1 ? 8 : 0, borderBottomWidth: vIdx < item.variants.length - 1 ? 1 : 0, borderBottomColor: '#e2e8f0' }}>
+                                  <Text style={{ fontSize: 13, fontWeight: '500', color: '#1e293b' }}>{v.nama}</Text>
+                                  <Text style={{ fontSize: 11, color: '#64748b' }}>{v.sku}</Text>
+                                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 2 }}>
+                                    <Text style={{ fontSize: 12, color: '#475569' }}>HPP: Rp {Number(v.hpp).toLocaleString('id-ID')}</Text>
+                                    <Text style={{ fontSize: 12, color: '#475569' }}>HJ2: Rp {Number(v.harga_jual_2).toLocaleString('id-ID')}</Text>
+                                  </View>
+                                </View>
+                              ))}
+                            </View>
+                          )}
                         </View>
                       )}
                     </View>
@@ -502,6 +651,129 @@ export default function DiskonScreen({ navigation }: any) {
         </TouchableOpacity>
       )}
 
+      {/* Modal Detail Live Shopee */}
+      <Modal visible={detailModalVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setDetailModalVisible(false)}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#f8fafc' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', padding: 16, backgroundColor: 'white', borderBottomWidth: 1, borderBottomColor: '#e2e8f0' }}>
+            <TouchableOpacity onPress={() => setDetailModalVisible(false)} style={{ padding: 8, marginRight: 8 }}>
+              <Ionicons name="close" size={24} color="#334155" />
+            </TouchableOpacity>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#0f172a' }}>{detailPromo?.discount_name || detailPromo?.nama_promo}</Text>
+              <Text style={{ fontSize: 13, color: '#64748b' }}>{detailPromo?.shop_name}</Text>
+            </View>
+          </View>
+          {loadingShopeeDetail ? (
+            <ActivityIndicator size="large" color="#f59e0b" style={{ marginTop: 40 }} />
+          ) : (
+            <FlatList
+              data={shopeeDetailItems}
+              keyExtractor={(_, idx) => idx.toString()}
+              contentContainerStyle={{ padding: 16 }}
+              renderItem={({ item }) => (
+                <View style={{ backgroundColor: 'white', padding: 16, borderRadius: 12, marginBottom: 12, borderWidth: 1, borderColor: '#e2e8f0' }}>
+                  <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#1e293b', marginBottom: 4 }}>{item.nama}</Text>
+                  <Text style={{ fontSize: 13, color: '#64748b', marginBottom: 12 }}>{item.sku}</Text>
+                  
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <Text style={{ color: '#475569' }}>Harga Normal</Text>
+                    <Text style={{ textDecorationLine: 'line-through', color: '#94a3b8' }}>Rp {Number(item.harga_normal || item.original_price).toLocaleString('id-ID')}</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 }}>
+                    <Text style={{ color: '#ef4444', fontWeight: 'bold' }}>Harga Promo</Text>
+                    <Text style={{ color: '#ef4444', fontWeight: 'bold' }}>Rp {Number(item.harga_promo).toLocaleString('id-ID')}</Text>
+                  </View>
+                  
+                  <View style={{ backgroundColor: '#f8fafc', padding: 12, borderRadius: 8 }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <Text style={{ fontSize: 12, color: '#64748b' }}>HPP</Text>
+                      <Text style={{ fontSize: 12, fontWeight: '600' }}>Rp {Number(item.hpp).toLocaleString('id-ID')}</Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <Text style={{ fontSize: 12, color: '#64748b' }}>Base (HJ2)</Text>
+                      <Text style={{ fontSize: 12, fontWeight: '600' }}>Rp {Number(item.harga_jual_2 || item.harga_base).toLocaleString('id-ID')}</Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4, paddingTop: 4, borderTopWidth: 1, borderTopColor: '#e2e8f0' }}>
+                      <Text style={{ fontSize: 12, color: '#64748b' }}>Margin Promo</Text>
+                      <Text style={{ fontSize: 12, fontWeight: 'bold', color: item.harga_promo - item.hpp > 0 ? '#16a34a' : '#ef4444' }}>
+                        Rp {Number(item.harga_promo - item.hpp).toLocaleString('id-ID')}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              )}
+              ListEmptyComponent={<Text style={{ textAlign: 'center', marginTop: 20, color: '#64748b' }}>Tidak ada detail item tersedia.</Text>}
+            />
+          )}
+        </SafeAreaView>
+      </Modal>
+
+      {/* Modal Detail Etalase Info */}
+      <Modal visible={etalaseModalVisible} transparent={true} animationType="fade" onRequestClose={() => setEtalaseModalVisible(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <View style={{ backgroundColor: 'white', borderRadius: 16, width: '100%', maxHeight: '80%', padding: 20 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#0f172a', flex: 1 }}>Detail Etalase Harga Coret</Text>
+              <TouchableOpacity onPress={() => setEtalaseModalVisible(false)}>
+                <Ionicons name="close-circle" size={28} color="#94a3b8" />
+              </TouchableOpacity>
+            </View>
+            <Text style={{ fontSize: 14, color: '#334155', marginBottom: 12, fontWeight: '500' }}>{etalaseModalProductName}</Text>
+            <FlatList
+              data={etalaseModalItems}
+              keyExtractor={(_, i) => i.toString()}
+              renderItem={({ item }) => (
+                <View style={{ padding: 12, backgroundColor: '#f8fafc', borderRadius: 8, marginBottom: 8, borderWidth: 1, borderColor: '#e2e8f0' }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontWeight: 'bold', color: '#1e293b', fontSize: 14 }}>{item.discount_name}</Text>
+                      <Text style={{ fontSize: 11, color: '#64748b' }}>ID: {item.discount_id}</Text>
+                    </View>
+                    <View style={{ backgroundColor: item.status_api === 'ongoing' ? '#dcfce7' : '#e0f2fe', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginLeft: 8 }}>
+                      <Text style={{ color: item.status_api === 'ongoing' ? '#166534' : '#0369a1', fontSize: 10, fontWeight: 'bold' }}>
+                        {item.status_api?.toUpperCase()}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={{ backgroundColor: '#fff3e0', alignSelf: 'flex-start', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginBottom: 8 }}>
+                    <Text style={{ color: '#e65100', fontSize: 11, fontWeight: 'bold' }}>{item.variant_name || item.shop_name}</Text>
+                  </View>
+
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <Text style={{ fontSize: 12, color: '#475569' }}>Harga Normal</Text>
+                    <Text style={{ fontSize: 12, textDecorationLine: 'line-through', color: '#9ca3af' }}>Rp {Number(item.harga_asli || 0).toLocaleString('id-ID')}</Text>
+                  </View>
+
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#1e293b' }}>Harga Promo</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#ef4444', marginRight: 6 }}>Rp {Number(item.harga_promo || 0).toLocaleString('id-ID')}</Text>
+                      {item.diskon_pct ? (
+                        <View style={{ backgroundColor: '#fee2e2', paddingHorizontal: 4, paddingVertical: 2, borderRadius: 4 }}>
+                          <Text style={{ color: '#ef4444', fontSize: 10, fontWeight: 'bold' }}>-{item.diskon_pct}%</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  </View>
+
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, paddingTop: 6, borderTopWidth: 1, borderTopColor: '#e2e8f0' }}>
+                    <Text style={{ fontSize: 11, color: '#64748b' }}>HPP: Rp {Number(item.hpp || 0).toLocaleString('id-ID')}</Text>
+                    {item.margin_pct !== null && item.margin_pct !== undefined ? (
+                      <View style={{ backgroundColor: Number(item.margin_pct) < 0 ? '#fee2e2' : '#dcfce7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                        <Text style={{ fontSize: 10, fontWeight: 'bold', color: Number(item.margin_pct) < 0 ? '#ef4444' : '#16a34a' }}>
+                          Margin: {item.margin_pct}%
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+                </View>
+              )}
+            />
+          </View>
+        </View>
+      </Modal>
+
       {/* Modal Add Promo */}
       <Modal
         visible={isAddModalVisible}
@@ -541,6 +813,32 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
+  },
+  shopTab: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#f3f4f6',
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  shopTabActive: {
+    backgroundColor: '#eff6ff',
+    borderColor: '#3b82f6',
+  },
+  shopTabText: {
+    color: '#4b5563',
+    fontWeight: '500',
+    fontSize: 13,
+  },
+  shopTabTextActive: {
+    color: '#1d4ed8',
+    fontWeight: 'bold',
+  },
+  cardSelected: {
+    borderColor: '#f59e0b',
+    borderWidth: 1,
   },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   cardTitle: { fontSize: 16, fontWeight: 'bold', color: '#1f2937', flex: 1 },

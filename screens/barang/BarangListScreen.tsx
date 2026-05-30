@@ -1,8 +1,21 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, FlatList, StyleSheet, TextInput, TouchableOpacity, RefreshControl, ActivityIndicator, Alert, Modal, Pressable } from 'react-native';
+import {
+  View,
+  Text,
+  FlatList,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  RefreshControl,
+  ActivityIndicator,
+  Alert,
+  Modal,
+  Pressable,
+  ScrollView,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation, DrawerActions } from '@react-navigation/native';
+import { useNavigation, DrawerActions, useFocusEffect } from '@react-navigation/native';
 import { AppStackParamList } from '../../navigation/RootNavigator';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { API_BASE_URL } from '../../services/api';
@@ -28,6 +41,15 @@ export interface Item {
   sync_stock: boolean;
 }
 
+// Type for sync result per marketplace
+interface SyncPlatformResult {
+  platform: string;
+  shop_id: string;
+  shop_name: string;
+  success: boolean;
+  error?: string;
+}
+
 type Nav = NativeStackNavigationProp<AppStackParamList, 'BarangList'>;
 
 export default function BarangListScreen(): JSX.Element {
@@ -47,7 +69,53 @@ export default function BarangListScreen(): JSX.Element {
   const [showKartuStok, setShowKartuStok] = useState(false);
   const [kartuStokItemId, setKartuStokItemId] = useState<number | null>(null);
   const [kartuStokItemNama, setKartuStokItemNama] = useState<string>('');
+
+  // Sync settings from server
+  const [syncStockEnabled, setSyncStockEnabled] = useState(false);
+  const [syncPriceEnabled, setSyncPriceEnabled] = useState(false);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+
+  // Sync result modal state
+  const [showSyncResultModal, setShowSyncResultModal] = useState(false);
+  const [syncResultLoading, setSyncResultLoading] = useState(false);
+  const [syncResultProductName, setSyncResultProductName] = useState('');
+  const [syncResultData, setSyncResultData] = useState<SyncPlatformResult[] | null>(null);
+  const [syncResultDisabled, setSyncResultDisabled] = useState(false);
+  const [syncResultDisabledReason, setSyncResultDisabledReason] = useState('');
+  const [syncPriceResult, setSyncPriceResult] = useState<{ success: boolean; error?: string } | null>(null);
+
   const PAGE_SIZE = 30;
+
+  // Determine sync button label based on settings
+  const syncButtonLabel = useMemo(() => {
+    if (syncStockEnabled && syncPriceEnabled) return 'Sync Stok & Harga';
+    if (syncStockEnabled) return 'Sync Stok';
+    if (syncPriceEnabled) return 'Sync Harga';
+    return null; // both disabled → hide button
+  }, [syncStockEnabled, syncPriceEnabled]);
+
+  // Load sync settings from server
+  const loadSyncSettings = async () => {
+    try {
+      const token = await getTokenAuth();
+      if (!token) return;
+      const res = await fetch(`${API_BASE_URL}/get/settings`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.status && Array.isArray(data.data)) {
+        const settings = data.data;
+        const stockSetting = settings.find((s: any) => s.setting === 'sync_stock');
+        const priceSetting = settings.find((s: any) => s.setting === 'sync_price');
+        setSyncStockEnabled(stockSetting?.value === 'true');
+        setSyncPriceEnabled(priceSetting?.value === 'true');
+      }
+    } catch (e) {
+      console.warn('[BARANG] Failed to load sync settings:', e);
+    } finally {
+      setSettingsLoaded(true);
+    }
+  };
 
   const fetchItems = async (reset = false) => {
     if (reset) {
@@ -147,6 +215,13 @@ export default function BarangListScreen(): JSX.Element {
     }
   };
 
+  // Reload sync settings every time screen comes into focus (e.g. after changing settings)
+  useFocusEffect(
+    React.useCallback(() => {
+      loadSyncSettings();
+    }, [])
+  );
+
   useEffect(() => {
     fetchItems(true);
   }, [searchBy]);
@@ -182,10 +257,86 @@ export default function BarangListScreen(): JSX.Element {
   };
 
   const handleSyncStock = async () => {
-    if (selectedItem) {
-      setShowActionSheet(false);
-      // TODO: Implement sync stock functionality
-      Alert.alert('Sync Stock', `Sync stock untuk ${selectedItem.nama}`);
+    if (!selectedItem) return;
+    setShowActionSheet(false);
+
+    // Reset result state and show modal
+    setSyncResultProductName(selectedItem.nama || selectedItem.sku);
+    setSyncResultData(null);
+    setSyncResultDisabled(false);
+    setSyncResultDisabledReason('');
+    setSyncPriceResult(null);
+    setSyncResultLoading(true);
+    setShowSyncResultModal(true);
+
+    try {
+      const token = await getTokenAuth();
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const body = JSON.stringify([{ id_barang: selectedItem.id }]);
+
+      // Sync stock if enabled
+      if (syncStockEnabled) {
+        try {
+          const stockRes = await fetch(`${API_BASE_URL}/ecommerce/sync/stock`, {
+            method: 'POST',
+            headers,
+            body,
+          });
+          const stockData = await stockRes.json();
+
+          if (stockData.status) {
+            const syncData = stockData.data;
+            if (syncData?.disabled) {
+              setSyncResultDisabled(true);
+              setSyncResultDisabledReason(syncData.reason || 'Sync stok dinonaktifkan di pengaturan.');
+              setSyncResultData([]);
+            } else {
+              setSyncResultData(syncData?.platforms || []);
+            }
+          } else {
+            setSyncResultData([
+              {
+                platform: 'ERROR',
+                shop_id: '',
+                shop_name: 'System',
+                success: false,
+                error: stockData.reason || 'Sync stok gagal',
+              },
+            ]);
+          }
+        } catch (err) {
+          setSyncResultData([
+            {
+              platform: 'ERROR',
+              shop_id: '',
+              shop_name: 'System',
+              success: false,
+              error: String(err),
+            },
+          ]);
+        }
+      }
+
+      // Sync price if enabled
+      if (syncPriceEnabled) {
+        try {
+          const priceRes = await fetch(`${API_BASE_URL}/ecommerce/sync/price`, {
+            method: 'POST',
+            headers,
+            body,
+          });
+          const priceData = await priceRes.json();
+          setSyncPriceResult({ success: priceData.status, error: priceData.status ? undefined : (priceData.reason || 'Sync harga gagal') });
+        } catch (err) {
+          setSyncPriceResult({ success: false, error: String(err) });
+        }
+      }
+    } finally {
+      setSyncResultLoading(false);
     }
   };
 
@@ -232,6 +383,49 @@ export default function BarangListScreen(): JSX.Element {
       )}
     </View>
   );
+
+  // Render per-platform row in sync result modal
+  const renderPlatformRow = (p: SyncPlatformResult, idx: number) => (
+    <View key={idx} style={[styles.platformRow, p.success ? styles.platformRowSuccess : styles.platformRowError]}>
+      <View style={styles.platformRowLeft}>
+        <View style={[styles.platformBadge, { backgroundColor: getPlatformColor(p.platform) }]}>
+          <Text style={styles.platformBadgeText}>{p.platform}</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.shopName} numberOfLines={1}>{p.shop_name || p.shop_id || '-'}</Text>
+          {!p.success && p.error && (
+            <Text style={styles.errorText} numberOfLines={2}>{p.error}</Text>
+          )}
+        </View>
+      </View>
+      <View style={[styles.statusBadge, p.success ? styles.statusSuccess : styles.statusError]}>
+        <Ionicons
+          name={p.success ? 'checkmark-circle' : 'close-circle'}
+          size={18}
+          color={p.success ? '#059669' : '#dc2626'}
+        />
+        <Text style={[styles.statusText, { color: p.success ? '#059669' : '#dc2626' }]}>
+          {p.success ? 'Berhasil' : 'Gagal'}
+        </Text>
+      </View>
+    </View>
+  );
+
+  const getPlatformColor = (platform: string): string => {
+    const colors: Record<string, string> = {
+      SHOPEE: '#ee4d2d',
+      TOKOPEDIA: '#42b549',
+      LAZADA: '#0f146d',
+      TIKTOK: '#010101',
+      BLIBLI: '#0095da',
+      ERROR: '#6b7280',
+    };
+    return colors[platform?.toUpperCase()] || '#6b7280';
+  };
+
+  // Calculate summary counts
+  const successCount = syncResultData?.filter(p => p.success).length ?? 0;
+  const failCount = syncResultData?.filter(p => !p.success).length ?? 0;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -287,6 +481,7 @@ export default function BarangListScreen(): JSX.Element {
       >
         <Pressable style={styles.modalOverlay} onPress={() => setShowActionSheet(false)}>
           <View style={styles.actionSheet}>
+            <View style={styles.actionSheetHandle} />
             <View style={styles.actionSheetHeader}>
               <Text style={styles.actionSheetTitle}>{selectedItem?.nama}</Text>
               <Text style={styles.actionSheetSubtitle}>SKU: {selectedItem?.sku}</Text>
@@ -302,16 +497,156 @@ export default function BarangListScreen(): JSX.Element {
               <Text style={styles.actionText}>Online</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.actionItem} onPress={handleSyncStock}>
-              <Ionicons name="sync-outline" size={22} color="#d97706" />
-              <Text style={styles.actionText}>Sync Stock</Text>
-            </TouchableOpacity>
+            {/* Sync button — only show if at least one sync setting is enabled */}
+            {settingsLoaded && syncButtonLabel && (
+              <TouchableOpacity style={styles.actionItem} onPress={handleSyncStock}>
+                <Ionicons name="sync-outline" size={22} color="#d97706" />
+                <Text style={styles.actionText}>{syncButtonLabel}</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Show skeleton/loading while settings load */}
+            {!settingsLoaded && (
+              <View style={[styles.actionItem, { opacity: 0.4 }]}>
+                <Ionicons name="sync-outline" size={22} color="#d97706" />
+                <Text style={styles.actionText}>Sync...</Text>
+              </View>
+            )}
 
             <TouchableOpacity style={[styles.actionItem, styles.cancelItem]} onPress={() => setShowActionSheet(false)}>
               <Text style={styles.cancelText}>Batal</Text>
             </TouchableOpacity>
           </View>
         </Pressable>
+      </Modal>
+
+      {/* Sync Result Modal */}
+      <Modal
+        visible={showSyncResultModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => !syncResultLoading && setShowSyncResultModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.syncResultSheet}>
+            {/* Header */}
+            <View style={styles.syncResultHeader}>
+              <View style={styles.syncResultHeaderIcon}>
+                <Ionicons name="sync" size={20} color="#fff" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.syncResultTitle}>
+                  {syncStockEnabled && syncPriceEnabled
+                    ? 'Sync Stok & Harga'
+                    : syncStockEnabled
+                    ? 'Sync Stok'
+                    : 'Sync Harga'}
+                </Text>
+                <Text style={styles.syncResultProductName} numberOfLines={1}>
+                  {syncResultProductName}
+                </Text>
+              </View>
+              {!syncResultLoading && (
+                <TouchableOpacity onPress={() => setShowSyncResultModal(false)} style={styles.closeBtn}>
+                  <Ionicons name="close" size={22} color="#6b7280" />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <ScrollView style={styles.syncResultBody} showsVerticalScrollIndicator={false}>
+              {/* Loading State */}
+              {syncResultLoading && (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color="#f59e0b" />
+                  <Text style={styles.loadingText}>Sedang sinkronisasi ke marketplace...</Text>
+                </View>
+              )}
+
+              {/* Disabled State */}
+              {!syncResultLoading && syncResultDisabled && (
+                <View style={styles.disabledContainer}>
+                  <Ionicons name="warning-outline" size={32} color="#d97706" />
+                  <Text style={styles.disabledTitle}>Sync Stok Dinonaktifkan</Text>
+                  <Text style={styles.disabledText}>{syncResultDisabledReason}</Text>
+                </View>
+              )}
+
+              {/* Stock Sync Results */}
+              {!syncResultLoading && !syncResultDisabled && syncStockEnabled && syncResultData !== null && (
+                <View>
+                  {/* Summary bar */}
+                  {syncResultData.length > 0 && (
+                    <View style={styles.summaryBar}>
+                      <View style={styles.summaryItem}>
+                        <Ionicons name="checkmark-circle" size={16} color="#059669" />
+                        <Text style={[styles.summaryCount, { color: '#059669' }]}>{successCount} Berhasil</Text>
+                      </View>
+                      {failCount > 0 && (
+                        <View style={styles.summaryItem}>
+                          <Ionicons name="close-circle" size={16} color="#dc2626" />
+                          <Text style={[styles.summaryCount, { color: '#dc2626' }]}>{failCount} Gagal</Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
+
+                  <Text style={styles.sectionLabel}>
+                    {syncStockEnabled ? '📦 Hasil Sync Stok' : ''}
+                  </Text>
+
+                  {syncResultData.length === 0 ? (
+                    <View style={styles.emptyContainer}>
+                      <Ionicons name="storefront-outline" size={28} color="#9ca3af" />
+                      <Text style={styles.emptyText}>Tidak ada marketplace yang terdaftar</Text>
+                    </View>
+                  ) : (
+                    syncResultData.map((p, idx) => renderPlatformRow(p, idx))
+                  )}
+                </View>
+              )}
+
+              {/* Price Sync Result */}
+              {!syncResultLoading && syncPriceEnabled && syncPriceResult !== null && (
+                <View style={styles.priceResultSection}>
+                  <Text style={styles.sectionLabel}>💰 Hasil Sync Harga</Text>
+                  <View style={[
+                    styles.priceResultRow,
+                    syncPriceResult.success ? styles.platformRowSuccess : styles.platformRowError,
+                  ]}>
+                    <View style={styles.platformRowLeft}>
+                      <Ionicons
+                        name={syncPriceResult.success ? 'checkmark-circle' : 'close-circle'}
+                        size={22}
+                        color={syncPriceResult.success ? '#059669' : '#dc2626'}
+                      />
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.shopName, { color: syncPriceResult.success ? '#059669' : '#dc2626' }]}>
+                          {syncPriceResult.success ? 'Harga berhasil disinkronisasi ke semua marketplace' : 'Sync harga gagal'}
+                        </Text>
+                        {!syncPriceResult.success && syncPriceResult.error && (
+                          <Text style={styles.errorText}>{syncPriceResult.error}</Text>
+                        )}
+                      </View>
+                    </View>
+                  </View>
+                </View>
+              )}
+
+              {/* Done state spacer */}
+              {!syncResultLoading && <View style={{ height: 16 }} />}
+            </ScrollView>
+
+            {/* Footer */}
+            {!syncResultLoading && (
+              <TouchableOpacity
+                style={styles.syncDoneBtn}
+                onPress={() => setShowSyncResultModal(false)}
+              >
+                <Text style={styles.syncDoneBtnText}>Tutup</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
       </Modal>
 
       {/* Online Product Management Modal */}
@@ -353,8 +688,13 @@ const styles = StyleSheet.create({
   kebab: { paddingHorizontal: 8, justifyContent: 'center' },
   loadMore: { alignSelf: 'center', paddingVertical: 8, paddingHorizontal: 12 },
   fab: { position: 'absolute', bottom: 20, right: 20, width: 56, height: 56, borderRadius: 28, backgroundColor: '#f59e0b', alignItems: 'center', justifyContent: 'center', elevation: 4 },
+
+  // Modal overlay
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  actionSheet: { backgroundColor: 'white', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 20 },
+
+  // Action Sheet
+  actionSheet: { backgroundColor: 'white', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 28 },
+  actionSheetHandle: { width: 36, height: 4, backgroundColor: '#d1d5db', borderRadius: 2, alignSelf: 'center', marginTop: 10, marginBottom: 4 },
   actionSheetHeader: { padding: 16, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
   actionSheetTitle: { fontSize: 16, fontWeight: '600', color: '#111827' },
   actionSheetSubtitle: { fontSize: 12, color: '#6B7280', marginTop: 4 },
@@ -362,5 +702,108 @@ const styles = StyleSheet.create({
   actionText: { fontSize: 16, color: '#111827' },
   cancelItem: { borderTopWidth: 1, borderTopColor: '#e5e7eb', marginTop: 8 },
   cancelText: { fontSize: 16, color: '#dc2626', fontWeight: '600', textAlign: 'center', flex: 1 },
-});
 
+  // Sync Result Modal
+  syncResultSheet: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '80%',
+    paddingBottom: 8,
+  },
+  syncResultHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+    gap: 12 as any,
+  },
+  syncResultHeaderIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#f59e0b',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  syncResultTitle: { fontSize: 15, fontWeight: '700', color: '#111827' },
+  syncResultProductName: { fontSize: 12, color: '#6b7280', marginTop: 1 },
+  closeBtn: { padding: 4 },
+  syncResultBody: { padding: 16, flexGrow: 1 },
+
+  // Loading
+  loadingContainer: { alignItems: 'center', paddingVertical: 32, gap: 12 as any },
+  loadingText: { fontSize: 14, color: '#6b7280', textAlign: 'center' },
+
+  // Disabled
+  disabledContainer: { alignItems: 'center', paddingVertical: 28, gap: 10 as any },
+  disabledTitle: { fontSize: 15, fontWeight: '600', color: '#d97706' },
+  disabledText: { fontSize: 13, color: '#6b7280', textAlign: 'center' },
+
+  // Summary bar
+  summaryBar: {
+    flexDirection: 'row',
+    gap: 16 as any,
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  summaryItem: { flexDirection: 'row', alignItems: 'center', gap: 4 as any },
+  summaryCount: { fontSize: 13, fontWeight: '600' },
+
+  // Section label
+  sectionLabel: { fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 8, marginTop: 4 },
+
+  // Empty state
+  emptyContainer: { alignItems: 'center', paddingVertical: 24, gap: 8 as any },
+  emptyText: { fontSize: 13, color: '#9ca3af', textAlign: 'center' },
+
+  // Platform row
+  platformRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 8,
+    borderWidth: 1,
+  },
+  platformRowSuccess: { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' },
+  platformRowError: { backgroundColor: '#fef2f2', borderColor: '#fecaca' },
+  platformRowLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 as any, flex: 1 },
+  platformBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    minWidth: 64,
+    alignItems: 'center',
+  },
+  platformBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+  shopName: { fontSize: 13, fontWeight: '500', color: '#111827' },
+  errorText: { fontSize: 11, color: '#dc2626', marginTop: 2 },
+  statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 3 as any, paddingLeft: 8 },
+  statusSuccess: {},
+  statusError: {},
+  statusText: { fontSize: 12, fontWeight: '600' },
+
+  // Price result
+  priceResultSection: { marginTop: 16 },
+  priceResultRow: {
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 8,
+  },
+
+  // Done button
+  syncDoneBtn: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    marginTop: 8,
+    backgroundColor: '#f59e0b',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  syncDoneBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+});

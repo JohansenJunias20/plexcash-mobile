@@ -280,9 +280,13 @@ const Settingscreen = ({ navigation }: Props): JSX.Element => {
       settingsData.marketplace_fee_strategies = JSON.stringify(marketplaceFeeStrategies);
       settingsData.tiktok_default_categories = JSON.stringify(selectedTiktokCategories);
 
+      const token = await import('../services/token').then(m => m.getTokenAuth());
       const response = await fetch(`${API_BASE_URL}/settings`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify(settingsData),
       });
 
