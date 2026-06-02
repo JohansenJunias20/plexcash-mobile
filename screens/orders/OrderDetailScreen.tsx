@@ -101,9 +101,9 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
       if (res?.status) {
         const d = res.data;
 
-        const finalPrintTimestamp = print_timestamp || d.print_timestamp || undefined;
-        const finalScanned = scanned !== undefined ? scanned : (d.scanned === true || d.scanned === 1 || d.scanned === '1');
-        const finalScanTimestamp = scan_timestamp !== undefined ? scan_timestamp : (d.scan_timestamp || null);
+        const finalPrintTimestamp = d.print_timestamp || print_timestamp || undefined;
+        const finalScanned = d.scanned !== undefined ? (d.scanned === true || d.scanned === 1 || d.scanned === '1' || String(d.scanned).toLowerCase() === 'true') : (scanned !== undefined ? scanned : false);
+        const finalScanTimestamp = d.scan_timestamp !== undefined ? d.scan_timestamp : (scan_timestamp !== undefined ? scan_timestamp : null);
 
         setDetail({
           id: d.id,
@@ -287,10 +287,21 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
                 <Text style={styles.orderId}>Order #{detail.id}</Text>
               </View>
             </View>
-            <View style={[styles.statusBadge, { backgroundColor: statusColors.bg }]}>
-              <Text style={[styles.statusText, { color: statusColors.text }]}>
-                {(detail.status || 'UNKNOWN').toUpperCase()}
-              </Text>
+            <View style={{ alignItems: 'flex-end' }}>
+              <View style={[styles.statusBadge, { backgroundColor: statusColors.bg }]}>
+                <Text style={[styles.statusText, { color: statusColors.text }]}>
+                  {(detail.status || 'UNKNOWN').toUpperCase()}
+                </Text>
+              </View>
+              {detail.scanned || !!detail.scan_timestamp ? (
+                <View style={[styles.statusBadge, { backgroundColor: '#D1FAE5', paddingHorizontal: 8, paddingVertical: 4, marginTop: 6 }]}>
+                  <Text style={[styles.statusText, { color: '#065F46', fontSize: 10 }]}>SUDAH SCAN</Text>
+                </View>
+              ) : (
+                <View style={[styles.statusBadge, { backgroundColor: '#FEE2E2', paddingHorizontal: 8, paddingVertical: 4, marginTop: 6 }]}>
+                  <Text style={[styles.statusText, { color: '#991B1B', fontSize: 10 }]}>BELUM SCAN</Text>
+                </View>
+              )}
             </View>
           </View>
         </View>

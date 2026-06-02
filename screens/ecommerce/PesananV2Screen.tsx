@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, RefreshControl, ActivityIndicator, Alert, Modal, ScrollView, Platform } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation, DrawerActions } from '@react-navigation/native';
+import { useNavigation, DrawerActions, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import ApiService from '../../services/api';
 import moment from 'moment';
@@ -23,6 +23,20 @@ const STATUS_TABS = [
   { label: 'Pembatalan', value: 'PEMBATALAN' },
   { label: 'Pengembalian', value: 'PENGEMBALIAN' },
 ];
+
+// Helper function to deduplicate orders by id_online and ecommerce_id to prevent duplicate key rendering warnings
+function deduplicateOrders(list: any[]) {
+  const seen = new Set<string>();
+  return list.filter(item => {
+    if (!item) return false;
+    const key = `${item.id_online || ''}-${item.ecommerce_id || ''}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
 
 export default function PesananV2Screen() {
   const navigation = useNavigation<Nav>();
@@ -159,30 +173,27 @@ export default function PesananV2Screen() {
         let dbOrders: any[] = [];
         let newPagination = { page: effectivePage, per_page: effectivePerPage, total_records: 0, total_pages: 1 };
         
-        let sudahScanCount = 0;
-        let belumScanCount = 0;
         let dbResFilterCounts = { penjualan: { sudah: 0, belum: 0 }, kurir: {}, toko: {}, cetak: { sudah: 0, belum: 0 }, scan: { sudah: 0, belum: 0 } };
 
         if (dbRes && dbRes.status) {
             let rawDbOrders = dbRes.data || [];
             
-            // Count scan out locally based on raw data
-            rawDbOrders.forEach((o: any) => {
-                const isScanned = !!o.scan_timestamp || o.scanned;
-                if (isScanned) sudahScanCount++;
-                else belumScanCount++;
+            // Standardize print and scanned flags flexibly to handle any V2 API format variations
+            rawDbOrders = rawDbOrders.map((rd: any) => {
+                const rawScanned = rd.scanned !== undefined ? rd.scanned : rd.is_scanned;
+                const rawPrint = rd.print !== undefined ? rd.print : rd.is_printed;
+                
+                const isScanned = (!!rawScanned && rawScanned !== '0' && rawScanned !== 0 && String(rawScanned).toLowerCase() !== 'false') || !!rd.scan_timestamp;
+                const isPrinted = (!!rawPrint && rawPrint !== '0' && rawPrint !== 0 && String(rawPrint).toLowerCase() !== 'false') || !!rd.print_timestamp;
+                
+                return {
+                    ...rd,
+                    print: isPrinted,
+                    scanned: isScanned,
+                };
             });
             
-            // Local filter for scan out (since backend might not support it yet)
-            const effectiveFilterScan = params?.filter_scan ?? filterScan;
-            if (effectiveFilterScan !== 'semua') {
-                rawDbOrders = rawDbOrders.filter((o: any) => {
-                    const isScanned = !!o.scan_timestamp || o.scanned;
-                    if (effectiveFilterScan === 'sudah') return isScanned;
-                    if (effectiveFilterScan === 'belum') return !isScanned;
-                    return true;
-                });
-            }
+
             dbOrders = rawDbOrders;
             
             newPagination.total_records = dbRes.pagination?.total_records || 0;
@@ -230,11 +241,23 @@ export default function PesananV2Screen() {
 
             const filterScanLocal = (o: any) => {
                 const effectiveFilterScan = params?.filter_scan ?? filterScan;
-                if (effectiveFilterScan === 'semua') return true;
-                const isScanned = !!o.scan_timestamp || o.scanned;
-                if (effectiveFilterScan === 'sudah') return isScanned;
-                if (effectiveFilterScan === 'belum') return !isScanned;
-                return true;
+                const effectiveFilterCetak = params?.filter_cetak ?? filterCetak;
+                
+                let pass = true;
+                
+                if (effectiveFilterScan !== 'semua') {
+                    const isScanned = o.scanned || !!o.scan_timestamp;
+                    if (effectiveFilterScan === 'sudah' && !isScanned) pass = false;
+                    if (effectiveFilterScan === 'belum' && isScanned) pass = false;
+                }
+                
+                if (effectiveFilterCetak !== 'semua') {
+                    const isPrinted = o.print || !!o.print_timestamp;
+                    if (effectiveFilterCetak === 'sudah' && !isPrinted) pass = false;
+                    if (effectiveFilterCetak === 'belum' && isPrinted) pass = false;
+                }
+                
+                return pass;
             };
 
             let preFilteredKilat = cachedKilat
@@ -263,11 +286,13 @@ export default function PesananV2Screen() {
                 }))
                 .filter(o => filterTab(o) && filterSearch(o));
                 
-            // Count kilat orders for scan out
+            // Ensure standard booleans for kilat as well using flexible checks
             preFilteredKilat.forEach((o: any) => {
-                const isScanned = !!o.scan_timestamp || o.scanned;
-                if (isScanned) sudahScanCount++;
-                else belumScanCount++;
+                const rawScanned = o.scanned !== undefined ? o.scanned : o.is_scanned;
+                const rawPrint = o.print !== undefined ? o.print : o.is_printed;
+                
+                o.scanned = (!!rawScanned && rawScanned !== '0' && rawScanned !== 0 && String(rawScanned).toLowerCase() !== 'false') || !!o.scan_timestamp;
+                o.print = (!!rawPrint && rawPrint !== '0' && rawPrint !== 0 && String(rawPrint).toLowerCase() !== 'false') || !!o.print_timestamp;
             });
             
             const filteredKilat = preFilteredKilat.filter(o => filterScanLocal(o));
@@ -281,20 +306,18 @@ export default function PesananV2Screen() {
                 newPagination.total_pages = Math.ceil(filteredKilat.length / effectivePerPage) || 1;
             } else if (filteredKilat.length > 0) {
                 // If orderType is 'semua', combine them and filter duplicates
-                const standardOrders = dbOrders.filter((o: any) => !o.isBookingOrder && !paginatedKilat.some(k => k.booking_sn === o.booking_sn));
+                const standardOrders = dbOrders.filter((o: any) => !o.isBookingOrder && !paginatedKilat.some(k => k.id_online === o.id_online || k.booking_sn === o.booking_sn || k.order_sn === o.id_online));
                 dbOrders = [...paginatedKilat, ...standardOrders];
             }
         }
 
         if (effectivePage === 1) {
-            setOrders(dbOrders);
+            setOrders(deduplicateOrders(dbOrders));
         } else {
-            setOrders(prev => [...prev, ...dbOrders]);
+            setOrders(prev => deduplicateOrders([...prev, ...dbOrders]));
         }
         setPagination(newPagination);
         
-        // Update the filter counts with our locally computed scan counts
-        dbResFilterCounts.scan = { sudah: sudahScanCount, belum: belumScanCount };
         setFilterCounts(dbResFilterCounts);
         
         // We handle selection clear slightly differently in mobile to preserve UX if wanted,
@@ -372,9 +395,11 @@ export default function PesananV2Screen() {
     syncLiveOrders();
   }, [currentTab, dateStart, dateEnd, selectedEcommerces, ecommerceList, orderTypeFilter]);
 
-  useEffect(() => {
-    fetchOrders({ page: 1 });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useFocusEffect(
+    useCallback(() => {
+      fetchOrders({ page: 1, isRefresh: true });
+    }, [fetchOrders])
+  );
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -601,7 +626,7 @@ export default function PesananV2Screen() {
               <Ionicons name="search" size={18} color="#9CA3AF" style={{ marginLeft: 8 }} />
               <TextInput
                   style={styles.searchInput}
-                  placeholder={`Cari ${searchType}... (Enter)`}
+                  placeholder={`Cari ${searchType === 'order_id' ? 'Order ID' : searchType === 'no_resi' ? 'No Resi' : searchType === 'buyer_username' ? 'Username' : 'SKU'}... (Enter)`}
                   value={searchTagInput}
                   onChangeText={setSearchTagInput}
                   onSubmitEditing={handleSearchSubmit}

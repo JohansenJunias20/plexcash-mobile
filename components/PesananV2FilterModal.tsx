@@ -13,8 +13,8 @@ interface Props {
 }
 
 export default function PesananV2FilterModal({ visible, onClose, state, setters, onApply, filterCounts, ecommerceList }: Props) {
-    const { sortMethod, dateType, orderTypeFilter, hasPenjualan, platformFilter, filterCetak, filterScan, filterResep, selectedEcommerces } = state;
-    const { setSortMethod, setDateType, setOrderTypeFilter, setHasPenjualan, setPlatformFilter, setFilterCetak, setFilterScan, setFilterResep, setSelectedEcommerces } = setters;
+    const { searchType, sortMethod, dateType, orderTypeFilter, hasPenjualan, platformFilter, filterCetak, filterScan, filterResep, selectedEcommerces } = state;
+    const { setSearchType, setSortMethod, setDateType, setOrderTypeFilter, setHasPenjualan, setPlatformFilter, setFilterCetak, setFilterScan, setFilterResep, setSelectedEcommerces } = setters;
 
     const OptionChip = ({ label, selected, onPress }: { label: string, selected: boolean, onPress: () => void }) => (
         <TouchableOpacity style={[styles.chip, selected && styles.chipSelected]} onPress={onPress}>
@@ -34,6 +34,15 @@ export default function PesananV2FilterModal({ visible, onClose, state, setters,
                     </View>
 
                     <ScrollView style={styles.content} contentContainerStyle={{ padding: 16 }}>
+                        {/* Kategori Pencarian */}
+                        <Text style={styles.sectionTitle}>Kategori Pencarian</Text>
+                        <View style={styles.rowWrap}>
+                            <OptionChip label="Order ID" selected={searchType === 'order_id'} onPress={() => setSearchType('order_id')} />
+                            <OptionChip label="No Resi" selected={searchType === 'no_resi'} onPress={() => setSearchType('no_resi')} />
+                            <OptionChip label="Username" selected={searchType === 'buyer_username'} onPress={() => setSearchType('buyer_username')} />
+                            <OptionChip label="SKU" selected={searchType === 'sku'} onPress={() => setSearchType('sku')} />
+                        </View>
+
                         {/* Sortir */}
                         <Text style={styles.sectionTitle}>Urutkan Berdasarkan</Text>
                         <View style={styles.rowWrap}>
@@ -107,6 +116,7 @@ export default function PesananV2FilterModal({ visible, onClose, state, setters,
 
                     <View style={styles.footer}>
                         <TouchableOpacity style={styles.resetBtn} onPress={() => {
+                            setSearchType('order_id');
                             setSortMethod('terbaru');
                             setOrderTypeFilter('semua');
                             setHasPenjualan('semua');

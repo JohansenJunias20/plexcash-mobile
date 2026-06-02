@@ -761,11 +761,11 @@ class ApiService {
                 const newFirebaseToken = await user.getIdToken(true); // force refresh
                 console.log('🔄 [AUTH-REQ] Exchanging new Firebase token with backend...');
                 const backendResponse = await this.exchangeFirebaseToken(newFirebaseToken);
-                
+
                 if (backendResponse.status) {
                   const tokenToStore = backendResponse.persistentToken || newFirebaseToken;
                   console.log('✅ [AUTH-REQ] Token refreshed successfully, saving...');
-                  
+
                   await this.storeDeviceTokens({
                     authToken: tokenToStore,
                     token: tokenToStore,
@@ -773,7 +773,7 @@ class ApiService {
                     user: { email: user.email || '' },
                     authMethod: 'firebase'
                   });
-                  
+
                   console.log('✅ [AUTH-REQ] Retrying request with refreshed token...');
                   return this.authenticatedRequest(endpoint, options, retryCount + 1);
                 } else {
@@ -794,11 +794,11 @@ class ApiService {
 
         // If we reach here, refresh failed or not applicable
         console.log(`❌ [AUTH-REQ] Token refresh failed or not applicable. IGNORING expired token and keeping user logged in.`);
-        
+
         // REMOVED automatic logout
         // try { await clearTokenAuth(); } catch { }
         // if (this.authErrorHandler) this.authErrorHandler();
-        
+
         // We still throw Unauthorized so the specific API call fails and can be caught by UI
         // But the user remains authenticated in the app
         throw new Error('Unauthorized');
