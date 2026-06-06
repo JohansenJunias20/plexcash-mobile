@@ -1,7 +1,8 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Modal, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import moment from 'moment';
+import { useAccess } from '../context/AccessContext';
 
 const C = {
   primary: '#D97706',
@@ -39,9 +40,40 @@ interface Props {
 }
 
 export default function PesananV2OrderCard({ order, isSelected, onToggleSelect, onPress }: Props) {
+  const { access } = useAccess();
+  const [showHpp, setShowHpp] = useState(false);
+
   const statusColor = getStatusColor(order.status);
   const platformKey = (order.platform || '').toLowerCase();
   const platformStyle = PLATFORM_LOGO[platformKey] || { bg: '#F3F4F6', color: '#4B5563', border: '#E5E7EB' };
+
+  // HPP Logic
+  const allItems = order.items || [];
+  const hasItems = allItems.length > 0;
+  const canShowHpp = !!access?.master?.show_hpp && hasItems;
+
+  const itemsWithHpp = allItems.filter((item: any) => Number(item.hpp || 0) > 0);
+  const hasPartialHpp = itemsWithHpp.length > 0 && itemsWithHpp.length < allItems.length;
+  const hasNoHpp = itemsWithHpp.length === 0;
+
+  let totalHpp = 0;
+  let totalJual = 0;
+
+  const calcItems = hasPartialHpp ? itemsWithHpp : allItems;
+  calcItems.forEach((item: any) => {
+    const qty = Number(item.qty || 0);
+    const itemHpp = Number(item.hpp || 0);
+    const itemJual = Number(item.harga_jual || item.price || item.harga || 0);
+    totalHpp += itemHpp * qty;
+    totalJual += itemJual * qty;
+  });
+
+  const selisih = totalJual - totalHpp;
+  const marginPct = totalHpp > 0 ? (selisih / totalHpp) * 100 : 100;
+  const isProfit = selisih >= 0;
+
+  const profitText = isProfit ? `+ Rp ${selisih.toLocaleString('id-ID')}` : `- Rp ${Math.abs(selisih).toLocaleString('id-ID')}`;
+  const marginText = isProfit ? `(+ ${parseFloat(marginPct.toFixed(1))}%)` : `(${parseFloat(marginPct.toFixed(1))}%)`;
 
   return (
     <View style={[styles.card, isSelected && styles.cardSelected]}>
@@ -121,9 +153,66 @@ export default function PesananV2OrderCard({ order, isSelected, onToggleSelect, 
                     <View style={[styles.miniBadge, { backgroundColor: '#FEE2E2' }]}><Text style={[styles.miniBadgeText, { color: '#991B1B' }]}>BELUM SCAN</Text></View>
                 )}
             </View>
-            <Text style={styles.totalText}>Rp {(order.total_harga || 0).toLocaleString('id-ID')}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={styles.totalText}>Rp {(order.total_harga || 0).toLocaleString('id-ID')}</Text>
+                {canShowHpp && (
+                    <TouchableOpacity 
+                        onPress={() => setShowHpp(true)} 
+                        style={{ marginLeft: 8 }}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                        <Ionicons name="bar-chart" size={18} color="#10B981" />
+                    </TouchableOpacity>
+                )}
+            </View>
         </View>
       </TouchableOpacity>
+
+      {/* HPP Modal */}
+      <Modal visible={showHpp} transparent={true} animationType="fade" onRequestClose={() => setShowHpp(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowHpp(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.bottomSheet}>
+            <View style={styles.bsHeader}>
+              <Text style={styles.bsTitle}>Rincian HPP</Text>
+              <TouchableOpacity onPress={() => setShowHpp(false)}>
+                <Ionicons name="close" size={24} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.bsContent} showsVerticalScrollIndicator={false}>
+              {allItems.map((item: any, idx: number) => {
+                const qty = Number(item.qty || 0);
+                const hppVal = Number(item.hpp || 0);
+                const hppTotal = hppVal * qty;
+                return (
+                  <View key={idx} style={styles.itemRow}>
+                    <Text style={styles.itemName} numberOfLines={2}>{item.nama || item.sku} × {qty}</Text>
+                    {hppVal > 0 ? (
+                      <Text style={styles.itemHpp}>Rp {hppTotal.toLocaleString('id-ID')}</Text>
+                    ) : (
+                      <Text style={styles.itemHppEmpty}>Rp 0</Text>
+                    )}
+                  </View>
+                );
+              })}
+            </ScrollView>
+            <View style={styles.bsFooter}>
+              <View style={styles.bsFooterRow}>
+                <Text style={styles.bsFooterLabel}>Total HPP</Text>
+                <Text style={styles.bsFooterValue}>Rp {totalHpp.toLocaleString('id-ID')}</Text>
+              </View>
+              <View style={styles.bsFooterRow}>
+                <Text style={styles.bsFooterLabel}>{hasPartialHpp ? 'Est. Untung' : 'Untung'}</Text>
+                <Text style={[styles.bsFooterValue, { color: isProfit ? '#10B981' : '#EF4444' }]}>
+                  {profitText} {marginText}
+                </Text>
+              </View>
+              {hasPartialHpp && (
+                <Text style={styles.warningText}>* sebagian HPP belum diisi.</Text>
+              )}
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -152,4 +241,19 @@ const styles = StyleSheet.create({
   miniBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   miniBadgeText: { fontSize: 9, fontWeight: '700' },
   totalText: { fontSize: 14, fontWeight: '700', color: '#111827' },
+  // Bottom Sheet / Modal styles
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  bottomSheet: { backgroundColor: '#FFF', borderTopLeftRadius: 16, borderTopRightRadius: 16, maxHeight: '80%', paddingBottom: 20 },
+  bsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  bsTitle: { fontSize: 16, fontWeight: '700', color: '#111827' },
+  bsContent: { padding: 16 },
+  itemRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#F9FAFB' },
+  itemName: { fontSize: 13, color: '#374151', flex: 1, marginRight: 12, lineHeight: 18 },
+  itemHpp: { fontSize: 13, fontWeight: '600', color: '#1F2937' },
+  itemHppEmpty: { fontSize: 13, color: '#9CA3AF', fontStyle: 'italic' },
+  bsFooter: { paddingHorizontal: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#E5E7EB', backgroundColor: '#F9FAFB' },
+  bsFooterRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  bsFooterLabel: { fontSize: 14, fontWeight: '600', color: '#4B5563' },
+  bsFooterValue: { fontSize: 14, fontWeight: '700', color: '#111827' },
+  warningText: { fontSize: 12, color: '#D97706', fontStyle: 'italic', marginTop: 4, textAlign: 'center' },
 });

@@ -90,6 +90,7 @@ export const DEFAULT_QUICK_ACTIONS: string[] = [
   'UserList',
   'BundlingList',
   'StokOpname',
+  'PembelianDPBeli',
   'Setting',
   'JurnalSearch',
   'JurnalBiaya',

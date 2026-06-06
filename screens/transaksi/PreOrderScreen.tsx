@@ -11,11 +11,13 @@ import {
   FlatList,
   TextInput,
   Modal,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import moment from 'moment';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { API_BASE_URL } from '../../services/api';
 import { getTokenAuth } from '../../services/token';
 import SearchSupplierModal, { SupplierItem } from '../../components/pembelian/SearchSupplierModal';
@@ -60,6 +62,8 @@ export default function PreOrderScreen() {
   const [showBarangModal, setShowBarangModal] = useState(false);
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [selectedPreOrders, setSelectedPreOrders] = useState<number[]>([]);
+  const [showTanggalPOPicker, setShowTanggalPOPicker] = useState(false);
+  const [showPerkiraanSampaiPicker, setShowPerkiraanSampaiPicker] = useState(false);
   const [suppliers, setSuppliers] = useState<SupplierItem[]>([]);
   
   const [currentPreOrder, setCurrentPreOrder] = useState<PreOrderData>({
@@ -362,6 +366,26 @@ export default function PreOrderScreen() {
     });
   };
 
+  const handleTanggalPOChange = (_: DateTimePickerEvent, selectedDate?: Date) => {
+    setShowTanggalPOPicker(false);
+    if (selectedDate) {
+      setCurrentPreOrder({
+        ...currentPreOrder,
+        tanggal_po: moment(selectedDate).format('YYYY-MM-DDTHH:mm:ss'),
+      });
+    }
+  };
+
+  const handlePerkiraanSampaiChange = (_: DateTimePickerEvent, selectedDate?: Date) => {
+    setShowPerkiraanSampaiPicker(false);
+    if (selectedDate) {
+      setCurrentPreOrder({
+        ...currentPreOrder,
+        tanggal_perkiraan_sampai: moment(selectedDate).format('YYYY-MM-DD'),
+      });
+    }
+  };
+
   const handleNewPreOrder = () => {
     resetCurrentPreOrder();
     setShowDialog(true);
@@ -616,21 +640,47 @@ export default function PreOrderScreen() {
               {/* PO Date */}
               <View style={styles.formGroup}>
                 <Text style={styles.formLabel}>Tanggal PO</Text>
-                <TextInput
-                  style={styles.input}
-                  value={moment(currentPreOrder.tanggal_po).format('DD/MM/YYYY HH:mm')}
-                  editable={false}
-                />
+                <TouchableOpacity
+                  style={styles.datePickerButton}
+                  onPress={() => setShowTanggalPOPicker(true)}
+                >
+                  <Ionicons name="calendar-outline" size={18} color="#6B7280" />
+                  <Text style={styles.datePickerText}>
+                    {moment(currentPreOrder.tanggal_po).format('DD/MM/YYYY HH:mm')}
+                  </Text>
+                  <Ionicons name="chevron-down" size={16} color="#9CA3AF" />
+                </TouchableOpacity>
+                {showTanggalPOPicker && (
+                  <DateTimePicker
+                    value={new Date(currentPreOrder.tanggal_po)}
+                    mode="date"
+                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    onChange={handleTanggalPOChange}
+                  />
+                )}
               </View>
 
               {/* Est. Arrival Date */}
               <View style={styles.formGroup}>
                 <Text style={styles.formLabel}>Perkiraan Sampai</Text>
-                <TextInput
-                  style={styles.input}
-                  value={moment(currentPreOrder.tanggal_perkiraan_sampai).format('DD/MM/YYYY')}
-                  editable={false}
-                />
+                <TouchableOpacity
+                  style={styles.datePickerButton}
+                  onPress={() => setShowPerkiraanSampaiPicker(true)}
+                >
+                  <Ionicons name="calendar-outline" size={18} color="#6B7280" />
+                  <Text style={styles.datePickerText}>
+                    {moment(currentPreOrder.tanggal_perkiraan_sampai).format('DD/MM/YYYY')}
+                  </Text>
+                  <Ionicons name="chevron-down" size={16} color="#9CA3AF" />
+                </TouchableOpacity>
+                {showPerkiraanSampaiPicker && (
+                  <DateTimePicker
+                    value={new Date(currentPreOrder.tanggal_perkiraan_sampai)}
+                    mode="date"
+                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    onChange={handlePerkiraanSampaiChange}
+                  />
+                )}
               </View>
 
               {/* Notes */}
@@ -664,10 +714,17 @@ export default function PreOrderScreen() {
                 {currentPreOrder.items.map((item, index) => (
                   <View key={index} style={styles.itemCard}>
                     <View style={styles.itemCardHeader}>
-                      <Text style={styles.itemName} numberOfLines={1}>
-                        {item.nama}
-                      </Text>
-                      <TouchableOpacity onPress={() => handleRemoveItem(index)}>
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        style={styles.itemNameScroll}
+                        contentContainerStyle={styles.itemNameScrollContent}
+                      >
+                        <Text style={styles.itemName}>
+                          {item.nama}
+                        </Text>
+                      </ScrollView>
+                      <TouchableOpacity onPress={() => handleRemoveItem(index)} style={styles.itemDeleteButton}>
                         <Ionicons name="trash-outline" size={20} color="#ef4444" />
                       </TouchableOpacity>
                     </View>
@@ -1008,6 +1065,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#111827',
   },
+  datePickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    gap: 8,
+  },
+  datePickerText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#111827',
+  },
   textArea: {
     minHeight: 80,
     textAlignVertical: 'top',
@@ -1040,11 +1113,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
+  itemNameScroll: {
+    flex: 1,
+    marginRight: 8,
+  },
+  itemNameScrollContent: {
+    alignItems: 'center',
+  },
   itemName: {
     fontSize: 14,
     fontWeight: '600',
     color: '#111827',
-    flex: 1,
+  },
+  itemDeleteButton: {
+    paddingLeft: 4,
+    flexShrink: 0,
   },
   itemCardBody: {
     flexDirection: 'row',
