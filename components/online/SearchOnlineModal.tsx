@@ -121,6 +121,13 @@ export default function SearchOnlineModal({
       ? `${item.parent_name} ${item.name}`
       : item.name;
 
+    let variantString = '';
+    if (item.jenis_varian && typeof item.jenis_varian === 'object') {
+      variantString = Object.values(item.jenis_varian)
+        .filter(val => val)
+        .join(' - ');
+    }
+
     return (
       <TouchableOpacity
         style={styles.productCard}
@@ -130,6 +137,11 @@ export default function SearchOnlineModal({
           <Text style={styles.productName} numberOfLines={2}>
             {displayName}
           </Text>
+          {variantString ? (
+            <Text style={{ fontSize: 14, color: '#059669', fontWeight: '500', marginBottom: 4 }}>
+              Variant: {variantString}
+            </Text>
+          ) : null}
           <Text style={styles.productSku}>SKU: {item.sku}</Text>
           {item.isVariant && (
             <View style={styles.badge}>

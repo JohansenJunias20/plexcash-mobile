@@ -42,9 +42,15 @@ export default function DiskonScreen({ navigation }: any) {
   const [detailPromo, setDetailPromo] = useState<any>(null);
   const [shopeeDetailItems, setShopeeDetailItems] = useState<any[]>([]);
   const [loadingShopeeDetail, setLoadingShopeeDetail] = useState(false);
+  const [editPriceMap, setEditPriceMap] = useState<Record<string, string>>({});
+  const [savingPrice, setSavingPrice] = useState(false);
 
   const [isAddModalVisible, setAddModalVisible] = useState(false);
   const [preselectedItems, setPreselectedItems] = useState<any[]>([]);
+  const [initialShopForModal, setInitialShopForModal] = useState<any>(null);
+
+  const [autoRenewPromos, setAutoRenewPromos] = useState([]);
+  const [liveSearch, setLiveSearch] = useState('');
 
   // Analisis multi-select
   const [analisisSelected, setAnalisisSelected] = useState<Set<number>>(new Set());
@@ -53,13 +59,20 @@ export default function DiskonScreen({ navigation }: any) {
   const [analisisFilterHpp, setAnalisisFilterHpp] = useState<'all' | 'ada' | 'tidak'>('all');
   const [analisisFilterBound, setAnalisisFilterBound] = useState<'all' | 'ada' | 'tidak'>('all');
 
-  const openAddModalWithItems = (items: any[]) => {
+  const openAddModalWithItems = (items: any[], shopId?: number) => {
     setPreselectedItems(items);
+    if (shopId) {
+      const shopObj = shops.find(s => s.id === shopId || s.ID === shopId);
+      setInitialShopForModal(shopObj);
+    } else {
+      setInitialShopForModal(null);
+    }
     setAddModalVisible(true);
   };
 
   const openAddModal = () => {
     setPreselectedItems([]);
+    setInitialShopForModal(null);
     setAddModalVisible(true);
   };
 
@@ -96,7 +109,8 @@ export default function DiskonScreen({ navigation }: any) {
   const fetchLivePromos = async () => {
     setLoadingAktif(true);
     try {
-      const res = await ApiService.get('/get/live_promo_shopee?status=ongoing,upcoming');
+      const searchParam = liveSearch.trim() ? `&search=${encodeURIComponent(liveSearch)}` : '';
+      const res = await ApiService.get(`/get/live_promo_shopee?status=ongoing,upcoming${searchParam}`);
       let items = [];
       if (Array.isArray(res)) items = res;
       else if (res && Array.isArray(res.data)) items = res.data;
@@ -147,10 +161,20 @@ export default function DiskonScreen({ navigation }: any) {
     }
   };
 
+  const fetchAutoRenewPromos = async () => {
+    try {
+      const res = await ApiService.get('/get/auto_renew_promos');
+      if (res && res.data) setAutoRenewPromos(res.data);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   useFocusEffect(
     useCallback(() => {
       fetchShops();
       fetchPromos();
+      fetchAutoRenewPromos();
       // Load others when tab changes or initially if needed
     }, [])
   );
@@ -229,10 +253,17 @@ export default function DiskonScreen({ navigation }: any) {
     setDetailPromo(promo);
     setLoadingShopeeDetail(true);
     setShopeeDetailItems([]);
+    setEditPriceMap({});
     try {
       const res = await ApiService.get(`/get/promo_detail_shopee/${promo.discount_id}?id_ecommerce=${promo.id_ecommerce}`);
       if (res && res.success) {
         setShopeeDetailItems(res.data || []);
+        const map: Record<string, string> = {};
+        (res.data || []).forEach((item: any) => {
+          const key = `${item.item_id}:${item.model_id || ''}`;
+          map[key] = String(item.harga_promo || '');
+        });
+        setEditPriceMap(map);
       } else if (res && res.data) {
         setShopeeDetailItems(res.data);
       } else {
@@ -242,6 +273,39 @@ export default function DiskonScreen({ navigation }: any) {
       Alert.alert("Error", e.message || String(e));
     } finally {
       setLoadingShopeeDetail(false);
+    }
+  };
+
+  const handleSavePromoPrice = async () => {
+    if (!detailPromo || !detailPromo.discount_id) return;
+    const itemsToUpdate = shopeeDetailItems.filter(item => {
+      const key = `${item.item_id}:${item.model_id || ''}`;
+      return editPriceMap[key] !== undefined && parseFloat(editPriceMap[key]) !== item.harga_promo;
+    }).map(item => ({
+      item_id: item.item_id,
+      model_id: item.model_id || null,
+      harga_promo: parseFloat(editPriceMap[`${item.item_id}:${item.model_id || ''}`])
+    })).filter(it => it.harga_promo > 0);
+
+    if (itemsToUpdate.length === 0) return Alert.alert('Info', 'Tidak ada perubahan harga.');
+
+    setSavingPrice(true);
+    try {
+      const res = await ApiService.post('/update/live_promo_price', {
+        discount_id: detailPromo.discount_id,
+        id_ecommerce: detailPromo.id_ecommerce,
+        items: itemsToUpdate
+      });
+      if (res.success || res.status) {
+        Alert.alert('Sukses', 'Harga promo berhasil diperbarui!');
+        openShopeeDetail(detailPromo); // reload
+      } else {
+        Alert.alert('Gagal', res.message || 'Terjadi kesalahan');
+      }
+    } catch (e: any) {
+      Alert.alert('Error', e.message || String(e));
+    } finally {
+      setSavingPrice(false);
     }
   };
 
@@ -275,6 +339,15 @@ export default function DiskonScreen({ navigation }: any) {
 
   const renderLokal = () => (
     <View style={styles.tabContent}>
+      {autoRenewPromos.length > 0 && (
+        <View style={{ backgroundColor: '#fff', padding: 12, borderRadius: 8, marginBottom: 12, borderWidth: 1, borderColor: '#e5e7eb', flexDirection: 'row', alignItems: 'center' }}>
+          <Ionicons name="sync-circle" size={28} color="#3b82f6" />
+          <View style={{ marginLeft: 12, flex: 1 }}>
+            <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#1e293b' }}>Promo Perpanjang Otomatis</Text>
+            <Text style={{ fontSize: 12, color: '#64748b' }}>{autoRenewPromos.length} promo dijadwalkan</Text>
+          </View>
+        </View>
+      )}
       {loadingLokal ? <ActivityIndicator size="large" color="#f59e0b" style={styles.loader} /> : (
         <FlatList
           data={promos}
@@ -313,6 +386,18 @@ export default function DiskonScreen({ navigation }: any) {
   const renderAktif = () => (
     <View style={styles.tabContent}>
       {renderShopTabs(filterShopName, setFilterShopName, true)}
+      <View style={[styles.searchBarRow, { marginBottom: 12, paddingHorizontal: 0, borderBottomWidth: 0 }]}>
+        <TextInput
+          style={styles.analisisSearchInput}
+          placeholder="Cari promo..."
+          value={liveSearch}
+          onChangeText={setLiveSearch}
+          onSubmitEditing={fetchLivePromos}
+        />
+        <TouchableOpacity style={styles.refreshBtn} onPress={fetchLivePromos}>
+          <Ionicons name="search" size={18} color="#6b7280" />
+        </TouchableOpacity>
+      </View>
       {loadingAktif ? <ActivityIndicator size="large" color="#f59e0b" style={styles.loader} /> : (
         <FlatList
           data={livePromos.filter((p: any) => filterShopName === 'all' || p.shop_name === filterShopName)}
@@ -487,7 +572,7 @@ export default function DiskonScreen({ navigation }: any) {
                   style={[styles.card, isChecked && styles.cardSelected]}
                   onPress={() => toggleOne(currentId)}
                   onLongPress={() => {
-                    openAddModalWithItems(buildPromoItems(new Set([currentId])));
+                    openAddModalWithItems(buildPromoItems(new Set([currentId])), analisisActiveShopId);
                   }}
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
@@ -589,7 +674,7 @@ export default function DiskonScreen({ navigation }: any) {
               <TouchableOpacity
                 style={styles.selectionPromoBtn}
                 onPress={() => {
-                  openAddModalWithItems(buildPromoItems(analisisSelected));
+                  openAddModalWithItems(buildPromoItems(analisisSelected), analisisActiveShopId);
                   clearAll();
                 }}
               >
@@ -662,6 +747,11 @@ export default function DiskonScreen({ navigation }: any) {
               <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#0f172a' }}>{detailPromo?.discount_name || detailPromo?.nama_promo}</Text>
               <Text style={{ fontSize: 13, color: '#64748b' }}>{detailPromo?.shop_name}</Text>
             </View>
+            {(detailPromo?.status_api === 'ongoing' || detailPromo?.status_api === 'upcoming') && (
+              <TouchableOpacity onPress={handleSavePromoPrice} disabled={savingPrice} style={{ backgroundColor: '#f59e0b', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }}>
+                {savingPrice ? <ActivityIndicator size="small" color="#fff" /> : <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 13 }}>Simpan</Text>}
+              </TouchableOpacity>
+            )}
           </View>
           {loadingShopeeDetail ? (
             <ActivityIndicator size="large" color="#f59e0b" style={{ marginTop: 40 }} />
@@ -672,16 +762,32 @@ export default function DiskonScreen({ navigation }: any) {
               contentContainerStyle={{ padding: 16 }}
               renderItem={({ item }) => (
                 <View style={{ backgroundColor: 'white', padding: 16, borderRadius: 12, marginBottom: 12, borderWidth: 1, borderColor: '#e2e8f0' }}>
-                  <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#1e293b', marginBottom: 4 }}>{item.nama}</Text>
-                  <Text style={{ fontSize: 13, color: '#64748b', marginBottom: 12 }}>{item.sku}</Text>
+                  <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#1e293b', marginBottom: 4 }}>
+                    {item.item_name || item.nama || `Item #${item.item_id}`} {item.model_name ? `- ${item.model_name}` : ''}
+                  </Text>
+                  <Text style={{ fontSize: 13, color: '#64748b', marginBottom: 12 }}>
+                    {item.item_sku || item.model_sku || item.sku || ''}
+                  </Text>
                   
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
                     <Text style={{ color: '#475569' }}>Harga Normal</Text>
-                    <Text style={{ textDecorationLine: 'line-through', color: '#94a3b8' }}>Rp {Number(item.harga_normal || item.original_price).toLocaleString('id-ID')}</Text>
+                    <Text style={{ textDecorationLine: 'line-through', color: '#94a3b8' }}>Rp {Number(item.harga_asli || item.original_price || item.harga_normal || 0).toLocaleString('id-ID')}</Text>
                   </View>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12, alignItems: 'center' }}>
                     <Text style={{ color: '#ef4444', fontWeight: 'bold' }}>Harga Promo</Text>
-                    <Text style={{ color: '#ef4444', fontWeight: 'bold' }}>Rp {Number(item.harga_promo).toLocaleString('id-ID')}</Text>
+                    {detailPromo?.status_api === 'ongoing' || detailPromo?.status_api === 'upcoming' ? (
+                       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <Text style={{ color: '#ef4444', fontWeight: 'bold', marginRight: 4 }}>Rp</Text>
+                          <TextInput 
+                             style={{ borderWidth: 1, borderColor: '#ef4444', color: '#ef4444', fontWeight: 'bold', paddingVertical: 2, paddingHorizontal: 6, borderRadius: 4, textAlign: 'right', minWidth: 80 }}
+                             keyboardType="numeric"
+                             value={editPriceMap[`${item.item_id}:${item.model_id || ''}`]}
+                             onChangeText={(val) => setEditPriceMap(prev => ({...prev, [`${item.item_id}:${item.model_id || ''}`]: val}))}
+                          />
+                       </View>
+                    ) : (
+                       <Text style={{ color: '#ef4444', fontWeight: 'bold' }}>Rp {Number(item.harga_promo).toLocaleString('id-ID')}</Text>
+                    )}
                   </View>
                   
                   <View style={{ backgroundColor: '#f8fafc', padding: 12, borderRadius: 8 }}>
@@ -702,7 +808,17 @@ export default function DiskonScreen({ navigation }: any) {
                   </View>
                 </View>
               )}
-              ListEmptyComponent={<Text style={{ textAlign: 'center', marginTop: 20, color: '#64748b' }}>Tidak ada detail item tersedia.</Text>}
+              ListEmptyComponent={
+                <View style={{ alignItems: 'center', marginTop: 30, padding: 20 }}>
+                  <Ionicons name="time-outline" size={48} color="#94a3b8" />
+                  <Text style={{ textAlign: 'center', marginTop: 12, color: '#64748b', fontSize: 16 }}>
+                    Detail produk belum tersedia.
+                  </Text>
+                  <Text style={{ textAlign: 'center', marginTop: 8, color: '#94a3b8', fontSize: 13 }}>
+                    Untuk promo yang baru dibuat, Shopee membutuhkan waktu sekitar 1-3 menit untuk memproses dan menampilkan detail barang. Silakan tutup dan coba buka lagi beberapa saat lagi.
+                  </Text>
+                </View>
+              }
             />
           )}
         </SafeAreaView>
@@ -783,6 +899,7 @@ export default function DiskonScreen({ navigation }: any) {
       >
         <DiskonAddModal 
           initialItems={preselectedItems}
+          initialShop={initialShopForModal}
           onClose={() => setAddModalVisible(false)} 
           onSuccess={() => {
             setAddModalVisible(false);

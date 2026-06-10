@@ -10,12 +10,13 @@ interface DiskonAddModalProps {
   onClose: () => void;
   onSuccess: () => void;
   initialItems?: any[];
+  initialShop?: any;
 }
 
-export default function DiskonAddModal({ onClose, onSuccess, initialItems }: DiskonAddModalProps) {
-  const [namaPromo, setNamaPromo] = useState('');
-  const [startTime, setStartTime] = useState(new Date());
-  const [endTime, setEndTime] = useState(moment().add(6, 'months').subtract(1, 'hour').toDate());
+export default function DiskonAddModal({ onClose, onSuccess, initialItems, initialShop }: DiskonAddModalProps) {
+  const [namaPromo, setNamaPromo] = useState(`Promo ${moment().format('YYYY-MM-DD')}`);
+  const [startTime, setStartTime] = useState(moment().add(5, 'minutes').toDate());
+  const [endTime, setEndTime] = useState(moment().add(179, 'days').toDate());
   
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
@@ -39,6 +40,9 @@ export default function DiskonAddModal({ onClose, onSuccess, initialItems }: Dis
 
   useEffect(() => {
     fetchShops();
+    if (initialShop) {
+      setSelectedShop(initialShop);
+    }
     if (initialItems && initialItems.length > 0) {
       const mapped = initialItems.map((it: any) => ({
         id_masterbarang: it.id_masterbarang || it.id || it.ID,
@@ -52,6 +56,9 @@ export default function DiskonAddModal({ onClose, onSuccess, initialItems }: Dis
         showMappings: false,
       }));
       setSelectedItems(mapped);
+      if (initialShop) {
+        checkPromoConflicts(initialShop.id || initialShop.ID, mapped);
+      }
     }
   }, []);
 
@@ -66,12 +73,24 @@ export default function DiskonAddModal({ onClose, onSuccess, initialItems }: Dis
 
   const handleSearch = async () => {
     if (!searchQuery) return;
+    if (!selectedShop) {
+      Alert.alert('Info', 'Pilih toko terlebih dahulu sebelum mencari barang.');
+      return;
+    }
     setSearching(true);
     try {
-      const res = await ApiService.post('/search/masterbarang', {
-        id: "", nama: searchQuery, kategori: "", merk: ""
-      });
-      setSearchResults(res.slice(0, 10));
+      const shopId = selectedShop.id || selectedShop.ID;
+      const res = await ApiService.get(`/get/analisis_produk_masterbarang?search=${encodeURIComponent(searchQuery)}&id_ecommerce=${shopId}`);
+      let items = [];
+      if (Array.isArray(res)) items = res;
+      else if (res && Array.isArray(res.data)) items = res.data;
+      else if (res && res.data && Array.isArray(res.data.rows)) items = res.data.rows;
+      else if (res && res.data && Array.isArray(res.data.data)) items = res.data.data;
+      else if (res && Array.isArray(res.result)) items = res.result;
+
+      // Filter only items that are bound to Shopee
+      const validItems = items.filter((i: any) => i.id_online || i.id_parent || i.id_ecommerce);
+      setSearchResults(validItems.slice(0, 10));
     } catch (e) {
       console.error(e);
     } finally {
@@ -80,13 +99,14 @@ export default function DiskonAddModal({ onClose, onSuccess, initialItems }: Dis
   };
 
   const handleSelectItem = (item: any) => {
-    if (selectedItems.find(i => i.id_masterbarang === (item.id || item.ID))) {
+    const currentId = item.id || item.id_masterbarang || item.id_produk || item.ID;
+    if (selectedItems.find(i => i.id_masterbarang === currentId)) {
       Alert.alert('Info', 'Barang sudah ada di daftar');
       return;
     }
     const newItem = {
-      id_masterbarang: item.id || item.ID,
-      nama: item.nama || item.NAMA,
+      id_masterbarang: currentId,
+      nama: item.nama || item.NAMA || item.local_nama,
       hpp: Number(item.hpp || item.HPP || 0),
       harga_jual_2: Number(item.harga_jual_2 || item.hargajual2 || item.HARGAJUAL2 || 0),
       harga_promo: '',
@@ -99,13 +119,13 @@ export default function DiskonAddModal({ onClose, onSuccess, initialItems }: Dis
     setSelectedItems(newItems);
     setSearchResults([]);
     setSearchQuery('');
-    checkPromoConflicts(selectedShop?.id, newItems);
+    checkPromoConflicts(selectedShop?.id || selectedShop?.ID, newItems);
   };
 
   const handleRemoveItem = (id: number) => {
     const newItems = selectedItems.filter(i => i.id_masterbarang !== id);
     setSelectedItems(newItems);
-    checkPromoConflicts(selectedShop?.id, newItems);
+    checkPromoConflicts(selectedShop?.id || selectedShop?.ID, newItems);
   };
 
   const checkPromoConflicts = async (shopId: number | undefined, items: any[]) => {
@@ -121,7 +141,13 @@ export default function DiskonAddModal({ onClose, onSuccess, initialItems }: Dis
       });
       if (res.success) {
         setPromoConflicts(res.conflicts || []);
-        setOnlineMappings(res.mappings || []);
+        // Merge mappings so that any local mappings from search aren't wiped out
+        setOnlineMappings(prev => {
+          const newMappings = res.mappings || [];
+          const existingMapIds = new Set(newMappings.map((m: any) => m.id_online));
+          const missingMappings = prev.filter((m: any) => !existingMapIds.has(m.id_online));
+          return [...newMappings, ...missingMappings];
+        });
       }
     } catch (e) {
       console.error(e);
@@ -133,7 +159,7 @@ export default function DiskonAddModal({ onClose, onSuccess, initialItems }: Dis
   const handleShopChange = (shop: any) => {
     setSelectedShop(shop);
     setShowShopPicker(false);
-    checkPromoConflicts(shop.id, selectedItems);
+    checkPromoConflicts(shop.id || shop.ID, selectedItems);
   };
 
   const applyMarkupFromHpp = () => {
@@ -202,31 +228,42 @@ export default function DiskonAddModal({ onClose, onSuccess, initialItems }: Dis
       nama_promo: namaPromo,
       start_time: moment(startTime).format('YYYY-MM-DDTHH:mm'),
       end_time: moment(endTime).format('YYYY-MM-DDTHH:mm'),
-      id_ecommerce: selectedShop.id,
+      id_ecommerce: selectedShop.id || selectedShop.ID,
       auto_renew: autoRenew,
-      details: selectedItems.map(i => {
-        const itemMappings = onlineMappings.filter(m => m.id_masterbarang === i.id_masterbarang);
-        let includedIds = i.included_id_onlines;
-        if (!includedIds || includedIds.length === 0) {
-          includedIds = itemMappings.map(m => m.id_online);
-        }
-        
-        return {
-          id_masterbarang: i.id_masterbarang,
-          harga_promo: Number(i.harga_promo),
-          harga_jual_2: Number(i.harga_jual_2),
-          persentase_promo: i.persentase_promo ? Number(i.persentase_promo) : null,
-          purchase_limit: Number(i.purchase_limit),
-          included_id_onlines: includedIds.length > 0 ? includedIds : null
-        };
-      })
+      details: (() => {
+        let flattened: any[] = [];
+        selectedItems.forEach(i => {
+          const itemMappings = onlineMappings.filter(m => m.id_masterbarang === i.id_masterbarang);
+          let includedIds = i.included_id_onlines;
+          if (!includedIds || includedIds.length === 0) {
+            includedIds = itemMappings.map(m => m.id_online);
+          }
+          
+          itemMappings.forEach(m => {
+            if (includedIds.includes(m.id_online)) {
+              const isVariant = m.id_parent !== null && m.id_parent !== "" && m.id_parent !== "0" && m.id_parent !== 0;
+              flattened.push({
+                id_masterbarang: i.id_masterbarang,
+                id_online: isVariant ? m.id_parent : m.id_online,
+                id_model: isVariant ? m.id_online : 0,
+                harga_promo: Number(i.harga_promo),
+                harga_jual_2: Number(i.harga_jual_2),
+                persentase_promo: i.persentase_promo ? Number(i.persentase_promo) : null,
+                purchase_limit: Number(i.purchase_limit),
+                included_id_onlines: includedIds.length > 0 ? includedIds : null
+              });
+            }
+          });
+        });
+        return flattened;
+      })()
     };
 
     setSaving(true);
     try {
-      const res = await ApiService.post('/insert/promo_marketplace', payload);
+      const res = await ApiService.post('/insert/promo_shopee_direct', payload);
       if (res.success) {
-        Alert.alert('Sukses', 'Promo berhasil disimpan di lokal.');
+        Alert.alert('Sukses', 'Promo berhasil disimpan dan disync ke Shopee.');
         onSuccess();
       } else {
         Alert.alert('Gagal', res.message || 'Terjadi kesalahan');
@@ -247,6 +284,10 @@ export default function DiskonAddModal({ onClose, onSuccess, initialItems }: Dis
     promoConflicts.filter((c: any) => String(c.id_masterbarang) === String(id_masterbarang));
 
   const isNotInShop = (id_masterbarang: number) => {
+    // If the modal was opened from the Analisis tab (initialShop is provided), 
+    // the products are already validated to be in the shop, so we bypass this check.
+    if (!!initialShop) return false;
+    
     if (!selectedShop) return false;
     const mappings = onlineMappings.filter((m: any) => String(m.id_masterbarang) === String(id_masterbarang));
     return mappings.length === 0;
@@ -329,12 +370,18 @@ export default function DiskonAddModal({ onClose, onSuccess, initialItems }: Dis
           )}
 
           <Text style={[styles.label, {marginTop: 12}]}>Toko Shopee</Text>
-          <TouchableOpacity style={styles.shopBtn} onPress={() => setShowShopPicker(true)}>
-            <Text style={{color: selectedShop ? '#111827' : '#9ca3af'}}>
-              {selectedShop ? selectedShop.name : 'Pilih Toko...'}
-            </Text>
-            <Ionicons name="chevron-down" size={20} color="#6b7280" />
-          </TouchableOpacity>
+          {initialShop ? (
+            <View style={[styles.shopBtn, { backgroundColor: '#e5e7eb' }]}>
+              <Text style={{color: '#4b5563', fontWeight: 'bold'}}>{initialShop.name}</Text>
+            </View>
+          ) : (
+            <TouchableOpacity style={styles.shopBtn} onPress={() => setShowShopPicker(true)}>
+              <Text style={{color: selectedShop ? '#111827' : '#9ca3af'}}>
+                {selectedShop ? selectedShop.name : 'Pilih Toko...'}
+              </Text>
+              <Ionicons name="chevron-down" size={20} color="#6b7280" />
+            </TouchableOpacity>
+          )}
 
           <View style={styles.switchRow}>
             <Text style={styles.label}>Perpanjang Otomatis</Text>
@@ -532,7 +579,7 @@ export default function DiskonAddModal({ onClose, onSuccess, initialItems }: Dis
             <Text style={styles.shopModalTitle}>Pilih Toko</Text>
             <FlatList
               data={shops}
-              keyExtractor={item => item.id.toString()}
+              keyExtractor={item => (item.id || item.ID).toString()}
               renderItem={({item}) => (
                 <TouchableOpacity style={styles.shopItem} onPress={() => handleShopChange(item)}>
                   <Text style={styles.shopItemText}>{item.name}</Text>

@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   ScrollView,
   Image,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { showMessage } from 'react-native-flash-message';
@@ -138,6 +139,7 @@ const MigrateModal: React.FC<MigrateModalProps> = ({
     let processedCount = 0;
     let succeededCount = 0;
     let failedCount = 0;
+    let errorMessages: string[] = [];
 
     setMigrationProgress({
       session_id: baseSessionId,
@@ -176,6 +178,31 @@ const MigrateModal: React.FC<MigrateModalProps> = ({
           } else {
             failedCount += chunk.length;
           }
+
+          let msg = response?.message || (typeof response?.reason === 'string' ? response.reason : '');
+          
+          if (!msg && response?.reason?.message) {
+            msg = response.reason.message;
+          } else if (!msg && response?.error) {
+            msg = typeof response.error === 'string' ? response.error : JSON.stringify(response.error);
+          } else if (!msg && response?.reason?.rejected_list && Array.isArray(response.reason.rejected_list)) {
+            const reasons = response.reason.rejected_list.map((r: any) => {
+              if (typeof r === 'string') return r;
+              return r?.reason || r?.message || JSON.stringify(r);
+            }).filter(Boolean);
+            if (reasons.length > 0) {
+              msg = reasons.join(', ');
+            }
+          }
+
+          if (!msg) {
+            msg = response?.reason ? JSON.stringify(response.reason) : JSON.stringify(response || {});
+          }
+
+          const finalMsg = typeof msg === 'string' ? msg : JSON.stringify(msg);
+          if (finalMsg && !errorMessages.includes(finalMsg)) {
+            errorMessages.push(finalMsg);
+          }
         }
 
         setMigrationProgress(prev => prev ? {
@@ -189,22 +216,51 @@ const MigrateModal: React.FC<MigrateModalProps> = ({
       setMigrationProgress(prev => prev ? { ...prev, status: 'completed' } : null);
       setIsMigrating(false);
 
+      let messageType: 'success' | 'warning' | 'danger' = 'success';
+      let title = 'Berhasil';
+      
+      if (failedCount > 0 && succeededCount === 0) {
+        messageType = 'danger';
+        title = 'Gagal';
+      } else if (failedCount > 0) {
+        messageType = 'warning';
+        title = 'Selesai Sebagian';
+      }
+
+      let description = `Migration selesai. Berhasil: ${succeededCount}, Gagal: ${failedCount}`;
+      if (errorMessages.length > 0) {
+        description += `\nError: ${errorMessages.join(', ')}`;
+      }
+
       showMessage({
-        message: 'Berhasil',
-        description: `Migration selesai. Berhasil: ${succeededCount}, Gagal: ${failedCount}`,
-        type: 'success',
-        duration: 4000,
+        message: title,
+        description: description,
+        type: messageType,
+        duration: errorMessages.length > 0 ? 6000 : 4000,
       });
       
-      onSuccess();
+      if (failedCount > 0 || errorMessages.length > 0) {
+        Alert.alert(title, description, [
+          { text: 'OK', onPress: () => onSuccess() }
+        ]);
+      } else {
+        onSuccess();
+      }
     } catch (error: any) {
       console.error('Error migrating products:', error);
+      let rawError = error.response?.data?.message || error.response?.data?.error || error.response?.data || error.message || 'Gagal memigrasikan sebagian produk';
+      
+      const errorMsg = typeof rawError === 'string' ? rawError : JSON.stringify(rawError);
+
       showMessage({
         message: 'Error',
-        description: error.message || 'Gagal memigrasikan sebagian produk',
+        description: errorMsg,
         type: 'danger',
-        duration: 4000,
+        duration: 6000,
       });
+
+      Alert.alert('Migrasi Gagal', errorMsg);
+
       setIsMigrating(false);
       setMigrationProgress(prev => prev ? { ...prev, status: 'error' } : null);
     }
