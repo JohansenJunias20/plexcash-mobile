@@ -334,6 +334,21 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ navigation, s
       {/* SETTING Section - always visible */}
       <SectionHeader title="SETTING" />
       <DrawerItem label="Settings" icon="settings" onPress={() => navigation.navigate('Setting')} active={currentRoute === 'Setting'} />
+      <DrawerItem
+        label="Info Langganan"
+        icon="wallet"
+        onPress={() => navigation.navigate('MySubscription')}
+        active={currentRoute === 'MySubscription'}
+      />
+      {isAdmin && (
+        <DrawerItem
+          label="Kelola Langganan"
+          icon="card"
+          onPress={() => navigation.navigate('ManageSubscription')}
+          active={currentRoute === 'ManageSubscription'}
+          badge="DEV"
+        />
+      )}
 
       </DrawerContentScrollView>
 

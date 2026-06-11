@@ -27,6 +27,8 @@ import BundlingListScreen from '../screens/bundling/BundlingListScreen';
 import BundlingEditScreen from '../screens/bundling/BundlingEditScreen';
 import StokOpnameScreen from '../screens/stokopname/StokOpnameScreen';
 import Settingscreen from '../screens/Settingscreen';
+import ManageSubscriptionScreen from '../screens/subscription/ManageSubscriptionScreen';
+import MySubscriptionScreen from '../screens/subscription/MySubscriptionScreen';
 
 // MASTER Section Imports
 import SupplierListScreen from '../screens/supplier/SupplierListScreen';
@@ -374,6 +376,8 @@ const DrawerNavigatorContent = () => {
 
       {/* SETTING Section */}
       <Drawer.Screen name="Setting" component={Settingscreen} />
+      <Drawer.Screen name="ManageSubscription" component={ManageSubscriptionScreen} />
+      <Drawer.Screen name="MySubscription" component={MySubscriptionScreen} />
 
       {/* Scan Out, Scan In & Scan Search - Special */}
       <Drawer.Screen name="ScanOut" component={ScanOutScreen} />

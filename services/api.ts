@@ -1010,6 +1010,267 @@ class ApiService {
       return { status: false, reason: 'Failed to update PIN requirement' };
     }
   }
+
+  // =====================================================
+  // SUBSCRIPTION MANAGEMENT (Admin/Developer only)
+  // =====================================================
+
+  /**
+   * Get balance info for all tenant databases in a single batch request
+   */
+  static async getDatabaseBalances(): Promise<{
+    status: boolean;
+    data?: Record<string, { balance: number; history_balance: number; last_checked_at: string | null }>;
+    reason?: string;
+  }> {
+    try {
+      const response = await this.authenticatedRequest('/get/database/balances');
+      return response;
+    } catch (error) {
+      console.error('Error fetching database balances:', error);
+      return { status: false, reason: 'Failed to fetch database balances' };
+    }
+  }
+
+  /**
+   * Get subscription pricing settings for all databases
+   */
+  static async getSubscriptionPrices(): Promise<{
+    status: boolean;
+    data?: { database_name: string; price: number; fee_type: 'fixed' | 'progressive' }[];
+    reason?: string;
+  }> {
+    try {
+      const response = await this.authenticatedRequest('/get/subscription/prices');
+      return response;
+    } catch (error) {
+      console.error('Error fetching subscription prices:', error);
+      return { status: false, reason: 'Failed to fetch subscription prices' };
+    }
+  }
+
+  /**
+   * Change the fee type (fixed or progressive) for a tenant database
+   */
+  static async setSubscriptionFeeType(
+    database_name: string,
+    fee_type: 'fixed' | 'progressive'
+  ): Promise<{ status: boolean; message?: string; reason?: string }> {
+    try {
+      const response = await this.authenticatedRequest('/admin/subscription/fee-type', {
+        method: 'POST',
+        body: JSON.stringify({ database_name, fee_type }),
+      });
+      return response;
+    } catch (error) {
+      console.error('Error setting subscription fee type:', error);
+      return { status: false, reason: 'Failed to set fee type' };
+    }
+  }
+
+  /**
+   * Save the flat (fixed) subscription price for a tenant store
+   */
+  static async setSubscriptionPrice(
+    store: string,
+    price: number
+  ): Promise<{ status: boolean; message?: string; reason?: string }> {
+    try {
+      const response = await this.authenticatedRequest('/admin/subscription/price', {
+        method: 'POST',
+        body: JSON.stringify({ store, price }),
+      });
+      return response;
+    } catch (error) {
+      console.error('Error setting subscription price:', error);
+      return { status: false, reason: 'Failed to set subscription price' };
+    }
+  }
+
+  /**
+   * Get progressive billing tier rules for a specific database
+   */
+  static async getProgressiveRules(database_name: string): Promise<{
+    status: boolean;
+    data?: { id: number; database_name: string; min_orders: number; max_orders: number | null; price: number }[];
+    reason?: string;
+  }> {
+    try {
+      const response = await this.authenticatedRequest(
+        `/admin/subscription/progressive-rules/${encodeURIComponent(database_name)}`
+      );
+      return response;
+    } catch (error) {
+      console.error('Error fetching progressive rules:', error);
+      return { status: false, reason: 'Failed to fetch progressive rules' };
+    }
+  }
+
+  /**
+   * Add a new progressive billing tier rule
+   */
+  static async addProgressiveRule(payload: {
+    database_name: string;
+    min_orders: number;
+    max_orders: number | null;
+    price: number;
+  }): Promise<{ status: boolean; message?: string; data?: any; reason?: string }> {
+    try {
+      const response = await this.authenticatedRequest('/admin/subscription/progressive-rules', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      return response;
+    } catch (error) {
+      console.error('Error adding progressive rule:', error);
+      return { status: false, reason: 'Failed to add progressive rule' };
+    }
+  }
+
+  /**
+   * Delete a progressive billing tier rule by ID
+   */
+  static async deleteProgressiveRule(id: number): Promise<{ status: boolean; message?: string; reason?: string }> {
+    try {
+      const response = await this.authenticatedRequest(
+        `/admin/subscription/progressive-rules/${id}`,
+        { method: 'DELETE' }
+      );
+      return response;
+    } catch (error) {
+      console.error('Error deleting progressive rule:', error);
+      return { status: false, reason: 'Failed to delete progressive rule' };
+    }
+  }
+
+  // =====================================================
+  // USER BALANCE & TOPUP (semua user yang login)
+  // =====================================================
+
+  /**
+   * Get current user's balance + auto-verifies any PENDING Xendit top-ups
+   */
+  static async getUserBalance(): Promise<{
+    status: boolean;
+    data?: { balance: number; last_topup?: string };
+    reason?: string;
+  }> {
+    try {
+      const response = await this.authenticatedRequest('/get/user/balance');
+      return response;
+    } catch (error) {
+      console.error('Error fetching user balance:', error);
+      return { status: false, reason: 'Failed to fetch balance' };
+    }
+  }
+
+  /**
+   * Get transaction history for the current user's database
+   * Returns up to 100 most recent transactions (top-up, billing, adjustment, etc.)
+   */
+  static async getUserTransactions(): Promise<{
+    status: boolean;
+    data?: {
+      id: number;
+      type: string;
+      amount: number;
+      description: string;
+      final_balance: number;
+      created_at: string;
+      date: string;
+      status: string;
+      payment_method: string | null;
+      payment_id: string | null;
+    }[];
+    reason?: string;
+  }> {
+    try {
+      const response = await this.authenticatedRequest('/get/user/transactions');
+      return response;
+    } catch (error) {
+      console.error('Error fetching user transactions:', error);
+      return { status: false, reason: 'Failed to fetch transactions' };
+    }
+  }
+
+  /**
+   * Create a Xendit payment invoice for balance top-up
+   * Returns a payment_url to open in browser/WebView
+   */
+  static async createTopUp(amount: number): Promise<{
+    status: boolean;
+    data?: { payment_url: string; amount: number };
+    reason?: string;
+  }> {
+    try {
+      const response = await this.authenticatedRequest('/user/topup', {
+        method: 'POST',
+        body: JSON.stringify({ amount }),
+      });
+      return response;
+    } catch (error) {
+      console.error('Error creating top-up:', error);
+      return { status: false, reason: 'Failed to create top-up payment' };
+    }
+  }
+
+  /**
+   * Verify a pending Xendit top-up by UUID (fallback if webhook/redirect failed)
+   */
+  static async verifyTopUp(uuid: string): Promise<{
+    status: boolean;
+    message?: string;
+    reason?: string;
+  }> {
+    try {
+      const response = await this.authenticatedRequest('/user/topup/verify', {
+        method: 'POST',
+        body: JSON.stringify({ uuid }),
+      });
+      return response;
+    } catch (error) {
+      console.error('Error verifying top-up:', error);
+      return { status: false, reason: 'Failed to verify top-up' };
+    }
+  }
+
+  /**
+   * Get current database's subscription price and fee type
+   */
+  static async getMySubscriptionPrice(): Promise<{
+    status: boolean;
+    data?: { price: number; fee_type: 'fixed' | 'progressive' };
+    reason?: string;
+  }> {
+    try {
+      const response = await this.authenticatedRequest('/get/subscription/price');
+      return response;
+    } catch (error) {
+      console.error('Error fetching subscription price:', error);
+      return { status: false, reason: 'Failed to fetch subscription price' };
+    }
+  }
+
+  /**
+   * Get progressive billing calculation for current billing period
+   */
+  static async getProgressiveCalculation(): Promise<{
+    status: boolean;
+    data?: {
+      order_count: number;
+      applicable_tier: { min_orders: number; max_orders: number | null; price: number } | null;
+      total_fee: number;
+    };
+    reason?: string;
+  }> {
+    try {
+      const response = await this.authenticatedRequest('/get/subscription/progressive-calculation');
+      return response;
+    } catch (error) {
+      console.error('Error fetching progressive calculation:', error);
+      return { status: false, reason: 'Failed to fetch progressive calculation' };
+    }
+  }
 }
 
 export default ApiService;
