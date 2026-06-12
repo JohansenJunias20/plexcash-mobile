@@ -13,6 +13,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 interface IntervalDatePickerProps {
   visible: boolean;
   onOK: (startDate: string, endDate: string) => void;
+  onCancel?: () => void;
   defaultStart?: string;
   defaultEnd?: string;
 }
@@ -20,6 +21,7 @@ interface IntervalDatePickerProps {
 const IntervalDatePicker: React.FC<IntervalDatePickerProps> = ({
   visible,
   onOK,
+  onCancel,
   defaultStart,
   defaultEnd,
 }) => {
@@ -85,7 +87,7 @@ const IntervalDatePicker: React.FC<IntervalDatePickerProps> = ({
       visible={visible}
       animationType="fade"
       transparent={true}
-      onRequestClose={() => {}}
+      onRequestClose={onCancel ?? (() => {})}
     >
       <View style={styles.overlay}>
         <View style={styles.container}>
@@ -93,6 +95,11 @@ const IntervalDatePicker: React.FC<IntervalDatePickerProps> = ({
           <View style={styles.header}>
             <Ionicons name="calendar-outline" size={24} color="#f59e0b" />
             <Text style={styles.title}>Pilih Periode</Text>
+            {onCancel && (
+              <TouchableOpacity onPress={onCancel} style={{ marginLeft: 'auto', padding: 4 }}>
+                <Ionicons name="close" size={22} color="#6B7280" />
+              </TouchableOpacity>
+            )}
           </View>
 
           {/* Date Pickers */}

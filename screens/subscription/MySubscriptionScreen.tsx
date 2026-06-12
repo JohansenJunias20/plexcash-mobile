@@ -18,6 +18,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import ApiService from '../../services/api';
 
@@ -288,19 +289,6 @@ interface HistoryTabProps {
 }
 
 const HistoryTab: React.FC<HistoryTabProps> = ({ transactions, loading, refreshing, onRefresh }) => {
-  const [filter, setFilter] = useState<'all' | 'top_up' | 'subscription_payment' | 'adjustment'>('all');
-
-  const filtered = filter === 'all'
-    ? transactions
-    : transactions.filter(t => t.type.toLowerCase() === filter);
-
-  const filterOptions = [
-    { key: 'all', label: 'Semua' },
-    { key: 'top_up', label: 'Top Up' },
-    { key: 'subscription_payment', label: 'Tagihan' },
-    { key: 'adjustment', label: 'Penyesuaian' },
-  ];
-
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -311,54 +299,31 @@ const HistoryTab: React.FC<HistoryTabProps> = ({ transactions, loading, refreshi
   }
 
   return (
-    <View style={{ flex: 1 }}>
-      {/* Filter chips */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.filterRow}
-      >
-        {filterOptions.map(opt => (
-          <TouchableOpacity
-            key={opt.key}
-            style={[styles.filterChip, filter === opt.key && styles.filterChipActive]}
-            onPress={() => setFilter(opt.key as any)}
-          >
-            <Text style={[styles.filterChipText, filter === opt.key && styles.filterChipTextActive]}>
-              {opt.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-
-      <FlatList
-        data={filtered}
-        keyExtractor={item => String(item.id)}
-        renderItem={({ item }) => <TransactionRow item={item} />}
-        contentContainerStyle={styles.txList}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={['#6366F1']}
-            tintColor="#6366F1"
-          />
-        }
-        ItemSeparatorComponent={() => <View style={styles.txSeparator} />}
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Ionicons name="receipt-outline" size={48} color="#D1D5DB" />
-            <Text style={styles.emptyTitle}>
-              {filter === 'all' ? 'Belum ada transaksi' : `Tidak ada transaksi "${filterOptions.find(o => o.key === filter)?.label}"`}
-            </Text>
-            <Text style={styles.emptySubtitle}>
-              Riwayat transaksi Anda akan muncul di sini setelah ada aktivitas.
-            </Text>
-          </View>
-        }
-      />
-    </View>
+    <FlatList
+      data={transactions}
+      keyExtractor={item => String(item.id)}
+      renderItem={({ item }) => <TransactionRow item={item} />}
+      contentContainerStyle={styles.txList}
+      showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          colors={['#6366F1']}
+          tintColor="#6366F1"
+        />
+      }
+      ItemSeparatorComponent={() => <View style={styles.txSeparator} />}
+      ListEmptyComponent={
+        <View style={styles.emptyState}>
+          <Ionicons name="receipt-outline" size={48} color="#D1D5DB" />
+          <Text style={styles.emptyTitle}>Belum ada transaksi</Text>
+          <Text style={styles.emptySubtitle}>
+            Riwayat transaksi Anda akan muncul di sini setelah ada aktivitas.
+          </Text>
+        </View>
+      }
+    />
   );
 };
 
@@ -556,6 +521,7 @@ const MySubscriptionScreen: React.FC<Props> = ({ navigation }) => {
   const [priceData, setPriceData] = useState<PriceData | null>(null);
   const [progCalc, setProgCalc] = useState<ProgressiveCalcData | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [currentDbName, setCurrentDbName] = useState<string>('');
 
   // Loading state per tab
   const [loadingBalance, setLoadingBalance] = useState(true);
@@ -579,7 +545,9 @@ const MySubscriptionScreen: React.FC<Props> = ({ navigation }) => {
   const handleTabChange = (tab: Tab) => {
     setActiveTab(tab);
     animateTab(tab);
-    if (tab === 'riwayat' && transactions.length === 0) {
+    if (tab === 'riwayat') {
+      // Always re-fetch history when switching to this tab
+      // so data reflects the current active database
       fetchHistory();
     }
   };
@@ -588,6 +556,10 @@ const MySubscriptionScreen: React.FC<Props> = ({ navigation }) => {
 
   const fetchBalance = useCallback(async () => {
     setLoadingBalance(true);
+    // Clear stale data immediately so old database's data doesn't show
+    setBalanceData(null);
+    setPriceData(null);
+    setProgCalc(null);
     try {
       const [balRes, priceRes] = await Promise.all([
         ApiService.getUserBalance(),
@@ -611,7 +583,11 @@ const MySubscriptionScreen: React.FC<Props> = ({ navigation }) => {
 
   const fetchHistory = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshingHistory(true);
-    else setLoadingHistory(true);
+    else {
+      setLoadingHistory(true);
+      // Clear stale data so old database's history doesn't show
+      setTransactions([]);
+    }
     try {
       const res = await ApiService.getUserTransactions();
       if (res.status && Array.isArray(res.data)) {
@@ -625,9 +601,66 @@ const MySubscriptionScreen: React.FC<Props> = ({ navigation }) => {
     }
   }, []);
 
-  useEffect(() => {
-    fetchBalance();
-  }, [fetchBalance]);
+  // useFocusEffect: re-fetch setiap kali screen mendapat fokus.
+  // Panggil getCurrentDatabase() LEBIH DULU untuk memastikan server sudah
+  // menggunakan database aktif yang benar (mengatasi auth-cache race condition).
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+
+      const loadData = async () => {
+        setActiveTab('saldo');
+        tabIndicatorAnim.setValue(0);
+        setBalanceData(null);
+        setPriceData(null);
+        setProgCalc(null);
+        setTransactions([]);
+        setLoadingBalance(true);
+
+        // Step 1: Verifikasi database aktif dari server
+        // Ini juga memaksa server melewati cache dan membaca database_name terbaru
+        // dari user_mapping.roles (karena auth cache di-invalidate saat setDatabase)
+        try {
+          const dbRes = await ApiService.getCurrentDatabase();
+          if (!cancelled && dbRes.status && dbRes.data) {
+            setCurrentDbName(dbRes.data);
+          }
+        } catch (e) {
+          console.warn('Could not verify active database:', e);
+        }
+
+        if (cancelled) return;
+
+        // Step 2: Fetch balance dan harga dengan database yang sudah benar
+        try {
+          const [balRes, priceRes] = await Promise.all([
+            ApiService.getUserBalance(),
+            ApiService.getMySubscriptionPrice(),
+          ]);
+
+          if (!cancelled) {
+            if (balRes.status && balRes.data) setBalanceData(balRes.data);
+            if (priceRes.status && priceRes.data) {
+              setPriceData(priceRes.data);
+              if (priceRes.data.fee_type === 'progressive') {
+                const calcRes = await ApiService.getProgressiveCalculation();
+                if (!cancelled && calcRes.status && calcRes.data) setProgCalc(calcRes.data);
+              }
+            }
+          }
+        } catch (e) {
+          console.error('Error fetching balance:', e);
+        } finally {
+          if (!cancelled) setLoadingBalance(false);
+        }
+      };
+
+      loadData();
+
+      // Cleanup: batalkan update state jika screen sudah di-unfocus
+      return () => { cancelled = true; };
+    }, [])
+  );
 
   const handleTopUpSuccess = () => {
     // Refresh balance and switch to riwayat tab
@@ -665,7 +698,7 @@ const MySubscriptionScreen: React.FC<Props> = ({ navigation }) => {
           <View>
             <Text style={styles.headerTitle}>Info Langganan</Text>
             <Text style={styles.headerSubtitle} numberOfLines={1}>
-              {(user as any)?.email || 'Akun Anda'}
+              {currentDbName ? `📦 ${currentDbName}` : ((user as any)?.email || 'Akun Anda')}
             </Text>
           </View>
         </View>
