@@ -13,7 +13,6 @@ export default function DiskonScreen({ navigation }: any) {
 
   const [index, setIndex] = useState(0);
   const [routes] = useState([
-    { key: 'lokal', title: 'Promo Lokal' },
     { key: 'aktif', title: 'Live Shopee' },
     { key: 'riwayat', title: 'Riwayat' },
     { key: 'analisis', title: 'Analisis' },
@@ -173,24 +172,30 @@ export default function DiskonScreen({ navigation }: any) {
   useFocusEffect(
     useCallback(() => {
       fetchShops();
-      fetchPromos();
-      fetchAutoRenewPromos();
-      // Load others when tab changes or initially if needed
-    }, [])
+      const currentRoute = routes[index]?.key;
+      if (currentRoute === 'aktif') {
+        fetchLivePromos();
+      } else if (currentRoute === 'riwayat') {
+        fetchHistoryPromos();
+      } else if (currentRoute === 'analisis') {
+        fetchAnalisis();
+      }
+    }, [index])
   );
 
   useEffect(() => {
-    if (index === 0 && promos.length === 0) fetchPromos();
-    if (index === 1 && livePromos.length === 0) fetchLivePromos();
-    if (index === 2 && historyPromos.length === 0) fetchHistoryPromos();
-    if (index === 3 && analisisItems.length === 0) fetchAnalisis();
+    const currentRoute = routes[index]?.key;
+    if (currentRoute === 'aktif' && livePromos.length === 0) fetchLivePromos();
+    if (currentRoute === 'riwayat' && historyPromos.length === 0) fetchHistoryPromos();
+    if (currentRoute === 'analisis' && analisisItems.length === 0) fetchAnalisis();
   }, [index]);
 
   useEffect(() => {
-    if (index === 3 && analisisActiveShopId !== 0) {
+    const currentRoute = routes[index]?.key;
+    if (currentRoute === 'analisis' && analisisActiveShopId !== 0) {
       fetchAnalisis();
     }
-  }, [analisisActiveShopId]);
+  }, [analisisActiveShopId, index]);
 
   const handleDeletePromo = (id: number) => {
     Alert.alert("Konfirmasi", "Yakin ingin menghapus promo ini (Lokal)?", [
@@ -726,8 +731,8 @@ export default function DiskonScreen({ navigation }: any) {
         )}
       />
 
-      {/* FAB Tambah Promo - hanya di tab Promo Lokal */}
-      {index === 0 && (
+      {/* FAB Tambah Promo - di tab Live Shopee */}
+      {routes[index]?.key === 'aktif' && (
         <TouchableOpacity 
           style={styles.fab}
           onPress={openAddModal}
@@ -903,7 +908,8 @@ export default function DiskonScreen({ navigation }: any) {
           onClose={() => setAddModalVisible(false)} 
           onSuccess={() => {
             setAddModalVisible(false);
-            fetchPromos();
+            fetchLivePromos();
+            fetchAnalisis();
           }} 
         />
       </Modal>
@@ -955,7 +961,8 @@ const styles = StyleSheet.create({
   },
   cardSelected: {
     borderColor: '#f59e0b',
-    borderWidth: 1,
+    borderWidth: 2,
+    backgroundColor: '#fffbeb',
   },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   cardTitle: { fontSize: 16, fontWeight: 'bold', color: '#1f2937', flex: 1 },
@@ -991,7 +998,7 @@ const styles = StyleSheet.create({
   etalaseTitle: { fontSize: 12, fontWeight: 'bold', color: '#64748b', marginBottom: 4 },
   etalaseText: { fontSize: 12, color: '#334155', marginBottom: 2 },
   // Analisis
-  cardSelected: { borderWidth: 2, borderColor: '#f59e0b', backgroundColor: '#fffbeb' },
+
   etalaseBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10, marginLeft: 6 },
   etalaseBadgeActive: { backgroundColor: '#dcfce7' },
   etalaseBadgeNone: { backgroundColor: '#f3f4f6' },
