@@ -99,27 +99,64 @@ export default function DiskonAddModal({ onClose, onSuccess, initialItems, initi
   };
 
   const handleSelectItem = (item: any) => {
-    const currentId = item.id || item.id_masterbarang || item.id_produk || item.ID;
-    if (selectedItems.find(i => i.id_masterbarang === currentId)) {
-      Alert.alert('Info', 'Barang sudah ada di daftar');
-      return;
+    if (item.variants && item.variants.length > 0 && !item.is_single_product) {
+      const newItemsToAdd: any[] = [];
+      item.variants.forEach((v: any) => {
+        const vId = v.id || v.id_masterbarang || v.id_produk || item.id || item.id_masterbarang || item.ID;
+        if (!selectedItems.find(i => i.id_masterbarang === vId)) {
+          const parentName = item.nama || item.NAMA || item.local_nama || '';
+          const fullName = v.nama
+            ? (v.nama.toLowerCase().includes(parentName.toLowerCase())
+              ? v.nama
+              : `${parentName} - ${v.nama}`)
+            : parentName;
+          newItemsToAdd.push({
+            id_masterbarang: vId,
+            nama: fullName,
+            hpp: Number(v.hpp || v.HPP || 0),
+            harga_jual_2: Number(v.harga_jual_2 || v.hargajual2 || v.HARGAJUAL2 || 0),
+            harga_promo: '',
+            persentase_promo: '',
+            purchase_limit: '0',
+            included_id_onlines: [],
+            showMappings: false
+          });
+        }
+      });
+
+      if (newItemsToAdd.length === 0) {
+        Alert.alert('Info', 'Semua varian barang sudah ada di daftar');
+        return;
+      }
+
+      const newItems = [...selectedItems, ...newItemsToAdd];
+      setSelectedItems(newItems);
+      setSearchResults([]);
+      setSearchQuery('');
+      checkPromoConflicts(selectedShop?.id || selectedShop?.ID, newItems);
+    } else {
+      const currentId = item.id || item.id_masterbarang || item.id_produk || item.ID;
+      if (selectedItems.find(i => i.id_masterbarang === currentId)) {
+        Alert.alert('Info', 'Barang sudah ada di daftar');
+        return;
+      }
+      const newItem = {
+        id_masterbarang: currentId,
+        nama: item.nama || item.NAMA || item.local_nama,
+        hpp: Number(item.hpp || item.HPP || 0),
+        harga_jual_2: Number(item.harga_jual_2 || item.hargajual2 || item.HARGAJUAL2 || 0),
+        harga_promo: '',
+        persentase_promo: '',
+        purchase_limit: '0',
+        included_id_onlines: [],
+        showMappings: false
+      };
+      const newItems = [...selectedItems, newItem];
+      setSelectedItems(newItems);
+      setSearchResults([]);
+      setSearchQuery('');
+      checkPromoConflicts(selectedShop?.id || selectedShop?.ID, newItems);
     }
-    const newItem = {
-      id_masterbarang: currentId,
-      nama: item.nama || item.NAMA || item.local_nama,
-      hpp: Number(item.hpp || item.HPP || 0),
-      harga_jual_2: Number(item.harga_jual_2 || item.hargajual2 || item.HARGAJUAL2 || 0),
-      harga_promo: '',
-      persentase_promo: '',
-      purchase_limit: '0',
-      included_id_onlines: [],
-      showMappings: false
-    };
-    const newItems = [...selectedItems, newItem];
-    setSelectedItems(newItems);
-    setSearchResults([]);
-    setSearchQuery('');
-    checkPromoConflicts(selectedShop?.id || selectedShop?.ID, newItems);
   };
 
   const handleRemoveItem = (id: number) => {
@@ -452,8 +489,10 @@ export default function DiskonAddModal({ onClose, onSuccess, initialItems, initi
             return (
               <View key={item.id_masterbarang} style={[styles.selectedCard, { opacity: cardOpacity }]}>
                 <View style={styles.selectedHeader}>
-                  <Text style={styles.selectedTitle} numberOfLines={2}>{item.nama}</Text>
-                  <TouchableOpacity onPress={() => handleRemoveItem(item.id_masterbarang)}>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1, marginRight: 8 }}>
+                    <Text style={[styles.selectedTitle, { flex: 0, marginRight: 0 }]} numberOfLines={1}>{item.nama}</Text>
+                  </ScrollView>
+                  <TouchableOpacity onPress={() => handleRemoveItem(item.id_masterbarang)} style={{ paddingLeft: 4 }}>
                     <Ionicons name="trash" size={20} color="#ef4444" />
                   </TouchableOpacity>
                 </View>

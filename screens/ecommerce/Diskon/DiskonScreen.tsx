@@ -493,22 +493,51 @@ export default function DiskonScreen({ navigation }: any) {
     const selectAll = () => setAnalisisSelected(new Set(allIds));
     const clearAll = () => setAnalisisSelected(new Set());
 
-    const buildPromoItems = (ids: Set<number>) =>
-      (analisisItems as any[])
-        .filter((i: any) => ids.has(i.id || i.id_masterbarang || i.id_produk))
-        .map((i: any) => ({
-          id_masterbarang: i.id || i.id_masterbarang || i.id_produk,
-          nama: i.nama,
-          sku: i.sku,
-          merk: i.merk,
-          hpp: i.hpp,
-          harga_jual_2: i.harga_jual_2,
-          harga_promo: '',
-          persentase_promo: '',
-          purchase_limit: '0',
-          included_id_onlines: [],
-          showMappings: false,
-        }));
+    const buildPromoItems = (ids: Set<number>) => {
+      const items: any[] = [];
+      (analisisItems as any[]).forEach((i: any) => {
+        const currentId = i.id || i.id_masterbarang || i.id_produk;
+        if (ids.has(currentId)) {
+          if (i.variants && i.variants.length > 0 && !i.is_single_product) {
+            i.variants.forEach((v: any) => {
+              const fullName = v.nama
+                ? (v.nama.toLowerCase().includes(i.nama.toLowerCase())
+                  ? v.nama
+                  : `${i.nama} - ${v.nama}`)
+                : i.nama;
+              items.push({
+                id_masterbarang: v.id || v.id_masterbarang || v.id_produk || currentId,
+                nama: fullName,
+                sku: v.sku || i.sku,
+                merk: v.merk || i.merk,
+                hpp: v.hpp || i.hpp,
+                harga_jual_2: v.harga_jual_2 || i.harga_jual_2,
+                harga_promo: '',
+                persentase_promo: '',
+                purchase_limit: '0',
+                included_id_onlines: [],
+                showMappings: false,
+              });
+            });
+          } else {
+            items.push({
+              id_masterbarang: currentId,
+              nama: i.nama,
+              sku: i.sku,
+              merk: i.merk,
+              hpp: i.hpp,
+              harga_jual_2: i.harga_jual_2,
+              harga_promo: '',
+              persentase_promo: '',
+              purchase_limit: '0',
+              included_id_onlines: [],
+              showMappings: false,
+            });
+          }
+        }
+      });
+      return items;
+    };
 
     return (
       <View style={{ flex: 1 }}>

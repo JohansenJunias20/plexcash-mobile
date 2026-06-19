@@ -8,7 +8,7 @@ import ApiService from '../../services/api';
 import type { AppStackParamList } from '../../navigation/RootNavigator';
 import BottomActionSheet, { ActionSheetAction } from '../../components/BottomActionSheet';
 import DaftarBarangModal, { ProductItem } from '../../components/DaftarBarangModal';
-import currency from '../../Server/view/helper/currency';
+
 
 // Types
 export type OrderCard = {
@@ -94,8 +94,11 @@ export default function OrdersListScreen() {
       const start = unix(dateStart); const end = unix(dateEnd);
       const shop = selectedShopId || 0;
       const res = await ApiService.authenticatedRequest(`/get/ecommerce/order/date/${start}/${end}?id_ecommerce=${shop}&mode=cepat&timestamp=${Math.floor(Date.now()/1000)}`);
-      if (res?.status && Array.isArray(res.data)) {
-        const mapped: OrderCard[] = res.data.map((rd: any) => {
+      if (res?.status) {
+        const standardOrders = Array.isArray(res.data) ? res.data : [];
+        const bookingOrders = Array.isArray(res.bookings) ? res.bookings : [];
+
+        const mappedStandard: OrderCard[] = standardOrders.map((rd: any) => {
           const isBookingOrder = rd.from === 'SHOPEE' && rd.booking_sn ? true : false;
           const orderType = isBookingOrder ? 'Standard by Booking' : (rd.orderType || 'Standard');
 
@@ -138,7 +141,40 @@ export default function OrdersListScreen() {
           };
         });
 
-        setAllItems(mapped);
+        const mappedBookings: OrderCard[] = bookingOrders.map((rd: any) => {
+          return {
+            id: String(rd.order_sn || rd.booking_sn || ''),
+            id_ecommerce: Number(rd.id_ecommerce || selectedShopId || 0),
+            platform: String(rd.platform || 'SHOPEE').toUpperCase(),
+            ecommerce_name: shops.find(s => s.id === rd.id_ecommerce)?.name || rd.platform || 'SHOPEE',
+            date: rd.create_time || rd.tanggal_order || undefined,
+            invoice: undefined,
+            status: rd.booking_status || 'BOOKING',
+            total_price: undefined,
+            ekspedisi: rd.shipping_carrier,
+            orderType: 'Standard by Booking',
+            booking_sn: rd.booking_sn,
+            retur: false,
+            dibuat: false,
+            dikirim: !!(rd.shipping_carrier || (rd.booking_status || '').toUpperCase().includes('SHIPPED')),
+            print: rd.print === true || rd.print === 1 || rd.print === '1',
+            print_timestamp: rd.print_timestamp || undefined,
+            scanned: rd.scanned === true || rd.scanned === 1 || rd.scanned === '1',
+            scan_timestamp: rd.scan_timestamp || null,
+            no_resi: rd.booking_sn || undefined,
+            items: (rd.items || []).map((it: any) => ({
+              sku: it.sku || '-',
+              name: it.name || '-',
+              qty: it.qty || 1,
+              price: 0,
+            })),
+            warehouse: '',
+            isBookingOrder: true,
+          };
+        });
+
+        const combined = [...mappedStandard, ...mappedBookings];
+        setAllItems(combined);
         setPage(1);
       } else {
         setAllItems([]);
@@ -461,15 +497,60 @@ export default function OrdersListScreen() {
       const payload = [{ id_ecommerce: item.id_ecommerce, order_id: item.id, A6: true }];
       const res = await ApiService.authenticatedRequest('/ecommerce/ship_label', { method: 'POST', body: JSON.stringify(payload) });
       if (!res || res.status === false) { Alert.alert('Failed', res?.reason || 'Failed to get label'); return; }
-      // Response may be array or object; normalize to array
-      const list = Array.isArray(res.data) ? res.data : res;
-      // Find first HTML_ENCODED label to preview
-      const htmlItem = list.find((x: any) => x?.type === 'HTML_ENCODED' && x.data);
-      if (htmlItem) {
-        navigation.navigate('LabelPreview', { html: String(htmlItem.data), title: `${item.platform} Label` });
+      
+      const list = Array.isArray(res.data) ? res.data : [res];
+
+      // Fetch recipe details if Shopee orders are present
+      const shopeeOrders = list.filter((it: any) => !it.error && it.data && it.platform === 'SHOPEE' && it.type === 'data');
+      let recipesMap: any = {};
+      if (shopeeOrders.length > 0) {
+        try {
+          const orderIds = shopeeOrders.map((it: any) => it.order_id);
+          const recipeRes = await ApiService.authenticatedRequest('/resi_recipe_details', {
+            method: 'POST',
+            body: JSON.stringify({ order_ids: orderIds }),
+          });
+          if (recipeRes?.status && Array.isArray(recipeRes.data)) {
+            recipesMap = recipeRes.data.reduce((acc: any, row: any) => {
+              const orderId = String(row.online_id || row.booking_sn || row.raw_online_id);
+              if (!acc[orderId]) acc[orderId] = {};
+              const recipeSku = String(row.recipe_sku);
+              if (!acc[orderId][recipeSku]) acc[orderId][recipeSku] = [];
+              
+              const existing = acc[orderId][recipeSku].find((c: any) => c.component_sku === row.component_sku && c.stock_type === row.stock_type && c.warehouse_name === row.warehouse_name);
+              if (existing) {
+                existing.component_qty += row.component_qty;
+              } else {
+                acc[orderId][recipeSku].push({
+                  recipe_nama: row.recipe_nama,
+                  component_nama: row.component_nama,
+                  component_sku: row.component_sku,
+                  component_qty: row.component_qty,
+                  warehouse_name: row.warehouse_name,
+                  stock_type: row.stock_type
+                });
+              }
+              return acc;
+            }, {});
+          }
+        } catch (recipeErr) {
+          console.warn('Failed to fetch recipe details for labels:', recipeErr);
+        }
+      }
+
+      const { processShippingLabels } = require('../../utils/printHelper');
+      const processed = processShippingLabels(list, recipesMap);
+      
+      if (processed.error) {
+        Alert.alert('Failed', processed.error);
         return;
       }
-      Alert.alert('Not supported', 'Label format is not supported on mobile yet. Please print from the web app.');
+      
+      navigation.navigate('LabelPreview', { 
+        html: processed.html, 
+        pdfUrl: processed.pdfUrl, 
+        title: `${item.platform} Label` 
+      });
     } catch (e: any) {
       console.error('printLabel error', e);
       Alert.alert('Error', e?.message || 'Failed to print label');
@@ -603,17 +684,59 @@ export default function OrdersListScreen() {
       }
 
       const list = Array.isArray(res.data) ? res.data : [res];
-      const htmlItem = list.find((x: any) => x?.type === 'HTML_ENCODED' && x.data);
 
-      if (htmlItem) {
-        navigation.navigate('LabelPreview', {
-          html: String(htmlItem.data),
-          title: `${selectedOrders.length} Labels`,
-        });
-        clearSelection();
-      } else {
-        Alert.alert('Not supported', 'Label format is not supported on mobile yet.');
+      // Fetch recipe details if Shopee orders are present
+      const shopeeOrders = list.filter((it: any) => !it.error && it.data && it.platform === 'SHOPEE' && it.type === 'data');
+      let recipesMap: any = {};
+      if (shopeeOrders.length > 0) {
+        try {
+          const orderIds = shopeeOrders.map((it: any) => it.order_id);
+          const recipeRes = await ApiService.authenticatedRequest('/resi_recipe_details', {
+            method: 'POST',
+            body: JSON.stringify({ order_ids: orderIds }),
+          });
+          if (recipeRes?.status && Array.isArray(recipeRes.data)) {
+            recipesMap = recipeRes.data.reduce((acc: any, row: any) => {
+              const orderId = String(row.online_id || row.booking_sn || row.raw_online_id);
+              if (!acc[orderId]) acc[orderId] = {};
+              const recipeSku = String(row.recipe_sku);
+              if (!acc[orderId][recipeSku]) acc[orderId][recipeSku] = [];
+              
+              const existing = acc[orderId][recipeSku].find((c: any) => c.component_sku === row.component_sku && c.stock_type === row.stock_type && c.warehouse_name === row.warehouse_name);
+              if (existing) {
+                existing.component_qty += row.component_qty;
+              } else {
+                acc[orderId][recipeSku].push({
+                  recipe_nama: row.recipe_nama,
+                  component_nama: row.component_nama,
+                  component_sku: row.component_sku,
+                  component_qty: row.component_qty,
+                  warehouse_name: row.warehouse_name,
+                  stock_type: row.stock_type
+                });
+              }
+              return acc;
+            }, {});
+          }
+        } catch (recipeErr) {
+          console.warn('Failed to fetch recipe details for labels:', recipeErr);
+        }
       }
+
+      const { processShippingLabels } = require('../../utils/printHelper');
+      const processed = processShippingLabels(list, recipesMap);
+
+      if (processed.error) {
+        Alert.alert('Failed', processed.error);
+        return;
+      }
+
+      navigation.navigate('LabelPreview', {
+        html: processed.html,
+        pdfUrl: processed.pdfUrl,
+        title: `${selectedOrders.length} Labels`,
+      });
+      clearSelection();
     } catch (e: any) {
       console.error('bulkPrintLabels error', e);
       Alert.alert('Error', e?.message || 'Failed to print labels');

@@ -19,6 +19,10 @@ import { getTokenAuth } from '../../../services/token';
 import IntervalDatePicker from '../../../components/pembelian/IntervalDatePicker';
 import SearchBaganAkunModal, { BaganAkunItem } from '../../../components/pembelian/SearchBaganAkunModal';
 import { useAuth } from '../../../context/AuthContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const DRAFT_KEY = '@plexcash:jurnal_biaya_draft';
+const LAST_SAVED_KEY = '@plexcash:jurnal_biaya_last_saved';
 
 interface JurnalItem {
   id: number;
@@ -28,6 +32,22 @@ interface JurnalItem {
   totalKredit: number;
   changed?: boolean;
 }
+
+const getErrorMessage = (reason: any, defaultMsg: string): string => {
+  if (!reason) return defaultMsg;
+  if (typeof reason === 'string') return reason;
+  if (typeof reason === 'object') {
+    try {
+      if (reason.message && typeof reason.message === 'string') {
+        return reason.message;
+      }
+      return JSON.stringify(reason);
+    } catch {
+      return defaultMsg;
+    }
+  }
+  return String(reason);
+};
 
 export default function JurnalBiayaScreen() {
   const navigation = useNavigation<any>();
@@ -56,12 +76,184 @@ export default function JurnalBiayaScreen() {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editData, setEditData] = useState<{ tanggal: string; keterangan: string }>({ tanggal: '', keterangan: '' });
 
-  // Initialize date on mount
+  // Caching and draft state
+  const [lastSavedData, setLastSavedData] = useState<any>(null);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  // Initialize date on mount and load cache (draft/last-saved)
   useEffect(() => {
-    const now = new Date();
-    const formattedDate = now.toISOString().slice(0, 19); // YYYY-MM-DDTHH:mm:ss
-    setTambahTanggal(formattedDate);
+    const initAndLoadCache = async () => {
+      const now = new Date();
+      const formattedDate = now.toISOString().slice(0, 19); // YYYY-MM-DDTHH:mm:ss
+      setTambahTanggal(formattedDate);
+
+      try {
+        const draftStr = await AsyncStorage.getItem(DRAFT_KEY);
+        const lastSavedStr = await AsyncStorage.getItem(LAST_SAVED_KEY);
+
+        let loadedBiaya = { kode: '', nama: '' };
+        let loadedKas = { kode: '', nama: '' };
+
+        if (lastSavedStr) {
+          setLastSavedData(JSON.parse(lastSavedStr));
+        }
+
+        if (draftStr) {
+          const draft = JSON.parse(draftStr);
+          if (draft.tanggal) setTambahTanggal(draft.tanggal);
+          if (draft.keterangan !== undefined) setTambahKeterangan(draft.keterangan);
+          if (draft.nominal !== undefined) setTambahNominal(draft.nominal);
+          if (draft.biaya) {
+            setBiaya(draft.biaya);
+            loadedBiaya = draft.biaya;
+          }
+          if (draft.kas) {
+            setKas(draft.kas);
+            loadedKas = draft.kas;
+          }
+        } else if (lastSavedStr) {
+          const lastSaved = JSON.parse(lastSavedStr);
+          if (lastSaved.keterangan !== undefined) setTambahKeterangan(lastSaved.keterangan);
+          if (lastSaved.nominal !== undefined) setTambahNominal(lastSaved.nominal);
+          if (lastSaved.biaya) {
+            setBiaya(lastSaved.biaya);
+            loadedBiaya = lastSaved.biaya;
+          }
+          if (lastSaved.kas) {
+            setKas(lastSaved.kas);
+            loadedKas = lastSaved.kas;
+          }
+          
+          setLastSavedData({
+            ...lastSaved,
+            tanggal: formattedDate
+          });
+        }
+
+        setIsLoaded(true);
+
+        if (loadedBiaya.kode || loadedKas.kode) {
+          validateAccounts(loadedBiaya.kode, loadedKas.kode);
+        }
+      } catch (e) {
+        console.error('Error loading cache:', e);
+        setIsLoaded(true);
+      }
+    };
+    initAndLoadCache();
   }, []);
+
+  const validateAccounts = async (bKode: string, kKode: string) => {
+    if (!bKode && !kKode) return;
+    try {
+      const token = await getTokenAuth();
+      if (!token) return;
+
+      const res = await fetch(`${API_BASE_URL}/get/baganakun`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+
+      if (data.status && data.data) {
+        const activeCodes = new Set(data.data.map((item: any) => item.kode));
+        
+        let biayaInvalid = false;
+        let kasInvalid = false;
+
+        if (bKode && !activeCodes.has(bKode)) {
+          biayaInvalid = true;
+          setBiaya({ kode: '', nama: '' });
+        }
+
+        if (kKode && !activeCodes.has(kKode)) {
+          kasInvalid = true;
+          setKas({ kode: '', nama: '' });
+        }
+
+        if (biayaInvalid || kasInvalid) {
+          Alert.alert(
+            'Informasi Akun',
+            'Beberapa akun yang dipilih sebelumnya tidak lagi valid atau telah dihapus dari Bagan Akun. Form telah direset.'
+          );
+        }
+      }
+    } catch (e) {
+      console.error('Error validating accounts:', e);
+    }
+  };
+
+  const saveDraft = async (
+    tanggal: string,
+    ket: string,
+    nom: string,
+    bAkun: { kode: string; nama: string },
+    kAkun: { kode: string; nama: string }
+  ) => {
+    try {
+      const draft = {
+        tanggal,
+        keterangan: ket,
+        nominal: nom,
+        biaya: bAkun,
+        kas: kAkun,
+      };
+      await AsyncStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    } catch (e) {
+      console.error('Error saving draft:', e);
+    }
+  };
+
+  const clearDraft = async () => {
+    try {
+      await AsyncStorage.removeItem(DRAFT_KEY);
+    } catch (e) {
+      console.error('Error clearing draft:', e);
+    }
+  };
+
+  const isFormChanged = (
+    tanggal: string,
+    ket: string,
+    nom: string,
+    bAkun: { kode: string; nama: string },
+    kAkun: { kode: string; nama: string },
+    lastSaved: any
+  ) => {
+    if (!lastSaved) return true;
+    return (
+      tanggal !== lastSaved.tanggal ||
+      ket !== lastSaved.keterangan ||
+      nom !== lastSaved.nominal ||
+      bAkun.kode !== lastSaved.biaya?.kode ||
+      kAkun.kode !== lastSaved.kas?.kode
+    );
+  };
+
+  const isFormEmpty = (
+    ket: string,
+    nom: string,
+    bAkun: { kode: string; nama: string },
+    kAkun: { kode: string; nama: string }
+  ) => {
+    return !ket && !nom && !bAkun.kode && !kAkun.kode;
+  };
+
+  // Monitor form changes to automatically save draft
+  useEffect(() => {
+    if (isLoaded) {
+      const empty = isFormEmpty(tambahKeterangan, tambahNominal, biaya, kas);
+      if (empty) {
+        clearDraft();
+      } else {
+        const changed = isFormChanged(tambahTanggal, tambahKeterangan, tambahNominal, biaya, kas, lastSavedData);
+        if (changed) {
+          saveDraft(tambahTanggal, tambahKeterangan, tambahNominal, biaya, kas);
+        } else {
+          clearDraft();
+        }
+      }
+    }
+  }, [tambahTanggal, tambahKeterangan, tambahNominal, biaya, kas, isLoaded, lastSavedData]);
 
   const loadRiwayat = async (start: string, end: string) => {
     try {
@@ -110,7 +302,7 @@ export default function JurnalBiayaScreen() {
         biayaItems.sort((a, b) => new Date(b.tanggal).getTime() - new Date(a.tanggal).getTime());
         setRiwayat(biayaItems);
       } else {
-        Alert.alert('Error', data.reason || 'Failed to load riwayat');
+        Alert.alert('Error', getErrorMessage(data.reason, 'Failed to load riwayat'));
       }
     } catch (error) {
       console.error('Load riwayat error:', error);
@@ -176,18 +368,34 @@ export default function JurnalBiayaScreen() {
       if (resData.status) {
         Alert.alert('Sukses', 'Berhasil menambah biaya operasional');
         
+        const lastSaved = {
+          tanggal: tambahTanggal,
+          keterangan: tambahKeterangan || biaya.nama,
+          nominal: tambahNominal,
+          biaya: biaya,
+          kas: kas,
+        };
+
+        await AsyncStorage.setItem(LAST_SAVED_KEY, JSON.stringify(lastSaved));
+        setLastSavedData(lastSaved);
+        await AsyncStorage.removeItem(DRAFT_KEY);
+
         // Reset form
         setTambahKeterangan('');
         setBiaya({ kode: '', nama: '' });
         setKas({ kode: '', nama: '' });
         setTambahNominal('');
+
+        const now = new Date();
+        const formattedDate = now.toISOString().slice(0, 19);
+        setTambahTanggal(formattedDate);
         
         // Refresh riwayat
         if (intervalDate.start && intervalDate.end) {
           loadRiwayat(intervalDate.start, intervalDate.end);
         }
       } else {
-        Alert.alert('Error', resData.reason || 'Gagal menyimpan biaya');
+        Alert.alert('Error', getErrorMessage(resData.reason, 'Gagal menyimpan biaya'));
       }
     } catch (error) {
       console.error('Save error:', error);
@@ -240,7 +448,7 @@ export default function JurnalBiayaScreen() {
           loadRiwayat(intervalDate.start, intervalDate.end);
         }
       } else {
-        Alert.alert('Error', resData.reason || 'Gagal update data');
+        Alert.alert('Error', getErrorMessage(resData.reason, 'Gagal update data'));
       }
     } catch (error) {
       Alert.alert('Error', 'Terjadi kesalahan');
@@ -276,7 +484,7 @@ export default function JurnalBiayaScreen() {
                 Alert.alert('Sukses', 'Biaya berhasil dihapus');
                 setRiwayat(riwayat.filter(item => item.id !== id));
               } else {
-                Alert.alert('Error', resData.reason || 'Gagal menghapus data');
+                Alert.alert('Error', getErrorMessage(resData.reason, 'Gagal menghapus data'));
               }
             } catch (error) {
               Alert.alert('Error', 'Terjadi kesalahan');
@@ -477,6 +685,7 @@ export default function JurnalBiayaScreen() {
           setShowBiayaModal(false);
         }}
         shows={['6']}
+        leafOnly={true}
       />
 
       <SearchBaganAkunModal
@@ -487,6 +696,7 @@ export default function JurnalBiayaScreen() {
           setShowKasModal(false);
         }}
         shows={['111']}
+        leafOnly={true}
       />
     </SafeAreaView>
   );

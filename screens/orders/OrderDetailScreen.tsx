@@ -217,13 +217,60 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
       const payload = [{ id_ecommerce: detail.id_ecommerce, order_id: detail.id, A6: true }];
       const res = await ApiService.authenticatedRequest('/ecommerce/ship_label', { method: 'POST', body: JSON.stringify(payload) });
       if (!res || res.status === false) { Alert.alert('Failed', res?.reason || 'Failed to get label'); return; }
-      const list = Array.isArray(res.data) ? res.data : res;
-      const htmlItem = list.find((x: any) => x?.type === 'HTML_ENCODED' && x.data);
-      if (htmlItem) {
-        navigation.navigate('LabelPreview', { html: String(htmlItem.data), title: `${detail.platform} Label` });
+      
+      const list = Array.isArray(res.data) ? res.data : [res];
+
+      // Fetch recipe details if Shopee orders are present
+      const shopeeOrders = list.filter((item: any) => !item.error && item.data && item.platform === 'SHOPEE' && item.type === 'data');
+      let recipesMap: any = {};
+      if (shopeeOrders.length > 0) {
+        try {
+          const orderIds = shopeeOrders.map((item: any) => item.order_id);
+          const recipeRes = await ApiService.authenticatedRequest('/resi_recipe_details', {
+            method: 'POST',
+            body: JSON.stringify({ order_ids: orderIds }),
+          });
+          if (recipeRes?.status && Array.isArray(recipeRes.data)) {
+            recipesMap = recipeRes.data.reduce((acc: any, row: any) => {
+              const orderId = String(row.online_id || row.booking_sn || row.raw_online_id);
+              if (!acc[orderId]) acc[orderId] = {};
+              const recipeSku = String(row.recipe_sku);
+              if (!acc[orderId][recipeSku]) acc[orderId][recipeSku] = [];
+              
+              const existing = acc[orderId][recipeSku].find((c: any) => c.component_sku === row.component_sku && c.stock_type === row.stock_type && c.warehouse_name === row.warehouse_name);
+              if (existing) {
+                existing.component_qty += row.component_qty;
+              } else {
+                acc[orderId][recipeSku].push({
+                  recipe_nama: row.recipe_nama,
+                  component_nama: row.component_nama,
+                  component_sku: row.component_sku,
+                  component_qty: row.component_qty,
+                  warehouse_name: row.warehouse_name,
+                  stock_type: row.stock_type
+                });
+              }
+              return acc;
+            }, {});
+          }
+        } catch (recipeErr) {
+          console.warn('Failed to fetch recipe details for labels:', recipeErr);
+        }
+      }
+      
+      const { processShippingLabels } = require('../../utils/printHelper');
+      const processed = processShippingLabels(list, recipesMap);
+      
+      if (processed.error) {
+        Alert.alert('Failed', processed.error);
         return;
       }
-      Alert.alert('Not supported', 'Label format is not supported on mobile yet. Please print from the web app.');
+      
+      navigation.navigate('LabelPreview', { 
+        html: processed.html, 
+        pdfUrl: processed.pdfUrl, 
+        title: `${detail.platform} Label` 
+      });
     } catch (e: any) { console.error('printLabel', e); Alert.alert('Error', e?.message || 'Failed'); }
   };
 

@@ -558,18 +558,58 @@ export default function PesananV2Screen() {
             body: JSON.stringify(payload)
         });
 
-        if (!res?.status) throw new Error(res?.reason || 'Gagal cetak resi');
-
-        // Navigasi ke LabelPreviewScreen
-        // Cari HTML encoded data
         const list = Array.isArray(res.data) ? res.data : [res];
-        const htmlItem = list.find((x: any) => x?.type === 'HTML_ENCODED' && x.data);
-        
-        if (htmlItem) {
-             navigation.navigate('LabelPreview', { html: String(htmlItem.data), title: `Label Pengiriman (${ordersToProcess.length})` });
-        } else {
-             Alert.alert('Not Supported', 'Format label tidak didukung di mobile. Silakan gunakan Web.');
+
+        // Fetch recipe details if Shopee orders are present
+        const shopeeOrders = list.filter((it: any) => !it.error && it.data && it.platform === 'SHOPEE' && it.type === 'data');
+        let recipesMap: any = {};
+        if (shopeeOrders.length > 0) {
+          try {
+            const orderIds = shopeeOrders.map((it: any) => it.order_id);
+            const recipeRes = await ApiService.authenticatedRequest('/resi_recipe_details', {
+              method: 'POST',
+              body: JSON.stringify({ order_ids: orderIds }),
+            });
+            if (recipeRes?.status && Array.isArray(recipeRes.data)) {
+              recipesMap = recipeRes.data.reduce((acc: any, row: any) => {
+                const orderId = String(row.online_id || row.booking_sn || row.raw_online_id);
+                if (!acc[orderId]) acc[orderId] = {};
+                const recipeSku = String(row.recipe_sku);
+                if (!acc[orderId][recipeSku]) acc[orderId][recipeSku] = [];
+                
+                const existing = acc[orderId][recipeSku].find((c: any) => c.component_sku === row.component_sku && c.stock_type === row.stock_type && c.warehouse_name === row.warehouse_name);
+                if (existing) {
+                  existing.component_qty += row.component_qty;
+                } else {
+                  acc[orderId][recipeSku].push({
+                    recipe_nama: row.recipe_nama,
+                    component_nama: row.component_nama,
+                    component_sku: row.component_sku,
+                    component_qty: row.component_qty,
+                    warehouse_name: row.warehouse_name,
+                    stock_type: row.stock_type
+                  });
+                }
+                return acc;
+              }, {});
+            }
+          } catch (recipeErr) {
+            console.warn('Failed to fetch recipe details for labels:', recipeErr);
+          }
         }
+
+        const { processShippingLabels } = require('../../utils/printHelper');
+        const processed = processShippingLabels(list, recipesMap);
+
+        if (processed.error) {
+            throw new Error(processed.error);
+        }
+
+        navigation.navigate('LabelPreview', { 
+            html: processed.html, 
+            pdfUrl: processed.pdfUrl, 
+            title: `Label Pengiriman (${ordersToProcess.length})` 
+        });
 
     } catch (e: any) {
         Alert.alert('Gagal', e.message);

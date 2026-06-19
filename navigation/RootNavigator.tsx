@@ -67,7 +67,7 @@ export type AppStackParamList = {
       items?: { sku: string; nama: string; qty: number; harga_jual?: number }[];
     };
   };
-  LabelPreview: { html: string; title?: string };
+  LabelPreview: { html?: string; pdfUrl?: string; title?: string };
   ScanOut: undefined;
   POSKasir: undefined;
   UserList: undefined;

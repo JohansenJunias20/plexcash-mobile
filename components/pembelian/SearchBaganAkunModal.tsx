@@ -27,6 +27,7 @@ interface SearchBaganAkunModalProps {
   onSelect: (item: BaganAkunItem) => void;
   title?: string;
   shows?: string[]; // Filter by kode_induk (e.g., ["111"] for cash accounts)
+  leafOnly?: boolean;
 }
 
 const SearchBaganAkunModal: React.FC<SearchBaganAkunModalProps> = ({
@@ -35,6 +36,7 @@ const SearchBaganAkunModal: React.FC<SearchBaganAkunModalProps> = ({
   onSelect,
   title = 'Cari Bagan Akun',
   shows = [],
+  leafOnly = false,
 }) => {
   const [query, setQuery] = useState('');
   const [items, setItems] = useState<BaganAkunItem[]>([]);
@@ -72,6 +74,11 @@ const SearchBaganAkunModal: React.FC<SearchBaganAkunModalProps> = ({
           kode_induk: item.kode_induk,
           depth: item.depth || 0,
         }));
+
+        if (leafOnly) {
+          const parentCodes = new Set(accounts.map(acc => acc.kode_induk).filter(Boolean));
+          accounts = accounts.filter((acc: BaganAkunItem) => !parentCodes.has(acc.kode));
+        }
 
         // Filter by shows (kode_induk)
         if (shows.length > 0) {
