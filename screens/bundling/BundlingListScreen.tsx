@@ -11,6 +11,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import NewOnlineModal from '../../components/NewOnlineModal';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect, DrawerActions } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -38,6 +39,13 @@ export default function BundlingListScreen(): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [query, setQuery] = useState('');
+  const [selectedItem, setSelectedItem] = useState<BundlingItem | null>(null);
+  const [showOnlineModal, setShowOnlineModal] = useState(false);
+
+  const handleOpenOnline = (item: BundlingItem) => {
+    setSelectedItem(item);
+    setShowOnlineModal(true);
+  };
 
   const fetchBundling = async () => {
     try {
@@ -180,12 +188,20 @@ export default function BundlingListScreen(): JSX.Element {
           )}
         </View>
       </View>
-      <TouchableOpacity
-        style={styles.deleteButton}
-        onPress={() => handleDelete(item.id, item.nama)}
-      >
-        <Ionicons name="trash-outline" size={20} color="#EF4444" />
-      </TouchableOpacity>
+      <View style={styles.cardActions}>
+        <TouchableOpacity
+          style={styles.onlineButton}
+          onPress={() => handleOpenOnline(item)}
+        >
+          <Ionicons name="cloud-upload-outline" size={20} color="#059669" />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.deleteButton}
+          onPress={() => handleDelete(item.id, item.nama)}
+        >
+          <Ionicons name="trash-outline" size={20} color="#EF4444" />
+        </TouchableOpacity>
+      </View>
     </TouchableOpacity>
   );
 
@@ -258,6 +274,14 @@ export default function BundlingListScreen(): JSX.Element {
       >
         <Ionicons name="add" size={28} color="#fff" />
       </TouchableOpacity>
+
+      {/* Online Product Management Modal */}
+      <NewOnlineModal
+        visible={showOnlineModal}
+        productId={selectedItem?.id || null}
+        from="bundling"
+        onClose={() => setShowOnlineModal(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -362,6 +386,18 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   deleteButton: {
+    padding: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingLeft: 8,
+  },
+  onlineButton: {
     padding: 8,
     justifyContent: 'center',
     alignItems: 'center',

@@ -22,9 +22,10 @@ interface NewOnlineModalProps {
   visible: boolean;
   productId: number | null;
   onClose: () => void;
+  from?: 'masterbarang' | 'bundling';
 }
 
-export default function NewOnlineModal({ visible, productId, onClose }: NewOnlineModalProps): JSX.Element {
+export default function NewOnlineModal({ visible, productId, onClose, from = 'masterbarang' }: NewOnlineModalProps): JSX.Element {
   const [index, setIndex] = useState(0);
   const [routes] = useState([
     { key: 'binding', title: 'Binding' },
@@ -40,9 +41,9 @@ export default function NewOnlineModal({ visible, productId, onClose }: NewOnlin
   }, [visible]);
 
   const renderScene = SceneMap({
-    binding: () => <BindingTab productId={productId} />,
-    upload: () => <UploadTab productId={productId} />,
-    edit: () => <EditTab productId={productId} />,
+    binding: () => <BindingTab productId={productId} from={from} />,
+    upload: () => <UploadTab productId={productId} from={from} />,
+    edit: () => <EditTab productId={productId} from={from} />,
   });
 
   const renderTabBar = (props: any) => (

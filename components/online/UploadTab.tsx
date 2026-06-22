@@ -18,11 +18,12 @@ import * as ImagePicker from 'expo-image-picker';
 
 interface UploadTabProps {
   productId: number | null;
+  from?: 'masterbarang' | 'bundling';
 }
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-export default function UploadTab({ productId }: UploadTabProps): JSX.Element {
+export default function UploadTab({ productId, from = 'masterbarang' }: UploadTabProps): JSX.Element {
   const [images, setImages] = useState<string[]>([]);
   const [name, setName] = useState('');
   const [sku, setSku] = useState('');

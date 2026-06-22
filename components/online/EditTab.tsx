@@ -20,11 +20,12 @@ import ApiService from '../../services/api';
 
 interface EditTabProps {
   productId: number | null;
+  from?: 'masterbarang' | 'bundling';
 }
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-export default function EditTab({ productId }: EditTabProps): JSX.Element {
+export default function EditTab({ productId, from = 'masterbarang' }: EditTabProps): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [platforms, setPlatforms] = useState<any[]>([]);
   const [selectedPlatform, setSelectedPlatform] = useState<any>(null);
@@ -47,7 +48,7 @@ export default function EditTab({ productId }: EditTabProps): JSX.Element {
       setLoading(true);
 
       const response = await ApiService.authenticatedRequest(
-        `/get/ecommerce/ALL/product?id_database=${productId}&from=masterbarang`
+        `/get/ecommerce/ALL/product?id_database=${productId}&from=${from}`
       );
 
       console.log('🔍 [EDIT] API Response:', JSON.stringify(response, null, 2));

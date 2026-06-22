@@ -81,6 +81,64 @@ export default function PreOrderScreen() {
     supplierId: null,
   });
 
+  const [tempFilters, setTempFilters] = useState<FilterState>({
+    dateFrom: '',
+    dateTo: '',
+    status: 'all',
+    supplierId: null,
+  });
+
+  const [showFilterDateFromPicker, setShowFilterDateFromPicker] = useState(false);
+  const [showFilterDateToPicker, setShowFilterDateToPicker] = useState(false);
+  const [showFilterSupplierModal, setShowFilterSupplierModal] = useState(false);
+
+  const handleOpenFilter = () => {
+    setTempFilters(filters);
+    setShowFilterModal(true);
+  };
+
+  const handleApplyFilter = () => {
+    setFilters(tempFilters);
+    setShowFilterModal(false);
+  };
+
+  const handleResetFilter = () => {
+    setTempFilters({
+      dateFrom: '',
+      dateTo: '',
+      status: 'all',
+      supplierId: null,
+    });
+  };
+
+  const handleSelectFilterSupplier = (supplier: SupplierItem) => {
+    setTempFilters({
+      ...tempFilters,
+      supplierId: supplier.id,
+    });
+    setShowFilterSupplierModal(false);
+  };
+
+  const handleFilterDateFromChange = (_: DateTimePickerEvent, selectedDate?: Date) => {
+    setShowFilterDateFromPicker(false);
+    if (selectedDate) {
+      setTempFilters({
+        ...tempFilters,
+        dateFrom: moment(selectedDate).format('YYYY-MM-DD'),
+      });
+    }
+  };
+
+  const handleFilterDateToChange = (_: DateTimePickerEvent, selectedDate?: Date) => {
+    setShowFilterDateToPicker(false);
+    if (selectedDate) {
+      setTempFilters({
+        ...tempFilters,
+        dateTo: moment(selectedDate).format('YYYY-MM-DD'),
+      });
+    }
+  };
+
   useEffect(() => {
     fetchPreOrders();
     fetchSuppliers();
@@ -246,7 +304,7 @@ export default function PreOrderScreen() {
       id_masterbarang: item.id,
       nama: item.nama,
       qty: 1,
-      harga: item.hargabeli || 0,
+      harga: (item as any).hargabeli || 0,
       merk: item.merk || '',
       satuan: item.satuan || 'pcs',
     }));
@@ -494,7 +552,7 @@ export default function PreOrderScreen() {
             <Text style={styles.actionButtonText}>Edit</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.actionButton, item.id_pembelian && styles.actionButtonDisabled]}
+            style={[styles.actionButton, !!item.id_pembelian && styles.actionButtonDisabled]}
             onPress={() => handleDeletePreOrder(item)}
             disabled={!!item.id_pembelian}
           >
@@ -505,7 +563,7 @@ export default function PreOrderScreen() {
             />
             <Text style={[
               styles.actionButtonText,
-              item.id_pembelian && styles.actionButtonTextDisabled
+              !!item.id_pembelian && styles.actionButtonTextDisabled
             ]}>
               Hapus
             </Text>
@@ -544,7 +602,7 @@ export default function PreOrderScreen() {
         <Text style={styles.headerTitle}>Pre Order</Text>
         <TouchableOpacity
           style={styles.filterButton}
-          onPress={() => setShowFilterModal(true)}
+          onPress={handleOpenFilter}
         >
           <Ionicons name="filter" size={24} color="#111827" />
           {activeFilterCount > 0 && (
@@ -785,6 +843,206 @@ export default function PreOrderScreen() {
         onSelect={handleSelectBarang}
         multiSelect={true}
         excludeIds={currentPreOrder.items.map(item => item.id_masterbarang)}
+      />
+
+      {/* Filter Pre Order Modal */}
+      <Modal
+        visible={showFilterModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowFilterModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Filter Pre Order</Text>
+              <TouchableOpacity onPress={() => setShowFilterModal(false)}>
+                <Ionicons name="close" size={24} color="#111827" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalContent}>
+              {/* Status Filter */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Status</Text>
+                <View style={styles.filterChipRow}>
+                  <TouchableOpacity
+                    style={[
+                      styles.filterChip,
+                      tempFilters.status === 'all' && styles.filterChipSelected,
+                    ]}
+                    onPress={() => setTempFilters({ ...tempFilters, status: 'all' })}
+                  >
+                    <Text
+                      style={[
+                        styles.filterChipText,
+                        tempFilters.status === 'all' && styles.filterChipTextSelected,
+                      ]}
+                    >
+                      Semua
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.filterChip,
+                      tempFilters.status === 'pending' && styles.filterChipSelected,
+                    ]}
+                    onPress={() => setTempFilters({ ...tempFilters, status: 'pending' })}
+                  >
+                    <Text
+                      style={[
+                        styles.filterChipText,
+                        tempFilters.status === 'pending' && styles.filterChipTextSelected,
+                      ]}
+                    >
+                      Pending
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.filterChip,
+                      tempFilters.status === 'converted' && styles.filterChipSelected,
+                    ]}
+                    onPress={() => setTempFilters({ ...tempFilters, status: 'converted' })}
+                  >
+                    <Text
+                      style={[
+                        styles.filterChipText,
+                        tempFilters.status === 'converted' && styles.filterChipTextSelected,
+                      ]}
+                    >
+                      Converted
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Supplier Filter */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Supplier</Text>
+                <View style={styles.selectButtonContainer}>
+                  <TouchableOpacity
+                    style={[styles.selectButton, { flex: 1 }]}
+                    onPress={() => setShowFilterSupplierModal(true)}
+                  >
+                    <Text
+                      style={[
+                        styles.selectButtonText,
+                        !tempFilters.supplierId && styles.selectButtonPlaceholder,
+                      ]}
+                    >
+                      {tempFilters.supplierId
+                        ? suppliers.find(s => s.id === tempFilters.supplierId)?.nama || 'Supplier terpilih'
+                        : 'Pilih Supplier'}
+                    </Text>
+                    <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+                  </TouchableOpacity>
+                  {tempFilters.supplierId !== null && (
+                    <TouchableOpacity
+                      onPress={() => setTempFilters({ ...tempFilters, supplierId: null })}
+                      style={styles.clearFilterButton}
+                    >
+                      <Ionicons name="close-circle" size={24} color="#EF4444" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+
+              {/* Date From Filter */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Tanggal Awal</Text>
+                <View style={styles.selectButtonContainer}>
+                  <TouchableOpacity
+                    style={[styles.datePickerButton, { flex: 1 }]}
+                    onPress={() => setShowFilterDateFromPicker(true)}
+                  >
+                    <Ionicons name="calendar-outline" size={18} color="#6B7280" />
+                    <Text style={styles.datePickerText}>
+                      {tempFilters.dateFrom
+                        ? moment(tempFilters.dateFrom).format('DD/MM/YYYY')
+                        : 'Pilih Tanggal Awal'}
+                    </Text>
+                    <Ionicons name="chevron-down" size={16} color="#9CA3AF" />
+                  </TouchableOpacity>
+                  {tempFilters.dateFrom !== '' && (
+                    <TouchableOpacity
+                      onPress={() => setTempFilters({ ...tempFilters, dateFrom: '' })}
+                      style={styles.clearFilterButton}
+                    >
+                      <Ionicons name="close-circle" size={24} color="#EF4444" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+                {showFilterDateFromPicker && (
+                  <DateTimePicker
+                    value={tempFilters.dateFrom ? new Date(tempFilters.dateFrom) : new Date()}
+                    mode="date"
+                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    onChange={handleFilterDateFromChange}
+                  />
+                )}
+              </View>
+
+              {/* Date To Filter */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Tanggal Akhir</Text>
+                <View style={styles.selectButtonContainer}>
+                  <TouchableOpacity
+                    style={[styles.datePickerButton, { flex: 1 }]}
+                    onPress={() => setShowFilterDateToPicker(true)}
+                  >
+                    <Ionicons name="calendar-outline" size={18} color="#6B7280" />
+                    <Text style={styles.datePickerText}>
+                      {tempFilters.dateTo
+                        ? moment(tempFilters.dateTo).format('DD/MM/YYYY')
+                        : 'Pilih Tanggal Akhir'}
+                    </Text>
+                    <Ionicons name="chevron-down" size={16} color="#9CA3AF" />
+                  </TouchableOpacity>
+                  {tempFilters.dateTo !== '' && (
+                    <TouchableOpacity
+                      onPress={() => setTempFilters({ ...tempFilters, dateTo: '' })}
+                      style={styles.clearFilterButton}
+                    >
+                      <Ionicons name="close-circle" size={24} color="#EF4444" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+                {showFilterDateToPicker && (
+                  <DateTimePicker
+                    value={tempFilters.dateTo ? new Date(tempFilters.dateTo) : new Date()}
+                    mode="date"
+                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    onChange={handleFilterDateToChange}
+                  />
+                )}
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={handleResetFilter}
+              >
+                <Text style={styles.cancelButtonText}>Reset</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.saveButton}
+                onPress={handleApplyFilter}
+              >
+                <Text style={styles.saveButtonText}>Terapkan Filter</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Supplier Modal for Filter */}
+      <SearchSupplierModal
+        visible={showFilterSupplierModal}
+        onClose={() => setShowFilterSupplierModal(false)}
+        onSelect={handleSelectFilterSupplier}
+        title="Pilih Supplier untuk Filter"
       />
     </SafeAreaView>
   );
@@ -1182,6 +1440,43 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: 'white',
+  },
+  filterChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 8,
+  },
+  filterChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  filterChipSelected: {
+    backgroundColor: '#FEF3C7',
+    borderColor: '#f59e0b',
+  },
+  filterChipText: {
+    fontSize: 14,
+    color: '#4B5563',
+    fontWeight: '500',
+  },
+  filterChipTextSelected: {
+    color: '#b45309',
+    fontWeight: '700',
+  },
+  selectButtonContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  clearFilterButton: {
+    padding: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
 

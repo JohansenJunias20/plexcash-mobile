@@ -52,9 +52,10 @@ interface EcommerceAccount {
 
 interface BindingTabProps {
   productId: number | null;
+  from?: 'masterbarang' | 'bundling';
 }
 
-export default function BindingTab({ productId }: BindingTabProps): JSX.Element {
+export default function BindingTab({ productId, from = 'masterbarang' }: BindingTabProps): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [platforms, setPlatforms] = useState<Platform[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -98,7 +99,7 @@ export default function BindingTab({ productId }: BindingTabProps): JSX.Element 
 
       // Fetch platform bindings
       const response = await ApiService.authenticatedRequest(
-        `/get/ecommerce/ALL/product?id_database=${productId}&from=masterbarang`
+        `/get/ecommerce/ALL/product?id_database=${productId}&from=${from}`
       );
 
       console.log('🔍 [BINDING] API Response:', JSON.stringify(response, null, 2));
@@ -132,13 +133,30 @@ export default function BindingTab({ productId }: BindingTabProps): JSX.Element 
         setPlatforms(platformData);
       }
 
-      // Fetch master barang data
-      const masterResponse = await ApiService.authenticatedRequest(
-        `/get/masterbarang/condition/and/id:equal:${productId}`
-      );
+      // Fetch master barang or bundling data
+      let masterResponse;
+      if (from === 'bundling') {
+        masterResponse = await ApiService.authenticatedRequest(
+          `/get/bundling?id=${productId}`
+        );
+      } else {
+        masterResponse = await ApiService.authenticatedRequest(
+          `/get/masterbarang/condition/and/id:equal:${productId}`
+        );
+      }
 
-      if (masterResponse?.status && masterResponse.data?.[0]) {
-        setProductData(masterResponse.data[0]);
+      if (masterResponse?.status) {
+        const data = from === 'bundling' ? masterResponse.data : masterResponse.data?.[0];
+        if (data) {
+          setProductData({
+            id: data.id,
+            nama: data.nama,
+            sku: data.sku,
+            hargajual2: data.hargajual2 || data.harga || data.hargajual || 0,
+            stok: data.stok || 0,
+            berat: data.berat || 0,
+          });
+        }
       }
 
     } catch (error) {
@@ -240,7 +258,7 @@ export default function BindingTab({ productId }: BindingTabProps): JSX.Element 
       setSyncingStock(true);
       const response = await ApiService.authenticatedRequest('/ecommerce/sync/stock', {
         method: 'POST',
-        body: JSON.stringify([{ id_barang: productId }]),
+        body: JSON.stringify([{ id_barang: productId, from }]),
       });
 
       if (response?.status) {
@@ -365,6 +383,7 @@ export default function BindingTab({ productId }: BindingTabProps): JSX.Element 
         new_sku: productData.sku,
         images: [],
         platforms: [newPlatformPayload],
+        from: from,
       };
 
       console.log('🔗 [BIND] Sending bind request:', JSON.stringify(uploadPayload));
