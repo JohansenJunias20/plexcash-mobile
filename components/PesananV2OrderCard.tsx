@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Modal, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Modal, ScrollView, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import moment from 'moment';
 import { useAccess } from '../context/AccessContext';
+import { API_BASE_URL } from '../services/api';
+import { getTokenAuth } from '../services/token';
 
 const C = {
   primary: '#D97706',
@@ -42,17 +44,121 @@ interface Props {
 export default function PesananV2OrderCard({ order, isSelected, onToggleSelect, onPress }: Props) {
   const { access } = useAccess();
   const [showHpp, setShowHpp] = useState(false);
+  const [resolvedItems, setResolvedItems] = useState<any[]>(order.items || []);
+  const [loadingHpp, setLoadingHpp] = useState(false);
+
+  useEffect(() => {
+    setResolvedItems(order.items || []);
+  }, [order.items]);
+
+  const handleShowHpp = async () => {
+    setShowHpp(true);
+    
+    // Check if we need to resolve HPP (i.e. if any item has HPP = 0 or undefined)
+    const itemsToResolve = (order.items || []).filter((item: any) => !item.hpp || Number(item.hpp) === 0);
+    if (itemsToResolve.length === 0) {
+      setResolvedItems(order.items || []);
+      return;
+    }
+
+    setLoadingHpp(true);
+    try {
+      const token = await getTokenAuth();
+      if (!token) return;
+
+      const updatedItems = await Promise.all(
+        (order.items || []).map(async (item: any) => {
+          // If already has hpp, use it
+          const currentHpp = Number(item.hpp || item.hargabeli || 0);
+          if (currentHpp > 0) {
+            return {
+              ...item,
+              hpp: currentHpp
+            };
+          }
+
+          let hpp = 0;
+
+          // 1. Try search by SKU first
+          if (item.sku && item.sku !== '-') {
+            try {
+              const qs = new URLSearchParams();
+              qs.set('start', '0');
+              qs.set('end', '1');
+              qs.set('sku', item.sku);
+              qs.set('nama', '');
+
+              const url = `${API_BASE_URL}/get/masterbarang/search?${qs.toString()}`;
+              const res = await fetch(url, {
+                headers: { Authorization: `Bearer ${token}` }
+              });
+              const data = await res.json();
+              if (data.status && data.data && data.data.length > 0) {
+                hpp = Number(data.data[0].hargabeli || data.data[0].hpp || 0);
+              }
+            } catch (err) {
+              console.warn(`Failed to search masterbarang by SKU (${item.sku}) for hpp:`, err);
+            }
+          }
+
+          // 2. Try by online ID if still 0
+          if (hpp === 0 && item.id_online) {
+            try {
+              const url = `${API_BASE_URL}/get/masterbarang?id_online=${item.id_online}&id_ecommerce=${order.ecommerce_id}`;
+              const res = await fetch(url, {
+                headers: { Authorization: `Bearer ${token}` }
+              });
+              const data = await res.json();
+              if (data.status && data.data && data.data.length > 0) {
+                hpp = Number(data.data[0].hargabeli || data.data[0].hpp || 0);
+              }
+            } catch (err) {
+              console.warn(`Failed to fetch masterbarang by online ID (${item.id_online}) for hpp:`, err);
+            }
+          }
+
+          // 3. Try bundling if still 0
+          if (hpp === 0 && item.id_online) {
+            try {
+              const url = `${API_BASE_URL}/get/bundling?id_online=${item.id_online}&id_ecommerce=${order.ecommerce_id}`;
+              const res = await fetch(url, {
+                headers: { Authorization: `Bearer ${token}` }
+              });
+              const data = await res.json();
+              if (data.status && data.data && data.data.length > 0) {
+                hpp = Number(data.data[0].hargabeli || data.data[0].hpp || 0);
+              }
+            } catch (err) {
+              console.warn(`Failed to fetch bundling by online ID (${item.id_online}) for hpp:`, err);
+            }
+          }
+
+          return {
+            ...item,
+            hpp: hpp
+          };
+        })
+      );
+
+      setResolvedItems(updatedItems);
+    } catch (error) {
+      console.warn('Error resolving HPP:', error);
+      setResolvedItems(order.items || []);
+    } finally {
+      setLoadingHpp(false);
+    }
+  };
 
   const statusColor = getStatusColor(order.status);
   const platformKey = (order.platform || '').toLowerCase();
   const platformStyle = PLATFORM_LOGO[platformKey] || { bg: '#F3F4F6', color: '#4B5563', border: '#E5E7EB' };
 
   // HPP Logic
-  const allItems = order.items || [];
+  const allItems = resolvedItems;
   const hasItems = allItems.length > 0;
   const canShowHpp = !!access?.master?.show_hpp && hasItems;
 
-  const itemsWithHpp = allItems.filter((item: any) => Number(item.hpp || 0) > 0);
+  const itemsWithHpp = allItems.filter((item: any) => Number(item.hpp || item.hargabeli || 0) > 0);
   const hasPartialHpp = itemsWithHpp.length > 0 && itemsWithHpp.length < allItems.length;
   const hasNoHpp = itemsWithHpp.length === 0;
 
@@ -62,7 +168,7 @@ export default function PesananV2OrderCard({ order, isSelected, onToggleSelect, 
   const calcItems = hasPartialHpp ? itemsWithHpp : allItems;
   calcItems.forEach((item: any) => {
     const qty = Number(item.qty || 0);
-    const itemHpp = Number(item.hpp || 0);
+    const itemHpp = Number(item.hpp || item.hargabeli || 0);
     const itemJual = Number(item.harga_jual || item.price || item.harga || 0);
     totalHpp += itemHpp * qty;
     totalJual += itemJual * qty;
@@ -152,12 +258,17 @@ export default function PesananV2OrderCard({ order, isSelected, onToggleSelect, 
                 ) : (
                     <View style={[styles.miniBadge, { backgroundColor: '#FEE2E2' }]}><Text style={[styles.miniBadgeText, { color: '#991B1B' }]}>BELUM SCAN</Text></View>
                 )}
+                {order.has_retur || order.retur ? (
+                    <View style={[styles.miniBadge, { backgroundColor: '#FFEDD5' }]}><Text style={[styles.miniBadgeText, { color: '#C2410C' }]}>SUDAH RETUR</Text></View>
+                ) : (
+                    <View style={[styles.miniBadge, { backgroundColor: '#F3F4F6' }]}><Text style={[styles.miniBadgeText, { color: '#4B5563' }]}>BELUM RETUR</Text></View>
+                )}
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <Text style={styles.totalText}>Rp {(order.total_harga || 0).toLocaleString('id-ID')}</Text>
                 {canShowHpp && (
                     <TouchableOpacity 
-                        onPress={() => setShowHpp(true)} 
+                        onPress={handleShowHpp} 
                         style={{ marginLeft: 8 }}
                         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     >
@@ -179,35 +290,50 @@ export default function PesananV2OrderCard({ order, isSelected, onToggleSelect, 
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.bsContent} showsVerticalScrollIndicator={false}>
-              {allItems.map((item: any, idx: number) => {
-                const qty = Number(item.qty || 0);
-                const hppVal = Number(item.hpp || 0);
-                const hppTotal = hppVal * qty;
-                return (
-                  <View key={idx} style={styles.itemRow}>
-                    <Text style={styles.itemName} numberOfLines={2}>{item.nama || item.sku} × {qty}</Text>
-                    {hppVal > 0 ? (
-                      <Text style={styles.itemHpp}>Rp {hppTotal.toLocaleString('id-ID')}</Text>
-                    ) : (
-                      <Text style={styles.itemHppEmpty}>Rp 0</Text>
-                    )}
-                  </View>
-                );
-              })}
+              {loadingHpp ? (
+                <View style={{ padding: 20, alignItems: 'center' }}>
+                  <ActivityIndicator size="small" color="#D97706" />
+                  <Text style={{ marginTop: 8, fontSize: 13, color: '#6B7280' }}>Memuat HPP...</Text>
+                </View>
+              ) : (
+                allItems.map((item: any, idx: number) => {
+                  const qty = Number(item.qty || 0);
+                  const hppVal = Number(item.hpp || item.hargabeli || 0);
+                  const hppTotal = hppVal * qty;
+                  return (
+                    <View key={idx} style={styles.itemRow}>
+                      <Text style={styles.itemName} numberOfLines={2}>{item.nama || item.sku} × {qty}</Text>
+                      {hppVal > 0 ? (
+                        <Text style={styles.itemHpp}>Rp {hppTotal.toLocaleString('id-ID')}</Text>
+                      ) : (
+                        <Text style={styles.itemHppEmpty}>Rp 0</Text>
+                      )}
+                    </View>
+                  );
+                })
+              )}
             </ScrollView>
             <View style={styles.bsFooter}>
-              <View style={styles.bsFooterRow}>
-                <Text style={styles.bsFooterLabel}>Total HPP</Text>
-                <Text style={styles.bsFooterValue}>Rp {totalHpp.toLocaleString('id-ID')}</Text>
-              </View>
-              <View style={styles.bsFooterRow}>
-                <Text style={styles.bsFooterLabel}>{hasPartialHpp ? 'Est. Untung' : 'Untung'}</Text>
-                <Text style={[styles.bsFooterValue, { color: isProfit ? '#10B981' : '#EF4444' }]}>
-                  {profitText} {marginText}
-                </Text>
-              </View>
-              {hasPartialHpp && (
-                <Text style={styles.warningText}>* sebagian HPP belum diisi.</Text>
+              {loadingHpp ? (
+                <View style={{ paddingVertical: 10, alignItems: 'center' }}>
+                  <Text style={{ fontSize: 13, color: '#9CA3AF', fontStyle: 'italic' }}>Menghitung...</Text>
+                </View>
+              ) : (
+                <>
+                  <View style={styles.bsFooterRow}>
+                    <Text style={styles.bsFooterLabel}>Total HPP</Text>
+                    <Text style={styles.bsFooterValue}>Rp {totalHpp.toLocaleString('id-ID')}</Text>
+                  </View>
+                  <View style={styles.bsFooterRow}>
+                    <Text style={styles.bsFooterLabel}>{hasPartialHpp ? 'Est. Untung' : 'Untung'}</Text>
+                    <Text style={[styles.bsFooterValue, { color: isProfit ? '#10B981' : '#EF4444' }]}>
+                      {profitText} {marginText}
+                    </Text>
+                  </View>
+                  {hasPartialHpp && (
+                    <Text style={styles.warningText}>* sebagian HPP belum diisi.</Text>
+                  )}
+                </>
               )}
             </View>
           </TouchableOpacity>

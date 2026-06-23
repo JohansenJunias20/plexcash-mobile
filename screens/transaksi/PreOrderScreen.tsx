@@ -444,6 +444,22 @@ export default function PreOrderScreen() {
     }
   };
 
+  const handleShortcutDays = (days: number) => {
+    const poDate = moment();
+    const arrivalDate = moment().add(days, 'days');
+    setCurrentPreOrder({
+      ...currentPreOrder,
+      tanggal_po: poDate.format('YYYY-MM-DDTHH:mm:ss'),
+      tanggal_perkiraan_sampai: arrivalDate.format('YYYY-MM-DD'),
+    });
+  };
+
+  const getSelectedShortcutDays = () => {
+    const poDate = moment(currentPreOrder.tanggal_po).startOf('day');
+    const arrivalDate = moment(currentPreOrder.tanggal_perkiraan_sampai).startOf('day');
+    return arrivalDate.diff(poDate, 'days');
+  };
+
   const handleNewPreOrder = () => {
     resetCurrentPreOrder();
     setShowDialog(true);
@@ -739,6 +755,35 @@ export default function PreOrderScreen() {
                     onChange={handlePerkiraanSampaiChange}
                   />
                 )}
+              </View>
+
+              {/* Shortcut Perkiraan Sampai */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Shortcut Perkiraan Sampai</Text>
+                <View style={styles.shortcutChipRow}>
+                  {[3, 7, 10, 14, 30].map((days) => {
+                    const isSelected = getSelectedShortcutDays() === days;
+                    return (
+                      <TouchableOpacity
+                        key={days}
+                        style={[
+                          styles.shortcutChip,
+                          isSelected && styles.shortcutChipSelected,
+                        ]}
+                        onPress={() => handleShortcutDays(days)}
+                      >
+                        <Text
+                          style={[
+                            styles.shortcutChipText,
+                            isSelected && styles.shortcutChipTextSelected,
+                          ]}
+                        >
+                          {days} Hari
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
               </View>
 
               {/* Notes */}
@@ -1477,6 +1522,32 @@ const styles = StyleSheet.create({
     padding: 4,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  shortcutChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  shortcutChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  shortcutChipSelected: {
+    backgroundColor: '#FEF3C7',
+    borderColor: '#f59e0b',
+  },
+  shortcutChipText: {
+    fontSize: 13,
+    color: '#4B5563',
+    fontWeight: '500',
+  },
+  shortcutChipTextSelected: {
+    color: '#b45309',
+    fontWeight: '600',
   },
 });
 

@@ -90,7 +90,7 @@ export default function PesananV2Screen() {
   const [userInfo, setUserInfo] = useState({ canUpdate: true, email: '' });
 
   // Progress Modals
-  const [buatProgress, setBuatProgress] = useState({ open: false, processed: 0, total: 0, status: '' });
+  const [buatProgress, setBuatProgress] = useState({ open: false, processed: 0, total: 0, status: '', title: '' });
   const [cetakLoading, setCetakLoading] = useState(false);
 
   const fetchIdRef = useRef(0);
@@ -472,7 +472,7 @@ export default function PesananV2Screen() {
   };
 
   const executeBulkBuatPenjualan = async (selectedArr: string[]) => {
-      setBuatProgress({ open: true, processed: 0, total: selectedArr.length, status: 'Mempersiapkan...' });
+      setBuatProgress({ open: true, processed: 0, total: selectedArr.length, status: 'Mempersiapkan...', title: 'Membuat Penjualan...' });
       
       const ordersToProcess = orders.filter(o => selectedArr.includes(o.id_online));
       
@@ -530,8 +530,89 @@ export default function PesananV2Screen() {
           setBuatProgress(prev => ({ ...prev, processed: i + chunk.length }));
       }
 
-      setBuatProgress({ open: false, processed: 0, total: 0, status: '' });
+      setBuatProgress({ open: false, processed: 0, total: 0, status: '', title: '' });
       Alert.alert('Hasil Buat Penjualan', `Berhasil: ${successCount}\nGagal: ${failCount}`);
+      setSelectedOrders(new Set());
+      fetchOrders({ page: 1 });
+  };
+
+  const bulkBuatRetur = async () => {
+      if (!userInfo.canUpdate) return Alert.alert('Permission Error', 'Anda tidak memiliki akses.');
+      
+      const selectedArr = Array.from(selectedOrders);
+      if (selectedArr.length === 0) return;
+
+      Alert.alert(
+          'Konfirmasi',
+          `Buat retur untuk ${selectedArr.length} pesanan?`,
+          [
+              { text: 'Batal', style: 'cancel' },
+              { text: 'Ya, Buat', onPress: () => executeBulkBuatRetur(selectedArr) }
+          ]
+      );
+  };
+
+  const executeBulkBuatRetur = async (selectedArr: string[]) => {
+      setBuatProgress({ open: true, processed: 0, total: selectedArr.length, status: 'Mempersiapkan...', title: 'Membuat Retur...' });
+      
+      const ordersToProcess = orders.filter(o => selectedArr.includes(o.id_online));
+      
+      const CHUNK_SIZE = 5;
+      let successCount = 0;
+      let failCount = 0;
+
+      for (let i = 0; i < ordersToProcess.length; i += CHUNK_SIZE) {
+          const chunk = ordersToProcess.slice(i, i + CHUNK_SIZE);
+          setBuatProgress(prev => ({ ...prev, status: `Memproses ${i+1} - ${Math.min(i+CHUNK_SIZE, ordersToProcess.length)} dari ${ordersToProcess.length}` }));
+
+          try {
+              const payloads = await Promise.all(chunk.map(async (o) => {
+                  try {
+                      // Fetch detail for latest items
+                      const detailRes = await ApiService.authenticatedRequest(`/get/ecommerce/order?id=${o.id_online}&id_ecommerce=${o.ecommerce_id}`);
+                      if (!detailRes?.status) return null;
+                      const d = detailRes.data;
+                      return {
+                          platform: d.from || o.platform,
+                          id: d.id || o.id_online,
+                          barang: (d.items || []).map((it: any) => ({
+                              price: it.price_after_discount ?? it.price ?? 0,
+                              name: it.name,
+                              sku: it.sku,
+                              qty: it.qty,
+                              id_online: it.id_online,
+                              id_parent: it.id_parent,
+                          })),
+                          id_ecommerce: d.id_ecommerce || o.ecommerce_id,
+                          date: typeof d.date === 'string' ? d.date : new Date().toISOString(),
+                          invoice: d.invoice,
+                          from_import: false,
+                          booking_sn: d.booking_sn,
+                          orderType: d.orderType,
+                          isBookingOrder: !!d.booking_sn,
+                          update_stok: true
+                      };
+                  } catch { return null; }
+              }));
+
+              const validPayloads = payloads.filter(p => p !== null);
+              if (validPayloads.length > 0) {
+                  const res = await ApiService.authenticatedRequest('/ecommerce/retur', {
+                      method: 'POST',
+                      body: JSON.stringify(validPayloads)
+                  });
+                  if (res?.status) successCount += validPayloads.length;
+                  else failCount += validPayloads.length;
+              }
+          } catch (e) {
+              failCount += chunk.length;
+          }
+
+          setBuatProgress(prev => ({ ...prev, processed: i + chunk.length }));
+      }
+
+      setBuatProgress({ open: false, processed: 0, total: 0, status: '', title: '' });
+      Alert.alert('Hasil Buat Retur', `Berhasil: ${successCount}\nGagal: ${failCount}`);
       setSelectedOrders(new Set());
       fetchOrders({ page: 1 });
   };
@@ -695,6 +776,9 @@ export default function PesananV2Screen() {
           <View style={styles.selectionBar}>
               <Text style={styles.selectionText}>{selectedOrders.size} Dipilih</Text>
               <View style={styles.selectionActions}>
+                  <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#F97316' }]} onPress={bulkBuatRetur}>
+                      <Text style={styles.actionBtnText}>Buat Retur</Text>
+                  </TouchableOpacity>
                   <TouchableOpacity style={styles.actionBtn} onPress={bulkBuatPenjualan}>
                       <Text style={styles.actionBtnText}>Buat Penjualan</Text>
                   </TouchableOpacity>
@@ -775,7 +859,7 @@ export default function PesananV2Screen() {
       {/* Progress Modal */}
       <ProgressModal
           visible={buatProgress.open}
-          title="Membuat Penjualan..."
+          title={buatProgress.title || "Membuat Penjualan..."}
           status={buatProgress.status}
           progress={buatProgress.total > 0 ? (buatProgress.processed / buatProgress.total) : 0}
           processed={buatProgress.processed}
