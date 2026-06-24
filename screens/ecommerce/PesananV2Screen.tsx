@@ -182,14 +182,17 @@ export default function PesananV2Screen() {
             rawDbOrders = rawDbOrders.map((rd: any) => {
                 const rawScanned = rd.scanned !== undefined ? rd.scanned : rd.is_scanned;
                 const rawPrint = rd.print !== undefined ? rd.print : rd.is_printed;
+                const rawPacked = rd.packed !== undefined ? rd.packed : rd.is_packed;
                 
                 const isScanned = (!!rawScanned && rawScanned !== '0' && rawScanned !== 0 && String(rawScanned).toLowerCase() !== 'false') || !!rd.scan_timestamp;
                 const isPrinted = (!!rawPrint && rawPrint !== '0' && rawPrint !== 0 && String(rawPrint).toLowerCase() !== 'false') || !!rd.print_timestamp;
+                const isPacked = (!!rawPacked && rawPacked !== '0' && rawPacked !== 0 && String(rawPacked).toLowerCase() !== 'false') || !!rd.pack_timestamp;
                 
                 return {
                     ...rd,
                     print: isPrinted,
                     scanned: isScanned,
+                    packed: isPacked,
                 };
             });
             
@@ -290,9 +293,11 @@ export default function PesananV2Screen() {
             preFilteredKilat.forEach((o: any) => {
                 const rawScanned = o.scanned !== undefined ? o.scanned : o.is_scanned;
                 const rawPrint = o.print !== undefined ? o.print : o.is_printed;
+                const rawPacked = o.packed !== undefined ? o.packed : o.is_packed;
                 
                 o.scanned = (!!rawScanned && rawScanned !== '0' && rawScanned !== 0 && String(rawScanned).toLowerCase() !== 'false') || !!o.scan_timestamp;
                 o.print = (!!rawPrint && rawPrint !== '0' && rawPrint !== 0 && String(rawPrint).toLowerCase() !== 'false') || !!o.print_timestamp;
+                o.packed = (!!rawPacked && rawPacked !== '0' && rawPacked !== 0 && String(rawPacked).toLowerCase() !== 'false') || !!o.pack_timestamp;
             });
             
             const filteredKilat = preFilteredKilat.filter(o => filterScanLocal(o));
@@ -815,6 +820,8 @@ export default function PesananV2Screen() {
                               scan_timestamp: item.scan_timestamp,
                               print_timestamp: item.print_timestamp,
                               scanned: item.scanned,
+                              packed: item.packed,
+                              pack_timestamp: item.pack_timestamp,
                               booking_sn: item.isBookingOrder ? item.booking_sn : undefined,
                               // Pass cached kilat data so detail screen shows items & shipping without extra API call
                               kilat_order_data: item.isBookingOrder ? {

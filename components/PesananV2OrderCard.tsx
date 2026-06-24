@@ -258,6 +258,11 @@ export default function PesananV2OrderCard({ order, isSelected, onToggleSelect, 
                 ) : (
                     <View style={[styles.miniBadge, { backgroundColor: '#FEE2E2' }]}><Text style={[styles.miniBadgeText, { color: '#991B1B' }]}>BELUM SCAN</Text></View>
                 )}
+                {order.packed || !!order.pack_timestamp ? (
+                    <View style={[styles.miniBadge, { backgroundColor: '#D1FAE5' }]}><Text style={[styles.miniBadgeText, { color: '#065F46' }]}>SUDAH PACK</Text></View>
+                ) : (
+                    <View style={[styles.miniBadge, { backgroundColor: '#FEE2E2' }]}><Text style={[styles.miniBadgeText, { color: '#991B1B' }]}>BELUM PACK</Text></View>
+                )}
                 {order.has_retur || order.retur ? (
                     <View style={[styles.miniBadge, { backgroundColor: '#FFEDD5' }]}><Text style={[styles.miniBadgeText, { color: '#C2410C' }]}>SUDAH RETUR</Text></View>
                 ) : (

@@ -52,6 +52,8 @@ export type AppStackParamList = {
     scan_timestamp?: string | null;
     print_timestamp?: string;
     scanned?: boolean;
+    packed?: boolean;
+    pack_timestamp?: string | null;
     booking_sn?: string;
     // Pre-fetched kilat order data (from booking cache) to avoid blank detail screen
     kilat_order_data?: {

@@ -69,6 +69,7 @@ export const AVAILABLE_MENUS: MenuItem[] = [
   { id: 'NaikkanProduk', label: 'Naikkan Produk', subtitle: 'Boost Products', icon: 'arrow-up-outline', route: 'NaikkanProduk', category: 'ECOMMERCE', accessKey: 'ecommerce.naikkan_produk' },
   { id: 'ProsesOtomatis', label: 'Proses Otomatis', subtitle: 'Automation', icon: 'cog-outline', route: 'ProsesOtomatis', category: 'ECOMMERCE', accessKey: 'ecommerce.proses_otomatis' },
   { id: 'ScanOut', label: 'Scan Out', subtitle: 'Scan Shipping Labels', icon: 'scan-outline', route: 'ScanOut', category: 'ECOMMERCE', accessKey: 'ecommerce.scanout' },
+  { id: 'Pack', label: 'Pack', subtitle: 'Scan & Pack Packages', icon: 'cube-outline', route: 'Pack', category: 'ECOMMERCE', accessKey: 'ecommerce.pack' },
   { id: 'ScanIn', label: 'Scan In', subtitle: 'Scan Returned Packages', icon: 'scan-outline', route: 'ScanIn', category: 'ECOMMERCE', accessKey: 'ecommerce.scanin' },
   { id: 'ScanSearch', label: 'Cari by Scan', subtitle: 'Search by Scan', icon: 'search-circle-outline', route: 'ScanSearch', category: 'ECOMMERCE', accessKey: 'ecommerce.scanout' },
 
@@ -87,6 +88,7 @@ export const DEFAULT_QUICK_ACTIONS: string[] = [
   'BarangList',
   'PesananV2',
   'ScanOut',
+  'Pack',
   'UserList',
   'BundlingList',
   'StokOpname',

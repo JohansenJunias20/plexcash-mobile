@@ -27,12 +27,14 @@ export type OrderDetail = {
   print_timestamp?: string;
   scanned?: boolean;
   scan_timestamp?: string | null;
+  packed?: boolean;
+  pack_timestamp?: string | null;
 };
 
 type Props = NativeStackScreenProps<AppStackParamList, 'OrderDetail'>;
 
 export default function OrderDetailScreen({ route, navigation }: Props) {
-  const { id, id_ecommerce, scan_timestamp, print_timestamp, scanned, booking_sn, kilat_order_data } = route.params;
+  const { id, id_ecommerce, scan_timestamp, print_timestamp, scanned, booking_sn, kilat_order_data, packed, pack_timestamp } = route.params;
   const [detail, setDetail] = useState<OrderDetail | null>(null);
   const [access, setAccess] = useState<{ actions?: { create?: boolean } } | undefined>();
   const [loading, setLoading] = useState(true);
@@ -104,6 +106,8 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
         const finalPrintTimestamp = d.print_timestamp || print_timestamp || undefined;
         const finalScanned = d.scanned !== undefined ? (d.scanned === true || d.scanned === 1 || d.scanned === '1' || String(d.scanned).toLowerCase() === 'true') : (scanned !== undefined ? scanned : false);
         const finalScanTimestamp = d.scan_timestamp !== undefined ? d.scan_timestamp : (scan_timestamp !== undefined ? scan_timestamp : null);
+        const finalPacked = d.packed !== undefined ? (d.packed === true || d.packed === 1 || d.packed === '1' || String(d.packed).toLowerCase() === 'true') : (packed !== undefined ? packed : false);
+        const finalPackTimestamp = d.pack_timestamp !== undefined ? d.pack_timestamp : (pack_timestamp !== undefined ? pack_timestamp : null);
 
         setDetail({
           id: d.id,
@@ -129,6 +133,8 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
           print_timestamp: finalPrintTimestamp,
           scanned: finalScanned,
           scan_timestamp: finalScanTimestamp,
+          packed: finalPacked,
+          pack_timestamp: finalPackTimestamp,
         });
       } else if (booking_sn) {
         // Kilat order: the marketplace API might not support lookup by booking_sn.
@@ -158,6 +164,8 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
           print_timestamp: print_timestamp || undefined,
           scanned: scanned || false,
           scan_timestamp: scan_timestamp || null,
+          packed: packed || false,
+          pack_timestamp: pack_timestamp || null,
         });
       }
     } catch (e) {
@@ -349,6 +357,15 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
                   <Text style={[styles.statusText, { color: '#991B1B', fontSize: 10 }]}>BELUM SCAN</Text>
                 </View>
               )}
+              {detail.packed || !!detail.pack_timestamp ? (
+                <View style={[styles.statusBadge, { backgroundColor: '#D1FAE5', paddingHorizontal: 8, paddingVertical: 4, marginTop: 4 }]}>
+                  <Text style={[styles.statusText, { color: '#065F46', fontSize: 10 }]}>SUDAH PACK</Text>
+                </View>
+              ) : (
+                <View style={[styles.statusBadge, { backgroundColor: '#FEE2E2', paddingHorizontal: 8, paddingVertical: 4, marginTop: 4 }]}>
+                  <Text style={[styles.statusText, { color: '#991B1B', fontSize: 10 }]}>BELUM PACK</Text>
+                </View>
+              )}
             </View>
           </View>
         </View>
@@ -449,6 +466,22 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
                 </Text>
               ) : (
                 <Text style={[styles.infoValue, { color: '#EF4444' }]}>Belum Scan</Text>
+              )}
+            </View>
+          </View>
+
+          <View style={styles.infoRow}>
+            <View style={styles.infoIconContainer}>
+              <Ionicons name="cube-outline" size={20} color="#6B7280" />
+            </View>
+            <View style={styles.infoContent}>
+              <Text style={styles.infoLabel}>Pack Date</Text>
+              {detail.pack_timestamp ? (
+                <Text style={[styles.infoValue, styles.scanTimestampHighlight]}>
+                  {formatDate(detail.pack_timestamp)}
+                </Text>
+              ) : (
+                <Text style={[styles.infoValue, { color: '#EF4444' }]}>Belum Pack</Text>
               )}
             </View>
           </View>

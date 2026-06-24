@@ -81,6 +81,7 @@ import NaikkanProdukScreen from '../screens/ecommerce/NaikkanProdukScreen';
 import BoostProdukScreen from '../screens/ecommerce/BoostProdukScreen';
 import ProsesOtomatisScreen from '../screens/ecommerce/ProsesOtomatisScreen';
 import ProsesOtomatisConfigScreen from '../screens/ecommerce/ProsesOtomatisConfigScreen';
+import PackScreen from '../screens/ecommerce/Pack/PackScreen';
 
 // LAPORAN Section
 import NeracaScreen from '../screens/laporan/NeracaScreen';
@@ -366,6 +367,7 @@ const DrawerNavigatorContent = () => {
       <Drawer.Screen name="EcommerceToolsProduct" component={EcommerceToolsProductScreen} />
       <Drawer.Screen name="NaikkanProduk" component={NaikkanProdukStackScreen} />
       <Drawer.Screen name="ProsesOtomatis" component={ProsesOtomatisStackScreen} />
+      <Drawer.Screen name="Pack" component={PackScreen} />
 
       {/* LAPORAN Section - Using Stack Navigator for Perangkat */}
       <Drawer.Screen name="Neraca" component={NeracaScreen} />
