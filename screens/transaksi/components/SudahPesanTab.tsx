@@ -47,6 +47,7 @@ interface SudahPesanTabProps {
   onUpdateQty: (id: number, qty: number) => void;
   onMarkAsNotOrdered: (id: number) => void;
   onTransferToPreOrder: () => void;
+  onExportPdf?: () => void;
 }
 
 export default function SudahPesanTab({
@@ -64,6 +65,7 @@ export default function SudahPesanTab({
   onUpdateQty,
   onMarkAsNotOrdered,
   onTransferToPreOrder,
+  onExportPdf,
 }: SudahPesanTabProps) {
   const [editingQty, setEditingQty] = useState<{ [key: number]: string }>({});
   const [kartuStokItemId, setKartuStokItemId] = useState<number | null>(null);
@@ -238,26 +240,41 @@ export default function SudahPesanTab({
     if (selectedItems.length === 0) return null;
 
     return (
-      <View style={styles.selectionBar}>
-        <View style={styles.selectionInfo}>
-          <Ionicons name="checkmark-circle" size={20} color="#f59e0b" />
-          <Text style={styles.selectionText}>
-            {selectedItems.length} item(s) selected
-          </Text>
-        </View>
-        <View style={styles.selectionActions}>
+      <View style={styles.bottomSelectionBar}>
+        {/* Selection summary row */}
+        <View style={styles.selectionInfoRow}>
+          <View style={styles.selectionCountContainer}>
+            <Ionicons name="checkmark-circle" size={18} color="#f59e0b" />
+            <Text style={styles.selectionCountText}>
+              {selectedItems.length} item terpilih
+            </Text>
+          </View>
           <TouchableOpacity
-            style={styles.clearButton}
+            style={styles.clearSelectionButton}
             onPress={() => selectedItems.forEach(id => onToggleSelection(id))}
           >
-            <Text style={styles.clearButtonText}>Clear</Text>
+            <Ionicons name="close-circle-outline" size={16} color="#ef4444" />
+            <Text style={styles.clearSelectionText}>Batal Pilih</Text>
           </TouchableOpacity>
+        </View>
+
+        {/* Action buttons row */}
+        <View style={styles.selectionButtonsRow}>
+          {onExportPdf && (
+            <TouchableOpacity
+              style={[styles.bottomActionBarButton, styles.exportPdfBtn]}
+              onPress={onExportPdf}
+            >
+              <Ionicons name="print" size={18} color="#ffffff" />
+              <Text style={styles.bottomActionBarButtonText}>Export PDF</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
-            style={styles.transferButton}
+            style={[styles.bottomActionBarButton, styles.transferPoBtn]}
             onPress={onTransferToPreOrder}
           >
             <Ionicons name="arrow-forward-circle" size={18} color="#ffffff" />
-            <Text style={styles.transferButtonText}>Transfer to PO</Text>
+            <Text style={styles.bottomActionBarButtonText}>Transfer to PO</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -368,7 +385,6 @@ export default function SudahPesanTab({
     <View style={styles.container}>
       {renderSupplierTabs()}
       {renderPOStatusTabs()}
-      {renderSelectionBar()}
 
       <FlatList
         data={filteredItems}
@@ -396,6 +412,8 @@ export default function SudahPesanTab({
         itemNama={kartuStokItemNama}
         onClose={() => setShowKartuStok(false)}
       />
+
+      {renderSelectionBar()}
     </View>
   );
 }
@@ -408,19 +426,21 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
+    flexGrow: 0,
   },
   supplierTabsContent: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
   },
   supplierTab: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    height: 38,
     marginRight: 12,
-    borderRadius: 20,
+    borderRadius: 19,
     backgroundColor: '#f3f4f6',
-    minWidth: 100,
-    maxWidth: 200,
+    minWidth: 95,
+    maxWidth: 180,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -428,7 +448,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f59e0b',
   },
   supplierTabText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '500',
     color: '#6b7280',
     textAlign: 'center',
@@ -486,53 +506,70 @@ const styles = StyleSheet.create({
     color: '#f59e0b',
     fontWeight: '600',
   },
-  selectionBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#fef3c7',
+  bottomSelectionBar: {
+    backgroundColor: '#ffffff',
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#fbbf24',
+    paddingVertical: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 5,
+    elevation: 10,
   },
-  selectionInfo: {
+  selectionInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  selectionCountContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
-  selectionText: {
+  selectionCountText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#92400e',
+    color: '#1f2937',
   },
-  selectionActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  clearButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-    backgroundColor: '#ffffff',
-  },
-  clearButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#6b7280',
-  },
-  transferButton: {
+  clearSelectionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-    backgroundColor: '#f59e0b',
     gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 4,
+    backgroundColor: '#fef2f2',
   },
-  transferButtonText: {
+  clearSelectionText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#ef4444',
+  },
+  selectionButtonsRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  bottomActionBarButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 8,
+    gap: 6,
+  },
+  exportPdfBtn: {
+    backgroundColor: '#3b82f6',
+  },
+  transferPoBtn: {
+    backgroundColor: '#f59e0b',
+  },
+  bottomActionBarButtonText: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '600',
     color: '#ffffff',
   },
   listContent: {

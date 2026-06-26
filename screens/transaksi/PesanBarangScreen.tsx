@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import RNPrint from 'react-native-print';
 import ApiService from '../../services/api';
 
 // Import components (to be created)
@@ -124,7 +125,11 @@ export default function PesanBarangScreen() {
       // Fetch suppliers
       const suppliersRes = await ApiService.get('/get/supplier/sudahpesan');
       if (suppliersRes.status) {
-        const supplierData = [{ id_supplier: null, nama: 'ALL' }, ...suppliersRes.data];
+        const processedSuppliers = (suppliersRes.data || []).map((s: any) => ({
+          id_supplier: s.id_supplier,
+          nama: s.nama || s.supplier_nama || s.nama_supplier || 'Unknown'
+        }));
+        const supplierData = [{ id_supplier: null, nama: 'ALL' }, ...processedSuppliers];
         setSuppliers(supplierData as Supplier[]);
       }
 
@@ -340,6 +345,172 @@ export default function PesanBarangScreen() {
     );
   };
 
+  // Helper to generate PDF HTML
+  const generatePdfHtml = (items: ItemSudahPesan[]) => {
+    const currentDate = new Date().toLocaleDateString('id-ID', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+    const totalQty = items.reduce((sum, item) => sum + (item.qty_pesan || 0), 0);
+
+    const tableRows = items
+      .map((item, index) => {
+        const formattedDate = new Date(item.tgl_pesan).toLocaleDateString('id-ID', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+        });
+        const poStatusText = item.po_status === 'sudah_po'
+          ? `Sudah PO (${item.po_ids.join(', ')})`
+          : 'Belum PO';
+
+        return `
+          <tr>
+            <td style="padding: 8px; border: 1px solid #dee2e6; text-align: center;">${index + 1}</td>
+            <td style="padding: 8px; border: 1px solid #dee2e6;">${formattedDate}</td>
+            <td style="padding: 8px; border: 1px solid #dee2e6;">${item.nama}</td>
+            <td style="padding: 8px; border: 1px solid #dee2e6;">${item.merk || '-'}</td>
+            <td style="padding: 8px; border: 1px solid #dee2e6;">${item.kategori || '-'}</td>
+            <td style="padding: 8px; border: 1px solid #dee2e6;">${item.supplier_nama || '-'}</td>
+            <td style="padding: 8px; border: 1px solid #dee2e6; text-align: right;">${item.qty_pesan}</td>
+            <td style="padding: 8px; border: 1px solid #dee2e6;">${poStatusText}</td>
+          </tr>
+        `;
+      })
+      .join('');
+
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Laporan Pesan Barang</title>
+        <style>
+          body {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            margin: 20px;
+            color: #333;
+            font-size: 11px;
+          }
+          .header {
+            text-align: center;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #2c3e50;
+            padding-bottom: 10px;
+          }
+          .header h1 {
+            margin: 0;
+            color: #2c3e50;
+            font-size: 20px;
+            text-transform: uppercase;
+          }
+          .header p {
+            margin: 5px 0 0 0;
+            color: #7f8c8d;
+            font-size: 12px;
+          }
+          .meta-container {
+            margin-bottom: 15px;
+            display: flex;
+            justify-content: space-between;
+            background: #f8f9fa;
+            padding: 8px 12px;
+            border-radius: 4px;
+            border: 1px solid #e9ecef;
+          }
+          .meta-item {
+            line-height: 1.5;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 5px;
+          }
+          th {
+            background-color: #2c3e50;
+            color: #ffffff;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 9px;
+            letter-spacing: 0.5px;
+            border: 1px solid #34495e;
+            padding: 8px;
+            text-align: left;
+          }
+          tr:nth-child(even) {
+            background-color: #f8f9fa;
+          }
+          .footer {
+            margin-top: 30px;
+            text-align: center;
+            font-size: 9px;
+            color: #95a5a6;
+            border-top: 1px solid #eee;
+            padding-top: 8px;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>Laporan Pesan Barang</h1>
+          <p>Aplikasi Mobile Plexcash</p>
+        </div>
+        <div class="meta-container">
+          <div class="meta-item">
+            <strong>Tanggal Cetak:</strong> ${currentDate}
+          </div>
+          <div class="meta-item">
+            <strong>Total Item:</strong> ${items.length} &nbsp;|&nbsp; 
+            <strong>Total Qty:</strong> ${totalQty}
+          </div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 5%; text-align: center;">No.</th>
+              <th style="width: 12%;">Tanggal</th>
+              <th style="width: 25%;">Nama Barang</th>
+              <th style="width: 10%;">Merk</th>
+              <th style="width: 10%;">Kategori</th>
+              <th style="width: 15%;">Supplier</th>
+              <th style="width: 8%; text-align: right;">Qty</th>
+              <th style="width: 15%;">Status PO</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tableRows}
+          </tbody>
+        </table>
+        <div class="footer">
+          Dokumen ini dihasilkan secara otomatis oleh Plexcash Mobile
+        </div>
+      </body>
+      </html>
+    `;
+  };
+
+  // Export Selected Items to PDF
+  const handleExportToPdf = async () => {
+    if (selectedItems.length === 0) {
+      Alert.alert('Error', 'Please select at least one item');
+      return;
+    }
+
+    const selected = itemsSudahPesan.filter(item => selectedItems.includes(item.id));
+
+    try {
+      const html = generatePdfHtml(selected);
+      await RNPrint.print({ html });
+    } catch (error: any) {
+      console.error('[PesanBarang] Export PDF error:', error);
+      Alert.alert('Error', 'Failed to export PDF: ' + (error?.message || 'Unknown error'));
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
@@ -411,6 +582,7 @@ export default function PesanBarangScreen() {
             onUpdateQty={handleUpdateQtySudah}
             onMarkAsNotOrdered={handleMarkAsNotOrdered}
             onTransferToPreOrder={handleTransferToPreOrder}
+            onExportPdf={handleExportToPdf}
           />
         )}
       </View>
