@@ -24,6 +24,7 @@ import moment from 'moment';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
 import BaganAkunSearchModal from './components/BaganAkunSearchModal';
+import RNPrint from 'react-native-print';
 
 // Platform UI Styling Utilities
 const PLATFORM_BRANDS: { [key: string]: { color: string; label: string; icon: string } } = {
@@ -119,6 +120,9 @@ export default function ReturOnlineScreen() {
   const [dateEnd, setDateEnd] = useState<moment.Moment>(moment().endOf('day'));
   const [showDatePickerStart, setShowDatePickerStart] = useState(false);
   const [showDatePickerEnd, setShowDatePickerEnd] = useState(false);
+  const [filterScanout, setFilterScanout] = useState(false);
+  const [filterPrint, setFilterPrint] = useState(false);
+  const [filterPack, setFilterPack] = useState(false);
 
   // Settings & Modes
   const [PengirimanGagalMethod, setPengirimanGagalMethod] = useState<'OTOMATIS' | 'MANUAL' | null>(null);
@@ -403,6 +407,61 @@ export default function ReturOnlineScreen() {
       Alert.alert('Error', 'Terjadi kesalahan saat menyetujui pengiriman gagal');
     } finally {
       setProcessingBulk(false);
+    }
+  };
+
+  // PRINT LAPORAN
+  const handlePrintLaporan = async (filteredRows: any[]) => {
+    const selectedRows = filteredRows.filter((r) => selectedRowIds.has(r.id));
+    if (selectedRows.length === 0) return;
+
+    try {
+      const htmlContent = `
+        <html>
+          <head>
+            <style>
+              body { font-family: Arial, sans-serif; padding: 20px; }
+              h2 { text-align: center; }
+              table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+              th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+              th { background-color: #f2f2f2; }
+            </style>
+          </head>
+          <body>
+            <h2>Laporan Retur Scanout</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>No</th>
+                  <th>Order ID / Resi</th>
+                  <th>Toko</th>
+                  <th>Tgl Scan Out</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${selectedRows.map((item, index) => {
+                  const shopName = item.shop_name || ecommerceList.find(s => Number(s.id) === Number(item.id_ecommerce))?.name || getPlatformBrand(item.platform).label;
+                  const scanoutDate = item.scanout_time && isValidTimestamp(item.scanout_time) ? moment(item.scanout_time).format('DD-MM-YYYY HH:mm') : 'Sudah Scanout';
+                  const identifier = item.invoice_tokped || item.invoice || item.id_online || '-';
+                  const resi = item.nomor_resi || '-';
+                  return `
+                    <tr>
+                      <td>${index + 1}</td>
+                      <td>${identifier}<br/><small>Resi: ${resi}</small></td>
+                      <td>${shopName}</td>
+                      <td>${scanoutDate}</td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </body>
+        </html>
+      `;
+
+      await RNPrint.print({ html: htmlContent });
+    } catch (e) {
+      Alert.alert('Error', 'Gagal membuat laporan PDF');
     }
   };
 
@@ -792,8 +851,9 @@ export default function ReturOnlineScreen() {
 
   // FILTER LOGIC FOR DATA LISTS
   const getFilteredData = () => {
+    let result = [];
     if (Tipe === 'komplain') {
-      return data
+      result = data
         .filter((dt) => {
           if (MenuIndex === 'pending') return dt.id_database === 0;
           if (MenuIndex === 'disetujui') return dt.id_database > 0;
@@ -802,7 +862,7 @@ export default function ReturOnlineScreen() {
         })
         .filter((dt) => CurrentEcommerce.id === 0 || dt.id_ecommerce === CurrentEcommerce.id);
     } else {
-      return data2
+      result = data2
         .filter((dt) => {
           const q = searchPengirimanGagal.toLowerCase().trim();
           if (!q) return true;
@@ -813,11 +873,25 @@ export default function ReturOnlineScreen() {
             (dt.id_retur || '').toLowerCase().includes(q)
           );
         })
-.filter((dt) => CurrentEcommerce.id === 0 || dt.id_ecommerce === CurrentEcommerce.id);
+        .filter((dt) => CurrentEcommerce.id === 0 || dt.id_ecommerce === CurrentEcommerce.id);
     }
+
+    if (filterScanout) {
+      result = result.filter(dt => toBool(dt.scanout) || isValidTimestamp(dt.scanout_time));
+    }
+    if (filterPrint) {
+      result = result.filter(dt => toBool(dt.print) || isValidTimestamp(dt.print_timestamp));
+    }
+    if (filterPack) {
+      result = result.filter(dt => toBool(dt.pack) || isValidTimestamp(dt.pack_time));
+    }
+    return result;
   };
 
   const filteredRows = getFilteredData();
+  const selectedItemsArr = filteredRows.filter(r => selectedRowIds.has(r.id));
+  const hasPendingKomplain = Tipe === 'komplain' && selectedItemsArr.some(r => r.id_database === 0);
+  const hasPendingLainnya = Tipe === 'lainnya' && Reason === 'pengiriman_gagal' && PengirimanGagalMethod === 'MANUAL' && selectedItemsArr.some(r => r.approved === 0 || r.status === 'pending');
  
   // RENDER CARD COMPONENT
   const renderItemCard = ({ item }: { item: any }) => {
@@ -846,15 +920,13 @@ export default function ReturOnlineScreen() {
     return (
       <View style={styles.card}>
         {/* Checkbox for Bulk Actions */}
-        {isPending && (Tipe === 'komplain' || (PengirimanGagalMethod === 'MANUAL' && Reason === 'pengiriman_gagal')) && (
-          <TouchableOpacity onPress={() => toggleSelectRow(item.id)} style={styles.checkboxContainer}>
-            <Ionicons
-              name={selectedRowIds.has(item.id) ? 'checkbox' : 'square-outline'}
-              size={22}
-              color={selectedRowIds.has(item.id) ? '#f59e0b' : '#9ca3af'}
-            />
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity onPress={() => toggleSelectRow(item.id)} style={styles.checkboxContainer}>
+          <Ionicons
+            name={selectedRowIds.has(item.id) ? 'checkbox' : 'square-outline'}
+            size={22}
+            color={selectedRowIds.has(item.id) ? '#f59e0b' : '#9ca3af'}
+          />
+        </TouchableOpacity>
 
         <TouchableOpacity style={styles.cardContent} onPress={() => openDetailModalSheet(item)}>
           {/* Platform & Shop Header */}
@@ -1161,6 +1233,51 @@ export default function ReturOnlineScreen() {
           </TouchableOpacity>
         </View>
 
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, paddingHorizontal: 4 }}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center' }}>
+            <TouchableOpacity
+              onPress={() => { setFilterScanout(!filterScanout); setSelectedRowIds(new Set()); }}
+              style={{
+                paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16,
+                backgroundColor: filterScanout ? '#e0e7ff' : '#f3f4f6',
+                borderWidth: 1, borderColor: filterScanout ? '#4f46e5' : '#d1d5db',
+                marginRight: 8
+              }}
+            >
+              <Text style={{ fontSize: 12, color: filterScanout ? '#4f46e5' : '#4b5563', fontWeight: 'bold' }}>Scan Out</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => { setFilterPrint(!filterPrint); setSelectedRowIds(new Set()); }}
+              style={{
+                paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16,
+                backgroundColor: filterPrint ? '#e0e7ff' : '#f3f4f6',
+                borderWidth: 1, borderColor: filterPrint ? '#4f46e5' : '#d1d5db',
+                marginRight: 8
+              }}
+            >
+              <Text style={{ fontSize: 12, color: filterPrint ? '#4f46e5' : '#4b5563', fontWeight: 'bold' }}>Print</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => { setFilterPack(!filterPack); setSelectedRowIds(new Set()); }}
+              style={{
+                paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16,
+                backgroundColor: filterPack ? '#e0e7ff' : '#f3f4f6',
+                borderWidth: 1, borderColor: filterPack ? '#4f46e5' : '#d1d5db',
+                marginRight: 8
+              }}
+            >
+              <Text style={{ fontSize: 12, color: filterPack ? '#4f46e5' : '#4b5563', fontWeight: 'bold' }}>Pack</Text>
+            </TouchableOpacity>
+          </ScrollView>
+          
+          <TouchableOpacity onPress={() => toggleSelectAll(filteredRows)} style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 8 }}>
+            <Ionicons name="checkbox-outline" size={18} color="#4f46e5" />
+            <Text style={{ marginLeft: 4, fontSize: 14, color: '#4f46e5', fontWeight: 'bold' }}>Pilih Semua</Text>
+          </TouchableOpacity>
+        </View>
+
         {showDatePickerStart && (
           <DateTimePicker value={dateStart.toDate()} mode="date" onChange={onDateStartChange} />
         )}
@@ -1190,37 +1307,39 @@ export default function ReturOnlineScreen() {
 
       {/* 5. Bulk actions header bar */}
       {selectedRowIds.size > 0 && (
-        <View style={styles.bulkActionBar}>
+        <View style={[styles.bulkActionBar, { flexWrap: 'wrap', gap: 8 }]}>
           <Text style={styles.bulkCountText}>{selectedRowIds.size} terpilih</Text>
 
-          {Tipe === 'komplain' ? (
-            <View style={styles.bulkActionLayout}>
-              <TouchableOpacity onPress={() => setShowBaganAkunModal(true)} style={styles.coaSelectButton}>
-                <Ionicons name="card-outline" size={16} color="#fff" style={{ marginRight: 6 }} />
-                <Text style={styles.coaSelectButtonText} numberOfLines={1}>
-                  {baganAkunPembayaran.kodeBA !== -1
-                    ? `${baganAkunPembayaran.kodeBA} - ${baganAkunPembayaran.keterangan}`
-                    : 'Pilih Akun Bank'}
-                </Text>
-              </TouchableOpacity>
+          <View style={styles.bulkActionLayout}>
+            {hasPendingKomplain && !filterScanout && !filterPrint && !filterPack && (
+              <>
+                <TouchableOpacity onPress={() => setShowBaganAkunModal(true)} style={styles.coaSelectButton}>
+                  <Ionicons name="card-outline" size={16} color="#fff" style={{ marginRight: 6 }} />
+                  <Text style={styles.coaSelectButtonText} numberOfLines={1}>
+                    {baganAkunPembayaran.kodeBA !== -1
+                      ? `${baganAkunPembayaran.kodeBA} - ${baganAkunPembayaran.keterangan}`
+                      : 'Pilih Akun Bank'}
+                  </Text>
+                </TouchableOpacity>
 
-              <TouchableOpacity
-                disabled={processingBulk}
-                onPress={() => handleBulkApproveKomplain(filteredRows)}
-                style={styles.bulkApproveBtn}
-              >
-                {processingBulk ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <>
-                    <Ionicons name="checkmark-circle" size={18} color="#fff" />
-                    <Text style={styles.bulkApproveText}>SETUJU</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <View style={styles.bulkActionLayout}>
+                <TouchableOpacity
+                  disabled={processingBulk}
+                  onPress={() => handleBulkApproveKomplain(filteredRows)}
+                  style={styles.bulkApproveBtn}
+                >
+                  {processingBulk ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <>
+                      <Ionicons name="checkmark-circle" size={18} color="#fff" />
+                      <Text style={styles.bulkApproveText}>SETUJU</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </>
+            )}
+
+            {hasPendingLainnya && !filterScanout && !filterPrint && !filterPack && (
               <TouchableOpacity
                 disabled={processingBulk}
                 onPress={() => handleBulkApproveLainnya(filteredRows)}
@@ -1235,8 +1354,17 @@ export default function ReturOnlineScreen() {
                   </>
                 )}
               </TouchableOpacity>
-            </View>
-          )}
+            )}
+
+            <TouchableOpacity
+              disabled={processingBulk}
+              onPress={() => handlePrintLaporan(filteredRows)}
+              style={[styles.bulkApproveBtn, { backgroundColor: '#3b82f6', marginLeft: 8 }]}
+            >
+              <Ionicons name="print-outline" size={18} color="#fff" />
+              <Text style={styles.bulkApproveText}>CETAK PDF</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
