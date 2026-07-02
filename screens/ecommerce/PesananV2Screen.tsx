@@ -181,7 +181,7 @@ export default function PesananV2Screen() {
             // Standardize print and scanned flags flexibly to handle any V2 API format variations
             rawDbOrders = rawDbOrders.map((rd: any) => {
                 const rawScanned = rd.scanned !== undefined ? rd.scanned : rd.is_scanned;
-                const rawPrint = rd.print !== undefined ? rd.print : rd.is_printed;
+                const rawPrint = rd.print !== undefined ? rd.print : (rd.is_printed !== undefined ? rd.is_printed : (rd.is_print !== undefined ? rd.is_print : (rd.cetak !== undefined ? rd.cetak : rd.is_cetak)));
                 const rawPacked = rd.packed !== undefined ? rd.packed : rd.is_packed;
                 
                 const isScanned = (!!rawScanned && rawScanned !== '0' && rawScanned !== 0 && String(rawScanned).toLowerCase() !== 'false') || !!rd.scan_timestamp;
@@ -228,6 +228,12 @@ export default function PesananV2Screen() {
                            (o.buyer_username || '').toLowerCase().includes(t) ||
                            (o.no_resi || '').toLowerCase().includes(t);
                 });
+            };
+
+            const filterKurir = (o: any) => {
+                if (effectiveKurirs.length === 0) return true;
+                const courierName = (o.shipping_carrier || o.nama_kurir || '').toLowerCase();
+                return effectiveKurirs.some((k: string) => k.toLowerCase() === courierName);
             };
             
             // Map raw booking fields to display fields (mirrors web Pesanan V2 mapping)
@@ -287,12 +293,12 @@ export default function PesananV2Screen() {
                     })),
                     orderType: 'PENGIRIMAN KILAT',
                 }))
-                .filter(o => filterTab(o) && filterSearch(o));
+                .filter(o => filterTab(o) && filterSearch(o) && filterKurir(o));
                 
             // Ensure standard booleans for kilat as well using flexible checks
             preFilteredKilat.forEach((o: any) => {
                 const rawScanned = o.scanned !== undefined ? o.scanned : o.is_scanned;
-                const rawPrint = o.print !== undefined ? o.print : o.is_printed;
+                const rawPrint = o.print !== undefined ? o.print : (o.is_printed !== undefined ? o.is_printed : (o.is_print !== undefined ? o.is_print : (o.cetak !== undefined ? o.cetak : o.is_cetak)));
                 const rawPacked = o.packed !== undefined ? o.packed : o.is_packed;
                 
                 o.scanned = (!!rawScanned && rawScanned !== '0' && rawScanned !== 0 && String(rawScanned).toLowerCase() !== 'false') || !!o.scan_timestamp;
@@ -818,6 +824,7 @@ export default function PesananV2Screen() {
                                 : item.id_online,
                               id_ecommerce: item.ecommerce_id,
                               scan_timestamp: item.scan_timestamp,
+                              print: item.print,
                               print_timestamp: item.print_timestamp,
                               scanned: item.scanned,
                               packed: item.packed,

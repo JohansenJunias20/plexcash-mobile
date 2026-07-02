@@ -13,8 +13,9 @@ interface Props {
 }
 
 export default function PesananV2FilterModal({ visible, onClose, state, setters, onApply, filterCounts, ecommerceList }: Props) {
-    const { searchType, sortMethod, dateType, orderTypeFilter, hasPenjualan, platformFilter, filterCetak, filterScan, filterResep, selectedEcommerces } = state;
-    const { setSearchType, setSortMethod, setDateType, setOrderTypeFilter, setHasPenjualan, setPlatformFilter, setFilterCetak, setFilterScan, setFilterResep, setSelectedEcommerces } = setters;
+    const { searchType, sortMethod, dateType, orderTypeFilter, hasPenjualan, platformFilter, filterCetak, filterScan, filterResep, selectedEcommerces, kurirFilters } = state;
+    const { setSearchType, setSortMethod, setDateType, setOrderTypeFilter, setHasPenjualan, setPlatformFilter, setFilterCetak, setFilterScan, setFilterResep, setSelectedEcommerces, setKurirFilters } = setters;
+
 
     const OptionChip = ({ label, selected, onPress }: { label: string, selected: boolean, onPress: () => void }) => (
         <TouchableOpacity style={[styles.chip, selected && styles.chipSelected]} onPress={onPress}>
@@ -89,6 +90,33 @@ export default function PesananV2FilterModal({ visible, onClose, state, setters,
                             <OptionChip label="Hanya Order Berresep" selected={filterResep === true} onPress={() => setFilterResep(!filterResep)} />
                         </View>
 
+
+                        {/* Ekspedisi / Kurir */}
+                        {filterCounts.kurir && Object.keys(filterCounts.kurir).length > 0 && (
+                            <>
+                                <Text style={styles.sectionTitle}>Ekspedisi / Kurir</Text>
+                                <View style={styles.rowWrap}>
+                                    {Object.keys(filterCounts.kurir).map(kurirName => {
+                                        const count = filterCounts.kurir[kurirName] || 0;
+                                        const isSelected = kurirFilters?.includes(kurirName) ?? false;
+                                        return (
+                                            <OptionChip
+                                                key={kurirName}
+                                                label={`${kurirName} (${count})`}
+                                                selected={isSelected}
+                                                onPress={() => {
+                                                    const newSel = isSelected
+                                                        ? kurirFilters.filter((k: string) => k !== kurirName)
+                                                        : [...(kurirFilters || []), kurirName];
+                                                    setKurirFilters(newSel);
+                                                }}
+                                            />
+                                        );
+                                    })}
+                                </View>
+                            </>
+                        )}
+
                         {/* Toko */}
                         {ecommerceList.length > 0 && (
                             <>
@@ -124,6 +152,7 @@ export default function PesananV2FilterModal({ visible, onClose, state, setters,
                             setFilterScan('semua');
                             setFilterResep(false);
                             setSelectedEcommerces([]);
+                            setKurirFilters([]);
                         }}>
                             <Text style={styles.resetBtnText}>Reset</Text>
                         </TouchableOpacity>

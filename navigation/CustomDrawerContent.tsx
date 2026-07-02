@@ -310,6 +310,7 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ navigation, s
       {checkAccess(a?.ecommerce?.booking_orders) && <DrawerItem label="Booking Orders" icon="airplane" onPress={() => navigation.navigate('BookingOrders')} active={currentRoute === 'BookingOrders'} badge="NEW" />}
       {checkAccess(a?.ecommerce?.integration) && <DrawerItem label="Integration" icon="git-network" onPress={() => navigation.navigate('Integration')} active={currentRoute === 'Integration'} />}
       {checkAccess(a?.ecommerce?.pack) && <DrawerItem label="Pack" icon="cube-outline" onPress={() => navigation.navigate('Pack')} active={currentRoute === 'Pack'} />}
+      {checkAccess(a?.ecommerce?.kesehatan_toko) && <DrawerItem label="Kesehatan Toko" icon="heart-half-outline" onPress={() => navigation.navigate('KesehatanToko')} active={currentRoute === 'KesehatanToko'} />}
 
       {/* Ecommerce Tools - Collapsible */}
       {checkAccess(a?.ecommerce?.ecommerce_tools?.product) && (

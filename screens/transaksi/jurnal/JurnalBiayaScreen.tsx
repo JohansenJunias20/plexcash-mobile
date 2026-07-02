@@ -49,6 +49,25 @@ const getErrorMessage = (reason: any, defaultMsg: string): string => {
   return String(reason);
 };
 
+const getDefaultDates = () => {
+  const start = new Date();
+  start.setMonth(start.getMonth() - 1);
+  const end = new Date();
+  end.setDate(end.getDate() + 1);
+
+  const formatDateStr = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  return {
+    start: formatDateStr(start),
+    end: formatDateStr(end),
+  };
+};
+
 export default function JurnalBiayaScreen() {
   const navigation = useNavigation<any>();
   const { user } = useAuth();
@@ -59,11 +78,11 @@ export default function JurnalBiayaScreen() {
   const [tambahNominal, setTambahNominal] = useState('');
   
   const [biaya, setBiaya] = useState<{ kode: string; nama: string }>({ kode: '', nama: '' });
-  const [kas, setKas] = useState<{ kode: string; nama: string }>({ kode: '', nama: '' });
+  const [kas, setKas] = useState<{ kode: string; nama: string }>({ kode: '111.2', nama: 'BCA' });
 
   // Riwayat State
-  const [intervalDate, setIntervalDate] = useState({ start: '', end: '' });
-  const [showIntervalPicker, setShowIntervalPicker] = useState(true);
+  const [intervalDate, setIntervalDate] = useState(getDefaultDates());
+  const [showIntervalPicker, setShowIntervalPicker] = useState(false);
   const [riwayat, setRiwayat] = useState<JurnalItem[]>([]);
   const [loadingRiwayat, setLoadingRiwayat] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -80,67 +99,27 @@ export default function JurnalBiayaScreen() {
   const [lastSavedData, setLastSavedData] = useState<any>(null);
   const [isLoaded, setIsLoaded] = useState(false);
 
-  // Initialize date on mount and load cache (draft/last-saved)
+  // Initialize date on mount and load defaults
   useEffect(() => {
-    const initAndLoadCache = async () => {
+    const initScreen = async () => {
       const now = new Date();
       const formattedDate = now.toISOString().slice(0, 19); // YYYY-MM-DDTHH:mm:ss
       setTambahTanggal(formattedDate);
 
+      // Load riwayat using default dates initially
+      const defaults = getDefaultDates();
+      loadRiwayat(defaults.start, defaults.end);
+
       try {
-        const draftStr = await AsyncStorage.getItem(DRAFT_KEY);
-        const lastSavedStr = await AsyncStorage.getItem(LAST_SAVED_KEY);
-
-        let loadedBiaya = { kode: '', nama: '' };
-        let loadedKas = { kode: '', nama: '' };
-
-        if (lastSavedStr) {
-          setLastSavedData(JSON.parse(lastSavedStr));
-        }
-
-        if (draftStr) {
-          const draft = JSON.parse(draftStr);
-          if (draft.tanggal) setTambahTanggal(draft.tanggal);
-          if (draft.keterangan !== undefined) setTambahKeterangan(draft.keterangan);
-          if (draft.nominal !== undefined) setTambahNominal(draft.nominal);
-          if (draft.biaya) {
-            setBiaya(draft.biaya);
-            loadedBiaya = draft.biaya;
-          }
-          if (draft.kas) {
-            setKas(draft.kas);
-            loadedKas = draft.kas;
-          }
-        } else if (lastSavedStr) {
-          const lastSaved = JSON.parse(lastSavedStr);
-          if (lastSaved.keterangan !== undefined) setTambahKeterangan(lastSaved.keterangan);
-          if (lastSaved.nominal !== undefined) setTambahNominal(lastSaved.nominal);
-          if (lastSaved.biaya) {
-            setBiaya(lastSaved.biaya);
-            loadedBiaya = lastSaved.biaya;
-          }
-          if (lastSaved.kas) {
-            setKas(lastSaved.kas);
-            loadedKas = lastSaved.kas;
-          }
-          
-          setLastSavedData({
-            ...lastSaved,
-            tanggal: formattedDate
-          });
-        }
-
+        // Validate default Kas account
+        validateAccounts('', '111.2');
         setIsLoaded(true);
-
-        if (loadedBiaya.kode || loadedKas.kode) {
-          validateAccounts(loadedBiaya.kode, loadedKas.kode);
-        }
       } catch (e) {
-        console.error('Error loading cache:', e);
+        console.error('Error loading default state:', e);
         setIsLoaded(true);
       }
     };
-    initAndLoadCache();
+    initScreen();
   }, []);
 
   const validateAccounts = async (bKode: string, kKode: string) => {
@@ -383,7 +362,7 @@ export default function JurnalBiayaScreen() {
         // Reset form
         setTambahKeterangan('');
         setBiaya({ kode: '', nama: '' });
-        setKas({ kode: '', nama: '' });
+        setKas({ kode: '111.2', nama: 'BCA' });
         setTambahNominal('');
 
         const now = new Date();

@@ -831,7 +831,7 @@ export default function DiskonScreen({ navigation }: any) {
                     </View>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
                       <Text style={{ fontSize: 12, color: '#64748b' }}>Base (HJ2)</Text>
-                      <Text style={{ fontSize: 12, fontWeight: '600' }}>Rp {Number(item.harga_jual_2 || item.harga_base).toLocaleString('id-ID')}</Text>
+                      <Text style={{ fontSize: 12, fontWeight: '600' }}>Rp {Number(item.harga_jual_2 ?? item.harga_base ?? item.hargajual2 ?? 0).toLocaleString('id-ID')}</Text>
                     </View>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4, paddingTop: 4, borderTopWidth: 1, borderTopColor: '#e2e8f0' }}>
                       <Text style={{ fontSize: 12, color: '#64748b' }}>Margin Promo</Text>

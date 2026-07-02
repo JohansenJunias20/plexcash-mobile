@@ -29,6 +29,7 @@ import Settingscreen from '../screens/Settingscreen';
 import PembelianRincianScreen from '../screens/transaksi/pembelian/PembelianRincianScreen';
 import PerangkatListScreen from '../screens/perangkat/PerangkatListScreen';
 import PerangkatConfigScreen from '../screens/perangkat/PerangkatConfigScreen';
+import KesehatanTokoScreen from '../screens/ecommerce/KesehatanTokoScreen';
 import { View, ActivityIndicator } from 'react-native';
 import { logNavigation, logStateChange } from '../utils/logger';
 
@@ -82,6 +83,7 @@ export type AppStackParamList = {
   PerangkatList: undefined;
   PerangkatConfig: { client_id: string; desktop_name: string };
   DiskonScreen: undefined;
+  KesehatanToko: undefined;
 };
 
 const AuthStack = createNativeStackNavigator();
@@ -176,6 +178,7 @@ export default function RootNavigator() {
       <AppStack.Screen name="PembelianRincian" component={PembelianRincianScreen} options={{ title: 'Rincian Pembelian' }} />
       <AppStack.Screen name="PerangkatList" component={PerangkatListScreen} options={{ headerShown: false }} />
       <AppStack.Screen name="PerangkatConfig" component={PerangkatConfigScreen} options={{ headerShown: false }} />
+      <AppStack.Screen name="KesehatanToko" component={KesehatanTokoScreen} options={{ title: 'Kesehatan Toko' }} />
     </AppStack.Navigator>
   );
 }

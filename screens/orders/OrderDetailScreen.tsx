@@ -24,6 +24,7 @@ export type OrderDetail = {
   items?: { sku: string; name: string; qty: number; price?: number; id_online?: string; id_parent?: string; image_url?: string }[];
   orderType?: string;
   booking_sn?: string;
+  print?: boolean;
   print_timestamp?: string;
   scanned?: boolean;
   scan_timestamp?: string | null;
@@ -34,7 +35,7 @@ export type OrderDetail = {
 type Props = NativeStackScreenProps<AppStackParamList, 'OrderDetail'>;
 
 export default function OrderDetailScreen({ route, navigation }: Props) {
-  const { id, id_ecommerce, scan_timestamp, print_timestamp, scanned, booking_sn, kilat_order_data, packed, pack_timestamp } = route.params;
+  const { id, id_ecommerce, scan_timestamp, print_timestamp, print, scanned, booking_sn, kilat_order_data, packed, pack_timestamp } = route.params;
   const [detail, setDetail] = useState<OrderDetail | null>(null);
   const [access, setAccess] = useState<{ actions?: { create?: boolean } } | undefined>();
   const [loading, setLoading] = useState(true);
@@ -104,6 +105,10 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
         const d = res.data;
 
         const finalPrintTimestamp = d.print_timestamp || print_timestamp || undefined;
+        
+        const rawPrint = d.print !== undefined ? d.print : (d.is_printed !== undefined ? d.is_printed : (d.is_print !== undefined ? d.is_print : (d.cetak !== undefined ? d.cetak : d.is_cetak)));
+        const finalPrint = (!!rawPrint && rawPrint !== '0' && rawPrint !== 0 && String(rawPrint).toLowerCase() !== 'false') || !!finalPrintTimestamp || print || false;
+
         const finalScanned = d.scanned !== undefined ? (d.scanned === true || d.scanned === 1 || d.scanned === '1' || String(d.scanned).toLowerCase() === 'true') : (scanned !== undefined ? scanned : false);
         const finalScanTimestamp = d.scan_timestamp !== undefined ? d.scan_timestamp : (scan_timestamp !== undefined ? scan_timestamp : null);
         const finalPacked = d.packed !== undefined ? (d.packed === true || d.packed === 1 || d.packed === '1' || String(d.packed).toLowerCase() === 'true') : (packed !== undefined ? packed : false);
@@ -130,6 +135,7 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
           })),
           orderType: d.orderType,
           booking_sn: d.booking_sn,
+          print: finalPrint,
           print_timestamp: finalPrintTimestamp,
           scanned: finalScanned,
           scan_timestamp: finalScanTimestamp,
@@ -161,6 +167,7 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
           })),
           orderType: 'PENGIRIMAN KILAT',
           booking_sn,
+          print: print || false,
           print_timestamp: print_timestamp || undefined,
           scanned: scanned || false,
           scan_timestamp: scan_timestamp || null,
@@ -442,17 +449,19 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
             </View>
           )}
 
-          {detail.print_timestamp && (
-            <View style={styles.infoRow}>
-              <View style={styles.infoIconContainer}>
-                <Ionicons name="print-outline" size={20} color="#6B7280" />
-              </View>
-              <View style={styles.infoContent}>
-                <Text style={styles.infoLabel}>Print Date</Text>
-                <Text style={styles.infoValue}>{formatDate(detail.print_timestamp)}</Text>
-              </View>
+          <View style={styles.infoRow}>
+            <View style={styles.infoIconContainer}>
+              <Ionicons name="print-outline" size={20} color="#6B7280" />
             </View>
-          )}
+            <View style={styles.infoContent}>
+              <Text style={styles.infoLabel}>Print Date</Text>
+              <Text style={styles.infoValue}>
+                {detail.print_timestamp 
+                  ? formatDate(detail.print_timestamp) 
+                  : (detail.print ? 'Sudah Dicetak (Tanggal tidak tersedia)' : 'Belum Cetak')}
+              </Text>
+            </View>
+          </View>
 
           <View style={styles.infoRow}>
             <View style={styles.infoIconContainer}>

@@ -21,6 +21,7 @@ import SearchSupplierModal, { SupplierItem } from '../../../components/pembelian
 import SearchBaganAkunModal, { BaganAkunItem } from '../../../components/pembelian/SearchBaganAkunModal';
 import SearchDPBeliModal, { DPBeliItem } from '../../../components/pembelian/SearchDPBeliModal';
 import { useAccess } from '../../../context/AccessContext';
+import AttachmentUploader, { DriveFile } from '../../../components/AttachmentUploader';
 
 // ---------------------------------------------------------------------------
 // State shape — mirrors the web interface exactly
@@ -37,11 +38,13 @@ export default function PembelianDPBeliScreen() {
     moment().format('YYYY-MM-DDTHH:mm:ss')
   );
   const [supplier, setSupplier] = useState<Supplier>({ id: 0, nama: '' });
-  const [kodeBaganAkun, setKodeBaganAkun] = useState('');
+  const [kodeBaganAkun, setKodeBaganAkun] = useState('111.2');
   const [keterangan, setKeterangan] = useState('');
   const [dp, setDp] = useState('');
   const [terpakai, setTerpakai] = useState<number>(0);
   const [isSaving, setIsSaving] = useState(false);
+  const [isGDriveConnected, setIsGDriveConnected] = useState(false);
+  const [pendingAttachments, setPendingAttachments] = useState<DriveFile[]>([]);
 
   // --- Modal visibility ---
   const [showSupplier, setShowSupplier] = useState(false);
@@ -57,6 +60,22 @@ export default function PembelianDPBeliScreen() {
   const navigation = useNavigation();
   const { access } = useAccess();
 
+  React.useEffect(() => {
+    const checkGDriveStatus = async () => {
+      try {
+        const token = await getTokenAuth();
+        const res = await fetch(`${API_BASE_URL}/google-drive/status`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = await res.json();
+        setIsGDriveConnected(!!data.connected);
+      } catch (e) {
+        console.error("Failed to check Google Drive status:", e);
+      }
+    };
+    checkGDriveStatus();
+  }, []);
+
   // Permission flags read from context — identical to web's context.state.access.actions.*
   const canCreate = !!access.actions?.create;
   const canUpdate = !!access.actions?.update;
@@ -71,10 +90,11 @@ export default function PembelianDPBeliScreen() {
     setId('BARU');
     setTanggal(moment().format('YYYY-MM-DDTHH:mm:ss'));
     setSupplier({ id: 0, nama: '' });
-    setKodeBaganAkun('');
+    setKodeBaganAkun('111.2');
     setKeterangan('');
     setDp('');
     setTerpakai(0);
+    setPendingAttachments([]);
   };
 
   const handleSupplierSelect = (item: SupplierItem) => {
@@ -245,6 +265,27 @@ export default function PembelianDPBeliScreen() {
         if (result.status) {
           Alert.alert('Sukses', 'sukses menyimpan');
           console.log(result);
+          
+          if (pendingAttachments.length > 0) {
+            try {
+              await fetch(`${API_BASE_URL}/google-drive/link-attachments`, {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  type: 'dp_beli',
+                  transaction_id: result.id,
+                  files: pendingAttachments,
+                }),
+              });
+              setPendingAttachments([]);
+            } catch (e) {
+              console.error("Failed to link attachments:", e);
+            }
+          }
+
           // Switch to edit mode with server-assigned id
           setId(result.id.toString());
         } else {
@@ -444,6 +485,14 @@ export default function PembelianDPBeliScreen() {
               />
             </View>
           )}
+
+          {/* 8. Attachment Uploader */}
+          <AttachmentUploader
+            transactionType="dp_beli"
+            transactionId={id === 'BARU' ? null : id}
+            isGDriveConnected={isGDriveConnected}
+            onPendingFilesChange={setPendingAttachments}
+          />
         </View>
       </ScrollView>
 

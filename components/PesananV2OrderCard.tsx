@@ -236,6 +236,19 @@ export default function PesananV2OrderCard({ order, isSelected, onToggleSelect, 
           <Text style={styles.infoText}> {order.tanggal_order ? moment(order.tanggal_order).format('DD/MM/YYYY HH:mm') : '-'}</Text>
         </View>
 
+        {/* Print Date */}
+        {(order.print_timestamp || order.print) && (
+          <View style={styles.row}>
+            <Ionicons name="print-outline" size={14} color="#6B7280" />
+            <Text style={styles.infoText}>
+              {' '}
+              {order.print_timestamp 
+                ? moment(order.print_timestamp).format('DD/MM/YYYY HH:mm') 
+                : 'Sudah Dicetak (Tanggal tidak tersedia)'}
+            </Text>
+          </View>
+        )}
+
         {/* Items Summary */}
         <View style={styles.itemsBox}>
             {order.items?.slice(0, 2).map((item: any, idx: number) => (
