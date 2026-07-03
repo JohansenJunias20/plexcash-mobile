@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert, ActivityIndicator, Linking, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert, ActivityIndicator, Linking, TextInput, ScrollView, RefreshControl, Platform } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Camera, useCameraDevice, useCodeScanner } from 'react-native-vision-camera';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,6 +8,7 @@ import * as Haptics from 'expo-haptics';
 import { useNavigation, DrawerActions, useIsFocused } from '@react-navigation/native';
 import ApiService from '../../services/api';
 import { Audio } from 'expo-av';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 interface ScannedOrder {
   orderNumber: string;
@@ -31,6 +32,30 @@ export default function ScanOutScreen(): JSX.Element {
   const isCooldownRef = useRef(false);
   const device = useCameraDevice('back');
   const isFocused = useIsFocused();
+  
+  const [activeTab, setActiveTab] = useState(0);
+  const [laporanData, setLaporanData] = useState<any>(null);
+  const [laporanLoading, setLaporanLoading] = useState(false);
+  
+  // Search States
+  const [searchResi, setSearchResi] = useState('');
+  const [searchStatus, setSearchStatus] = useState<'semua' | 'sudah' | 'belum'>('semua');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchAggregation, setSearchAggregation] = useState<any>(null);
+  const [dateFrom, setDateFrom] = useState(new Date());
+  const [dateTo, setDateTo] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState<{type: 'from' | 'to', visible: boolean}>({type: 'from', visible: false});
+
+  const onDateChange = (event: any, selectedDate?: Date) => {
+    const isFrom = showDatePicker.type === 'from';
+    if (Platform.OS === 'android') {
+      setShowDatePicker({ ...showDatePicker, visible: false });
+    }
+    if (selectedDate) {
+      if (isFrom) setDateFrom(selectedDate);
+      else setDateTo(selectedDate);
+    }
+  };
 
   const codeScanner = useCodeScanner({
     codeTypes: ['qr', 'code-128', 'code-39', 'ean-13', 'ean-8'],
@@ -49,6 +74,71 @@ export default function ScanOutScreen(): JSX.Element {
       // Audio sounds are managed individually in playSound with unloadAsync
     };
   }, []);
+
+  const fetchTodayStats = async (statusOverride?: string) => {
+    try {
+      const currentStatus = statusOverride !== undefined ? statusOverride : searchStatus;
+      
+      const todayDate = new Date();
+      const todayStr = todayDate.getFullYear() + '-' + String(todayDate.getMonth() + 1).padStart(2, '0') + '-' + String(todayDate.getDate()).padStart(2, '0');
+      
+      let url = `/scanout/search?date_from=${todayStr}&date_to=${todayStr}&include_printed_list=true&limit=1`;
+      if (currentStatus === 'sudah') url += '&status_scan=sudah';
+      else if (currentStatus === 'belum') url += '&status_scan=belum';
+      if (searchResi.trim() !== '') url += `&resi=${encodeURIComponent(searchResi.trim())}`;
+
+      const response = await ApiService.authenticatedRequest(url, { method: 'GET' });
+      if (response?.status && response.aggregation) {
+        setLaporanData(response.aggregation);
+      }
+    } catch (error) {
+      console.error('Error fetching today stats:', error);
+    }
+  };
+
+  const fetchSearchResults = async (statusOverride?: string) => {
+    setLaporanLoading(true);
+    try {
+      const currentStatus = statusOverride !== undefined ? statusOverride : searchStatus;
+      
+      const fromStr = dateFrom.getFullYear() + '-' + String(dateFrom.getMonth() + 1).padStart(2, '0') + '-' + String(dateFrom.getDate()).padStart(2, '0');
+      const toStr = dateTo.getFullYear() + '-' + String(dateTo.getMonth() + 1).padStart(2, '0') + '-' + String(dateTo.getDate()).padStart(2, '0');
+      
+      let url = `/scanout/search?date_from=${fromStr}&date_to=${toStr}&limit=100`;
+      if (currentStatus === 'sudah') url += '&status_scan=sudah';
+      else if (currentStatus === 'belum') url += '&status_scan=belum';
+      if (searchResi.trim() !== '') url += `&resi=${encodeURIComponent(searchResi.trim())}`;
+      
+      const response = await ApiService.authenticatedRequest(url, { method: 'GET' });
+      if (response?.status) {
+        if (response.data) setSearchResults(response.data);
+        else setSearchResults([]);
+        
+        if (response.aggregation) setSearchAggregation(response.aggregation);
+      } else {
+        setSearchResults([]);
+        setSearchAggregation(null);
+      }
+    } catch (error) {
+      console.error('Error fetching search results:', error);
+      Alert.alert('Error', 'Gagal memuat hasil pencarian.');
+    } finally {
+      setLaporanLoading(false);
+    }
+  };
+
+  const handleRefreshLaporan = async (statusOverride?: string) => {
+    setLaporanLoading(true);
+    await Promise.all([fetchTodayStats(statusOverride), fetchSearchResults(statusOverride)]);
+    setLaporanLoading(false);
+  };
+
+  useEffect(() => {
+    if (activeTab === 1) {
+      if (!laporanData) fetchTodayStats();
+      if (searchResults.length === 0) fetchSearchResults();
+    }
+  }, [activeTab]);
 
   const playSound = async (type: 'success' | 'warning' | 'error') => {
     try {
@@ -359,21 +449,238 @@ const renderScannedOrder = ({ item, index }: { item: ScannedOrder; index: number
           <Ionicons name="menu" size={28} color="#f59e0b" />
         </TouchableOpacity>
         <Text style={styles.topHeaderTitle}>Scan Out</Text>
-        <TouchableOpacity
-          style={styles.cameraToggleButton}
-          onPress={() => setIsCameraActive(prev => !prev)}
+        {activeTab === 0 ? (
+          <TouchableOpacity
+            style={styles.cameraToggleButton}
+            onPress={() => setIsCameraActive(prev => !prev)}
+          >
+            <Ionicons 
+              name={isCameraActive ? "videocam" : "videocam-off"} 
+              size={24} 
+              color={isCameraActive ? "#10B981" : "#EF4444"} 
+            />
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.headerRight} />
+        )}
+      </View>
+
+      {/* Tabs */}
+      <View style={styles.tabContainer}>
+        <TouchableOpacity 
+          style={[styles.tabButton, activeTab === 0 && styles.tabButtonActive]}
+          onPress={() => setActiveTab(0)}
         >
-          <Ionicons 
-            name={isCameraActive ? "videocam" : "videocam-off"} 
-            size={24} 
-            color={isCameraActive ? "#10B981" : "#EF4444"} 
-          />
+          <Text style={[styles.tabText, activeTab === 0 && styles.tabTextActive]}>Scan Resi</Text>
         </TouchableOpacity>
-        <View style={styles.headerRight} />
+        <TouchableOpacity 
+          style={[styles.tabButton, activeTab === 1 && styles.tabButtonActive]}
+          onPress={() => setActiveTab(1)}
+        >
+          <Text style={[styles.tabText, activeTab === 1 && styles.tabTextActive]}>Progress & Laporan</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Body Content */}
-      {!hasPermission ? (
+      {activeTab === 1 ? (
+        <ScrollView 
+          style={styles.laporanContainer}
+          refreshControl={
+            <RefreshControl refreshing={laporanLoading} onRefresh={handleRefreshLaporan} colors={['#f59e0b']} />
+          }
+        >
+          {laporanLoading && !laporanData ? (
+            <View style={{ padding: 40, alignItems: 'center' }}>
+              <ActivityIndicator size="large" color="#f59e0b" />
+              <Text style={{ marginTop: 10, color: '#6B7280' }}>Memuat laporan...</Text>
+            </View>
+          ) : laporanData ? (
+            <View style={styles.laporanContent}>
+              
+              {/* Filter Section */}
+              <View style={styles.laporanCard}>
+                <Text style={styles.laporanCardTitle}>Cari & Filter Scan</Text>
+                
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <TouchableOpacity 
+                    style={styles.datePickerBtn}
+                    onPress={() => setShowDatePicker({ type: 'from', visible: true })}
+                  >
+                    <Ionicons name="calendar-outline" size={16} color="#6B7280" style={{ marginRight: 6 }} />
+                    <Text style={styles.datePickerText}>Dari: {dateFrom.toLocaleDateString('id-ID')}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={styles.datePickerBtn}
+                    onPress={() => setShowDatePicker({ type: 'to', visible: true })}
+                  >
+                    <Ionicons name="calendar-outline" size={16} color="#6B7280" style={{ marginRight: 6 }} />
+                    <Text style={styles.datePickerText}>Sampai: {dateTo.toLocaleDateString('id-ID')}</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {showDatePicker.visible && (
+                  <DateTimePicker
+                    value={showDatePicker.type === 'from' ? dateFrom : dateTo}
+                    mode="date"
+                    display="default"
+                    onChange={onDateChange}
+                  />
+                )}
+                
+                <View style={styles.statusFilterContainer}>
+                  <TouchableOpacity 
+                    style={[styles.statusFilterBtn, searchStatus === 'semua' && styles.statusFilterBtnActive]}
+                    onPress={() => {
+                      setSearchStatus('semua');
+                      handleRefreshLaporan('semua');
+                    }}
+                  >
+                    <Text style={[styles.statusFilterText, searchStatus === 'semua' && styles.statusFilterTextActive]}>Semua</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={[styles.statusFilterBtn, searchStatus === 'sudah' && styles.statusFilterBtnActive]}
+                    onPress={() => {
+                      setSearchStatus('sudah');
+                      handleRefreshLaporan('sudah');
+                    }}
+                  >
+                    <Text style={[styles.statusFilterText, searchStatus === 'sudah' && styles.statusFilterTextActive]}>Sudah Scan</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={[styles.statusFilterBtn, searchStatus === 'belum' && styles.statusFilterBtnActive]}
+                    onPress={() => {
+                      setSearchStatus('belum');
+                      handleRefreshLaporan('belum');
+                    }}
+                  >
+                    <Text style={[styles.statusFilterText, searchStatus === 'belum' && styles.statusFilterTextActive]}>Belum Scan</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.searchRow}>
+                  <TextInput
+                    style={styles.searchInput}
+                    placeholder="Nomor Resi..."
+                    value={searchResi}
+                    onChangeText={setSearchResi}
+                    onSubmitEditing={() => handleRefreshLaporan()}
+                    returnKeyType="search"
+                  />
+                  <TouchableOpacity style={styles.searchBtn} onPress={() => handleRefreshLaporan()}>
+                    <Ionicons name="search" size={20} color="white" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+              <View style={styles.laporanCard}>
+                <Text style={styles.laporanCardTitle}>Keseluruhan (Hari Ini)</Text>
+                {(() => {
+                  const rawTotal = laporanData.overall?.printed || 0;
+                  const scanned = laporanData.overall?.scanned || 0;
+                  const total = rawTotal < scanned ? scanned : rawTotal;
+                  const percent = total > 0 ? Math.round((scanned / total) * 100) : 0;
+                  return (
+                    <View style={styles.progressRow}>
+                      <View style={styles.progressBarBg}>
+                        <View style={[styles.progressBarFill, { width: `${percent}%`, backgroundColor: percent >= 100 ? '#10B981' : '#3B82F6' }]} />
+                      </View>
+                      <Text style={styles.progressText}>{scanned} / {total} ({percent}%)</Text>
+                    </View>
+                  );
+                })()}
+              </View>
+
+              {searchAggregation?.byShop && Object.keys(searchAggregation.byShop).length > 0 && (
+                <View style={styles.laporanCard}>
+                  <Text style={styles.laporanCardTitle}>Berdasarkan Toko</Text>
+                  {Object.keys(searchAggregation.byShop).sort().map(shop => {
+                    const rawTotal = searchAggregation.byShop[shop].printed || 0;
+                    const scanned = searchAggregation.byShop[shop].scanned || 0;
+                    const total = rawTotal < scanned ? scanned : rawTotal;
+                    const percent = total > 0 ? Math.round((scanned / total) * 100) : 0;
+                    return (
+                      <View key={shop} style={styles.progressItem}>
+                        <Text style={styles.progressLabel}>{shop}</Text>
+                        <View style={styles.progressRow}>
+                          <View style={styles.progressBarBgSmall}>
+                            <View style={[styles.progressBarFillSmall, { width: `${percent}%`, backgroundColor: percent >= 100 ? '#10B981' : '#F59E0B' }]} />
+                          </View>
+                          <Text style={styles.progressTextSmall}>{scanned}/{total} ({percent}%)</Text>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+
+              {searchAggregation?.byExpedition && Object.keys(searchAggregation.byExpedition).length > 0 && (
+                <View style={styles.laporanCard}>
+                  <Text style={styles.laporanCardTitle}>Berdasarkan Ekspedisi</Text>
+                  {Object.keys(searchAggregation.byExpedition).sort().map(exp => {
+                    const rawTotal = searchAggregation.byExpedition[exp].printed || 0;
+                    const scanned = searchAggregation.byExpedition[exp].scanned || 0;
+                    const total = rawTotal < scanned ? scanned : rawTotal;
+                    const percent = total > 0 ? Math.round((scanned / total) * 100) : 0;
+                    return (
+                      <View key={exp} style={styles.progressItem}>
+                        <Text style={styles.progressLabel}>{exp}</Text>
+                        <View style={styles.progressRow}>
+                          <View style={styles.progressBarBgSmall}>
+                            <View style={[styles.progressBarFillSmall, { width: `${percent}%`, backgroundColor: percent >= 100 ? '#10B981' : '#8B5CF6' }]} />
+                          </View>
+                          <Text style={styles.progressTextSmall}>{scanned}/{total} ({percent}%)</Text>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+
+              {/* Search Results List */}
+              <View style={styles.laporanCard}>
+                <Text style={styles.laporanCardTitle}>Hasil Pencarian ({searchResults.length})</Text>
+                {searchResults.length === 0 ? (
+                  <View style={{ padding: 20, alignItems: 'center' }}>
+                    <Ionicons name="search-outline" size={40} color="#9CA3AF" />
+                    <Text style={{ marginTop: 10, color: '#6B7280' }}>Tidak ada data scan ditemukan</Text>
+                  </View>
+                ) : (
+                  searchResults.map((item, index) => (
+                    <View key={item.order_id || index} style={styles.resultCard}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <Text style={{ fontWeight: 'bold', color: '#111827' }}>{item.resi}</Text>
+                        <Text style={{ fontSize: 12, color: item.time_scan ? '#10B981' : '#EF4444', fontWeight: '500' }}>
+                          {item.time_scan ? 'Sudah Scan' : 'Belum Scan'}
+                        </Text>
+                      </View>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+                        <Ionicons name="storefront-outline" size={14} color="#6B7280" style={{ marginRight: 4 }} />
+                        <Text style={{ fontSize: 13, color: '#4B5563' }}>{item.shop_name || '-'}</Text>
+                        {item.platform && (
+                          <View style={{ backgroundColor: '#F3F4F6', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginLeft: 8 }}>
+                            <Text style={{ fontSize: 10, color: '#4B5563', fontWeight: '600' }}>{item.platform}</Text>
+                          </View>
+                        )}
+                      </View>
+                      {item.time_scan && (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                          <Ionicons name="time-outline" size={14} color="#6B7280" style={{ marginRight: 4 }} />
+                          <Text style={{ fontSize: 12, color: '#6B7280' }}>
+                            {new Date(item.time_scan).toLocaleString('id-ID')}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  ))
+                )}
+              </View>
+            </View>
+          ) : (
+            <View style={{ padding: 40, alignItems: 'center' }}>
+              <Text style={{ color: '#6B7280' }}>Data laporan tidak tersedia</Text>
+            </View>
+          )}
+        </ScrollView>
+      ) : !hasPermission ? (
         <LinearGradient colors={['#fbbf24', '#f59e0b', '#d97706']} style={styles.container}>
           <View style={styles.permissionContainer}>
             <Ionicons name="camera-outline" size={64} color="white" />
@@ -792,6 +1099,177 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6B7280',
     fontWeight: '500',
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    backgroundColor: 'white',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  tabButton: {
+    flex: 1,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  tabButtonActive: {
+    borderBottomColor: '#f59e0b',
+  },
+  tabText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#6B7280',
+  },
+  tabTextActive: {
+    color: '#f59e0b',
+    fontWeight: '600',
+  },
+  laporanContainer: {
+    flex: 1,
+    backgroundColor: '#F3F4F6',
+  },
+  laporanContent: {
+    padding: 16,
+  },
+  laporanCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  laporanCardTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 16,
+  },
+  progressItem: {
+    marginBottom: 12,
+  },
+  progressLabel: {
+    fontSize: 13,
+    color: '#4B5563',
+    marginBottom: 4,
+  },
+  progressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  progressBarBg: {
+    flex: 1,
+    height: 10,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 5,
+    marginRight: 12,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 5,
+  },
+  progressText: {
+    fontSize: 13,
+    color: '#6B7280',
+    width: 90,
+    textAlign: 'right',
+  },
+  progressBarBgSmall: {
+    flex: 1,
+    height: 6,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 3,
+    marginRight: 12,
+    overflow: 'hidden',
+  },
+  progressBarFillSmall: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  progressTextSmall: {
+    fontSize: 12,
+    color: '#6B7280',
+    width: 80,
+    textAlign: 'right',
+  },
+  statusFilterContainer: {
+    flexDirection: 'row',
+    marginBottom: 12,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 8,
+    padding: 4,
+  },
+  datePickerBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    marginHorizontal: 4,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 6,
+    backgroundColor: '#F9FAFB'
+  },
+  datePickerText: {
+    fontSize: 12,
+    color: '#374151',
+    fontWeight: '500'
+  },
+  statusFilterBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderRadius: 6,
+  },
+  statusFilterBtnActive: {
+    backgroundColor: 'white',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 1,
+    elevation: 1,
+  },
+  statusFilterText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#6B7280',
+  },
+  statusFilterTextActive: {
+    color: '#111827',
+    fontWeight: '600',
+  },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  searchInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    height: 40,
+    backgroundColor: '#F9FAFB',
+    marginRight: 8,
+  },
+  searchBtn: {
+    backgroundColor: '#f59e0b',
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  resultCard: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+    paddingVertical: 12,
   },
   manualInputContainer: {
     flexDirection: 'row',

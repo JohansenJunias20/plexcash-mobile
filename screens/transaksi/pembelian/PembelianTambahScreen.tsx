@@ -105,6 +105,10 @@ export default function PembelianTambahScreen() {
   const [loadingPreOrders, setLoadingPreOrders] = useState(false);
   const [pendingPreOrdersCount, setPendingPreOrdersCount] = useState(0);
 
+  // DP Beli related state
+  const [pendingDPBeli, setPendingDPBeli] = useState<any[]>([]);
+  const [loadingDPBeli, setLoadingDPBeli] = useState(false);
+
   const navigation = useNavigation();
   const route = useRoute();
 
@@ -121,6 +125,41 @@ export default function PembelianTambahScreen() {
       navigation.setParams({ po_ids: undefined } as any);
     }
   }, [route.params]);
+
+  // Fetch pending DP Beli when supplier changes
+  useEffect(() => {
+    const fetchPendingDPBeli = async () => {
+      if (idSupplier === 0) {
+        setPendingDPBeli([]);
+        return;
+      }
+      try {
+        setLoadingDPBeli(true);
+        const token = await getTokenAuth();
+        if (!token) return;
+
+        const start = '2020-01-01';
+        const end = moment().add(1, 'years').format('YYYY-MM-DD');
+        const dpResponse = await fetch(`${API_BASE_URL}/get/dpbeli/interval/${start}/${end}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const dpData = await dpResponse.json();
+        
+        if (dpData.status && dpData.data) {
+          const dpPending = dpData.data.filter((item: any) => 
+            String(item.id_supplier) === String(idSupplier) && Number(item.dp) > Number(item.terpakai)
+          );
+          setPendingDPBeli(dpPending);
+        }
+      } catch (error) {
+        console.error('Error fetching pending DP Beli:', error);
+      } finally {
+        setLoadingDPBeli(false);
+      }
+    };
+
+    fetchPendingDPBeli();
+  }, [idSupplier]);
 
   const loadInitialData = async () => {
     try {
@@ -152,9 +191,6 @@ export default function PembelianTambahScreen() {
         // Filter out SHOPEE_BOOKING_PENDING warehouses from purchase form
         const filteredWarehouses = warehouseData.data.filter((wh: Warehouse) => wh.type !== 'SHOPEE_BOOKING_PENDING');
         setWarehouses(filteredWarehouses);
-        if (filteredWarehouses.length > 0) {
-          setSelectedWarehouse(filteredWarehouses[0].id);
-        }
       }
 
       // Set default date to now
@@ -707,10 +743,38 @@ export default function PembelianTambahScreen() {
               </View>
               <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
             </TouchableOpacity>
-          </View>
+            </View>
 
-          {/* Pending Pre-Orders Notification */}
-          {idSupplier > 0 && pendingPreOrdersCount > 0 && (
+            {/* Pending DP Beli Info */}
+            {idSupplier > 0 && loadingDPBeli && (
+              <View style={styles.dpInfoAlert}>
+                <ActivityIndicator size="small" color="#10b981" />
+                <Text style={{ fontSize: 14, color: '#065f46', marginLeft: 8 }}>
+                  Memuat DP Beli...
+                </Text>
+              </View>
+            )}
+            {idSupplier > 0 && !loadingDPBeli && pendingDPBeli.length > 0 && (
+              <View style={styles.dpInfoAlert}>
+                <Ionicons name="cash-outline" size={20} color="#10b981" />
+                <View style={{ flex: 1, marginLeft: 8 }}>
+                  <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#065f46' }}>
+                    DP Beli Pending ({pendingDPBeli.length})
+                  </Text>
+                  {pendingDPBeli.map((dpItem, idx) => {
+                    const sisa = Number(dpItem.dp) - Number(dpItem.terpakai);
+                    return (
+                      <Text key={idx} style={{ fontSize: 13, color: '#064e3b', marginTop: 2 }}>
+                        • {dpItem.tanggal.substring(0,10)}: Rp {sisa.toLocaleString('id-ID')} {dpItem.keterangan ? `(${dpItem.keterangan})` : ''}
+                      </Text>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+
+            {/* Pending Pre-Orders Notification */}
+            {idSupplier > 0 && pendingPreOrdersCount > 0 && (
             <View style={styles.infoAlert}>
               <Ionicons name="information-circle" size={20} color="#3b82f6" />
               <Text style={styles.infoText}>
@@ -776,6 +840,19 @@ export default function PembelianTambahScreen() {
             <View style={styles.formGroup}>
               <Text style={styles.label}>Warehouse</Text>
               <View style={styles.pickerContainer}>
+                <TouchableOpacity
+                  style={[
+                    styles.radioOption,
+                    selectedWarehouse === '' && styles.radioOptionSelected,
+                  ]}
+                  onPress={() => setSelectedWarehouse('')}
+                  disabled={saving}
+                >
+                  <View style={styles.radioCircle}>
+                    {selectedWarehouse === '' && <View style={styles.radioCircleInner} />}
+                  </View>
+                  <Text style={styles.radioLabel}>Tidak Pilih (Master Barang)</Text>
+                </TouchableOpacity>
                 {warehouses.map((wh) => (
                   <TouchableOpacity
                     key={wh.id}
@@ -1563,6 +1640,16 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   // Pre-order styles
+  dpInfoAlert: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#ECFDF5',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
+  },
   infoAlert: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1674,15 +1761,6 @@ const styles = StyleSheet.create({
   preOrderItems: {
     fontSize: 12,
     color: '#9CA3AF',
-  },
-  emptyState: {
-    padding: 40,
-    alignItems: 'center',
-  },
-  emptyText: {
-    fontSize: 14,
-    color: '#9CA3AF',
-    marginTop: 12,
   },
   modalFooter: {
     flexDirection: 'row',
