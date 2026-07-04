@@ -260,7 +260,7 @@ export default function DiskonScreen({ navigation }: any) {
     setShopeeDetailItems([]);
     setEditPriceMap({});
     try {
-      const res = await ApiService.get(`/get/promo_detail_shopee/${promo.discount_id}?id_ecommerce=${promo.id_ecommerce}`);
+      const res = await ApiService.get(`/get/promo_detail_shopee/${promo.discount_id}?id_ecommerce=${promo.id_ecommerce}&_t=${Date.now()}`);
       if (res && res.success) {
         setShopeeDetailItems(res.data || []);
         const map: Record<string, string> = {};
@@ -285,12 +285,24 @@ export default function DiskonScreen({ navigation }: any) {
     if (!detailPromo || !detailPromo.discount_id) return;
     const itemsToUpdate = shopeeDetailItems.filter(item => {
       const key = `${item.item_id}:${item.model_id || ''}`;
-      return editPriceMap[key] !== undefined && parseFloat(editPriceMap[key]) !== item.harga_promo;
-    }).map(item => ({
-      item_id: item.item_id,
-      model_id: item.model_id || null,
-      harga_promo: parseFloat(editPriceMap[`${item.item_id}:${item.model_id || ''}`])
-    })).filter(it => it.harga_promo > 0);
+      if (editPriceMap[key] === undefined) return false;
+      const cleanVal = editPriceMap[key].replace(/[^0-9]/g, '');
+      if (!cleanVal) return false;
+      return parseFloat(cleanVal) !== Number(item.harga_promo);
+    }).map(item => {
+      const key = `${item.item_id}:${item.model_id || ''}`;
+      const cleanVal = editPriceMap[key].replace(/[^0-9]/g, '');
+      const numModel = item.model_id ? Number(item.model_id) : 0;
+      return {
+        item_id: Number(item.item_id),
+        model_id: numModel,
+        id_online: Number(item.item_id),
+        id_model: numModel,
+        harga_promo: parseFloat(cleanVal),
+        purchase_limit: item.purchase_limit ? Number(item.purchase_limit) : 0,
+        original_price: Number(item.harga_asli || item.original_price || item.harga_normal || 0)
+      };
+    }).filter(it => it.harga_promo > 0);
 
     if (itemsToUpdate.length === 0) return Alert.alert('Info', 'Tidak ada perubahan harga.');
 
@@ -303,7 +315,23 @@ export default function DiskonScreen({ navigation }: any) {
       });
       if (res.success || res.status) {
         Alert.alert('Sukses', 'Harga promo berhasil diperbarui!');
-        openShopeeDetail(detailPromo); // reload
+        // Update local state to avoid backend cache returning old data
+        const updatedItems = shopeeDetailItems.map(it => {
+          const key = `${it.item_id}:${it.model_id || ''}`;
+          if (editPriceMap[key] !== undefined) {
+             const cleanVal = editPriceMap[key].replace(/[^0-9]/g, '');
+             if (cleanVal) return { ...it, harga_promo: parseFloat(cleanVal) };
+          }
+          return it;
+        });
+        setShopeeDetailItems(updatedItems);
+        
+        const newMap: Record<string, string> = {};
+        updatedItems.forEach((it: any) => {
+          const key = `${it.item_id}:${it.model_id || ''}`;
+          newMap[key] = String(it.harga_promo || '');
+        });
+        setEditPriceMap(newMap);
       } else {
         Alert.alert('Gagal', res.message || 'Terjadi kesalahan');
       }

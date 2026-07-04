@@ -178,13 +178,22 @@ export default function DiskonAddModal({ onClose, onSuccess, initialItems, initi
       });
       if (res.success) {
         setPromoConflicts(res.conflicts || []);
-        // Merge mappings so that any local mappings from search aren't wiped out
         setOnlineMappings(prev => {
           const newMappings = res.mappings || [];
           const existingMapIds = new Set(newMappings.map((m: any) => m.id_online));
           const missingMappings = prev.filter((m: any) => !existingMapIds.has(m.id_online));
           return [...newMappings, ...missingMappings];
         });
+        
+        setSelectedItems(prevItems => prevItems.map(it => {
+          const newMappings = res.mappings || [];
+          const m = newMappings.find((m: any) => String(m.id_masterbarang) === String(it.id_masterbarang));
+          if (m) {
+            const p = m.harga_normal || m.original_price || m.harga_asli || m.price || m.harga || 0;
+            if (Number(p) > 0) return { ...it, base_price_online: Number(p) };
+          }
+          return it;
+        }));
       }
     } catch (e) {
       console.error(e);
@@ -211,7 +220,7 @@ export default function DiskonAddModal({ onClose, onSuccess, initialItems, initi
       if (!hpp || hpp <= 0) return item;
       
       const hargaCoret = Math.round(hpp * (1 + pct / 100));
-      const base = Number(item.harga_jual_2);
+      const base = item.base_price_online || Number(item.harga_jual_2);
       const diskonPct = base > 0 ? ((1 - hargaCoret / base) * 100).toFixed(1) : '';
       
       return {
@@ -226,19 +235,21 @@ export default function DiskonAddModal({ onClose, onSuccess, initialItems, initi
     setSelectedItems(prev => prev.map(item => {
       if (item.id_masterbarang !== id) return item;
       
+      const basePrice = item.base_price_online || item.harga_jual_2;
+      
       const newItem = { ...item, [field]: value };
       
       if (field === 'harga_promo') {
         const hp = parseFloat(value);
-        if (!isNaN(hp) && item.harga_jual_2 > 0) {
-          newItem.persentase_promo = ((1 - hp / item.harga_jual_2) * 100).toFixed(1);
+        if (!isNaN(hp) && basePrice > 0) {
+          newItem.persentase_promo = ((1 - hp / basePrice) * 100).toFixed(1);
         } else {
           newItem.persentase_promo = '';
         }
       } else if (field === 'persentase_promo') {
         const pct = parseFloat(value);
-        if (!isNaN(pct) && item.harga_jual_2 > 0) {
-          newItem.harga_promo = Math.round(item.harga_jual_2 * (1 - pct / 100)).toString();
+        if (!isNaN(pct) && basePrice > 0) {
+          newItem.harga_promo = Math.round(basePrice * (1 - pct / 100)).toString();
         } else {
           newItem.harga_promo = '';
         }
@@ -256,8 +267,9 @@ export default function DiskonAddModal({ onClose, onSuccess, initialItems, initi
     for (let item of selectedItems) {
       const hp = Number(item.harga_promo);
       if (!hp || hp <= 0) return Alert.alert('Error', `Harga promo untuk "${item.nama}" belum diisi/tidak valid`);
-      if (item.harga_jual_2 > 0 && hp >= item.harga_jual_2) {
-        return Alert.alert('Error', `Harga promo "${item.nama}" tidak boleh lebih besar atau sama dengan Harga Jual`);
+      const basePrice = item.base_price_online || item.harga_jual_2;
+      if (basePrice > 0 && hp >= basePrice) {
+        return Alert.alert('Error', `Harga promo "${item.nama}" tidak boleh lebih besar atau sama dengan Harga Asli/Jual`);
       }
     }
 
@@ -498,7 +510,7 @@ export default function DiskonAddModal({ onClose, onSuccess, initialItems, initi
                 </View>
 
                 <View style={styles.priceInfo}>
-                  <Text style={styles.priceLabel}>Base: Rp {item.harga_jual_2.toLocaleString('id-ID')}</Text>
+                  <Text style={styles.priceLabel}>Base: Rp {(item.base_price_online || item.harga_jual_2).toLocaleString('id-ID')}</Text>
                   <Text style={styles.priceLabel}>HPP: Rp {item.hpp.toLocaleString('id-ID')}</Text>
                 </View>
 

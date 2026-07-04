@@ -65,6 +65,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         });
         console.log('🔥 [AUTH-STATE-CHANGED] Firebase auth state changed, user:', firebaseUser?.email || 'null');
 
+        // PERSISTENT AUTH FIX: If the user is logged in via QR or PIN, ignore Firebase state changes
+        const storedAuthMethod = await AsyncStorage.getItem('authMethod');
+        if (storedAuthMethod === 'device' || storedAuthMethod === 'pin') {
+          console.log(`⚠️ [AUTH-STATE-CHANGED] Ignoring Firebase auth state because current authMethod is ${storedAuthMethod}`);
+          return;
+        }
+
         // CRITICAL FIX: Always set isLoading = true when processing auth state change
         // But we'll set it to false at the end to ensure navigation works
         logStateChange('Setting isLoading = true (processing auth state change)');
