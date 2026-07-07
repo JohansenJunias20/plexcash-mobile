@@ -205,7 +205,14 @@ export default function PesananV2OrderCard({ order, isSelected, onToggleSelect, 
                   </View>
               )}
             </View>
-            <Text style={[styles.statusText, { color: statusColor }]}>{order.status}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              {order.packed || !!order.pack_timestamp ? (
+                  <View style={[styles.miniBadge, { backgroundColor: '#D1FAE5' }]}><Text style={[styles.miniBadgeText, { color: '#065F46' }]}>SUDAH PACK</Text></View>
+              ) : (
+                  <View style={[styles.miniBadge, { backgroundColor: '#FEE2E2' }]}><Text style={[styles.miniBadgeText, { color: '#991B1B' }]}>BELUM PACK</Text></View>
+              )}
+              <Text style={[styles.statusText, { color: statusColor }]}>{order.status}</Text>
+            </View>
           </View>
           <Text style={styles.ecommerceName}>{order.ecommerce_name}</Text>
         </TouchableOpacity>
@@ -271,15 +278,8 @@ export default function PesananV2OrderCard({ order, isSelected, onToggleSelect, 
                 ) : (
                     <View style={[styles.miniBadge, { backgroundColor: '#FEE2E2' }]}><Text style={[styles.miniBadgeText, { color: '#991B1B' }]}>BELUM SCAN</Text></View>
                 )}
-                {order.packed || !!order.pack_timestamp ? (
-                    <View style={[styles.miniBadge, { backgroundColor: '#D1FAE5' }]}><Text style={[styles.miniBadgeText, { color: '#065F46' }]}>SUDAH PACK</Text></View>
-                ) : (
-                    <View style={[styles.miniBadge, { backgroundColor: '#FEE2E2' }]}><Text style={[styles.miniBadgeText, { color: '#991B1B' }]}>BELUM PACK</Text></View>
-                )}
-                {order.has_retur || order.retur ? (
+                {(order.has_retur || order.retur) && (
                     <View style={[styles.miniBadge, { backgroundColor: '#FFEDD5' }]}><Text style={[styles.miniBadgeText, { color: '#C2410C' }]}>SUDAH RETUR</Text></View>
-                ) : (
-                    <View style={[styles.miniBadge, { backgroundColor: '#F3F4F6' }]}><Text style={[styles.miniBadgeText, { color: '#4B5563' }]}>BELUM RETUR</Text></View>
                 )}
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -381,7 +381,7 @@ const styles = StyleSheet.create({
   itemText: { fontSize: 12, color: '#374151', marginBottom: 2 },
   itemMoreText: { fontSize: 11, color: '#6B7280', fontStyle: 'italic', marginTop: 2 },
   footer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 },
-  badgesRow: { flexDirection: 'row', gap: 6 },
+  badgesRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap', flex: 1, marginRight: 8 },
   miniBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   miniBadgeText: { fontSize: 9, fontWeight: '700' },
   totalText: { fontSize: 14, fontWeight: '700', color: '#111827' },
