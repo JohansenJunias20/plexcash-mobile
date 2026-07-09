@@ -145,26 +145,34 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ navigation, s
 
   useEffect(() => {
     const fetchDatabaseInfo = async () => {
+      if (!user) {
+        console.log('[DRAWER-DEBUG] No user found yet.');
+        return;
+      }
       try {
         setLoadingDatabase(true);
+        console.log('[DRAWER-DEBUG] Fetching database info for:', (user as any).email);
         const dbResponse = await ApiService.getCurrentDatabase();
+        console.log('[DRAWER-DEBUG] dbResponse:', dbResponse);
         if (dbResponse.status && dbResponse.data) {
           setCurrentDatabase(dbResponse.data);
         }
 
         const listResponse = await ApiService.getDatabaseList();
+        console.log('[DRAWER-DEBUG] listResponse:', listResponse);
         if (listResponse.status && listResponse.data) {
           setDatabases(listResponse.data);
+          console.log('[DRAWER-DEBUG] databases set to:', listResponse.data);
         }
       } catch (error) {
-        console.error('Error fetching database info:', error);
+        console.error('[DRAWER-DEBUG] Error fetching database info:', error);
       } finally {
         setLoadingDatabase(false);
       }
     };
 
     fetchDatabaseInfo();
-  }, [isAdmin]);
+  }, [user, role]);
 
   const handleDatabaseSwitch = async (newDatabase: string) => {
     if (newDatabase === currentDatabase) {
@@ -177,6 +185,16 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ navigation, s
       const response = await ApiService.setDatabase(newDatabase);
 
       if (response.status) {
+        if (response.token) {
+          console.log('[DRAWER] Saving new database session token...');
+          await ApiService.storeDeviceTokens({
+            authToken: response.token,
+            token: response.token,
+            deviceId: await ApiService.getOrCreateDeviceId(),
+            user: { email: user?.email || '' },
+            authMethod: 'firebase'
+          });
+        }
         setCurrentDatabase(newDatabase);
         setShowDatabasePicker(false);
         Alert.alert(
@@ -197,9 +215,22 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ navigation, s
             }
           }]
         );
+      } else {
+        setShowDatabasePicker(false);
+        Alert.alert(
+          'Error',
+          response.reason || 'Failed to switch database',
+          [{ text: 'OK' }]
+        );
       }
     } catch (error) {
       console.error('Error switching database:', error);
+      setShowDatabasePicker(false);
+      Alert.alert(
+        'Error',
+        'An error occurred while switching database',
+        [{ text: 'OK' }]
+      );
     } finally {
       setSwitchingDatabase(false);
     }

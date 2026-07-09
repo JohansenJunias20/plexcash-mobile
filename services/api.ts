@@ -864,7 +864,7 @@ class ApiService {
   /**
    * Set the current database (admin only)
    */
-  static async setDatabase(databaseName: string): Promise<{ status: boolean; data?: string; reason?: string }> {
+  static async setDatabase(databaseName: string): Promise<{ status: boolean; data?: string; token?: string; reason?: string }> {
     try {
       const response = await this.authenticatedRequest('/set/database', {
         method: 'POST',
@@ -1008,6 +1008,52 @@ class ApiService {
     } catch (error) {
       console.error('Error updating retur penjualan PIN requirement:', error);
       return { status: false, reason: 'Failed to update PIN requirement' };
+    }
+  }
+
+  // =====================================================
+  // POS KASIR PIN MANAGEMENT
+  // =====================================================
+
+  /**
+   * Check if POS Kasir PIN is required for current user
+   */
+  static async checkPosKasirPINRequirement(email: string): Promise<{
+    status: boolean;
+    has_pin?: boolean;
+    reason?: string
+  }> {
+    try {
+      const response = await this.authenticatedRequest(`/user/pos-kasir/pin?email=${encodeURIComponent(email)}`);
+      // check if pos_kasir_pin is truthy or if there is any other indicator
+      return {
+        status: response.status,
+        has_pin: !!response.pos_kasir_pin || !!response.pin || response.has_pin === true,
+        reason: response.reason
+      };
+    } catch (error) {
+      console.error('Error checking POS Kasir PIN requirement:', error);
+      return { status: false, reason: 'Failed to check PIN requirement' };
+    }
+  }
+
+  /**
+   * Validate PIN for POS Kasir
+   */
+  static async validatePosKasirPIN(pin: string): Promise<{
+    status: boolean;
+    message?: string;
+    reason?: string
+  }> {
+    try {
+      const response = await this.authenticatedRequest('/user/pos-kasir/pin/validate', {
+        method: 'POST',
+        body: JSON.stringify({ pin }),
+      });
+      return response;
+    } catch (error) {
+      console.error('Error validating POS Kasir PIN:', error);
+      return { status: false, reason: 'Failed to validate PIN' };
     }
   }
 

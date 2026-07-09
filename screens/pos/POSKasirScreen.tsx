@@ -35,8 +35,10 @@ import {
   PrintOptions,
 } from '../../services/BluetoothPrinterService';
 import LANPrinterSettings from '../../components/LANPrinterSettings';
+import PosKasirPINModal from '../../components/PosKasirPINModal';
 import { useAuth } from '../../context/AuthContext';
 import { useOrientation } from '../../hooks/useOrientation';
+import ApiService from '../../services/api';
 
 interface BundlingDetail {
   id: number;
@@ -206,6 +208,54 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
 
   // Product view mode state (grid/list)
   const [productViewMode, setProductViewMode] = useState<'grid' | 'list'>('grid');
+
+  // POS Kasir PIN states
+  const [isPosKasirPinVerified, setIsPosKasirPinVerified] = useState(false);
+  const [isCheckingPosKasirPin, setIsCheckingPosKasirPin] = useState(true);
+  const [showPosKasirPinModal, setShowPosKasirPinModal] = useState(false);
+  const [requiresPosKasirPin, setRequiresPosKasirPin] = useState(false);
+
+  useEffect(() => {
+    checkPosKasirPIN();
+  }, []);
+
+  const checkPosKasirPIN = async () => {
+    if (!user?.email) {
+      setIsCheckingPosKasirPin(false);
+      setIsPosKasirPinVerified(true);
+      return;
+    }
+    const result = await ApiService.checkPosKasirPINRequirement(user.email);
+    if (result.has_pin) {
+      setRequiresPosKasirPin(true);
+      setShowPosKasirPinModal(true);
+      setIsCheckingPosKasirPin(false);
+    } else {
+      setRequiresPosKasirPin(false);
+      setIsPosKasirPinVerified(true);
+      setIsCheckingPosKasirPin(false);
+    }
+  };
+
+  useEffect(() => {
+    const unsubscribeFocus = navigation.addListener('focus', () => {
+      if (requiresPosKasirPin && !isPosKasirPinVerified) {
+        setShowPosKasirPinModal(true);
+      }
+    });
+
+    const unsubscribeBlur = navigation.addListener('blur', () => {
+      // Lock the screen again when the user leaves the POS Kasir menu
+      if (requiresPosKasirPin) {
+        setIsPosKasirPinVerified(false);
+      }
+    });
+
+    return () => {
+      unsubscribeFocus();
+      unsubscribeBlur();
+    };
+  }, [navigation, requiresPosKasirPin, isPosKasirPinVerified]);
 
   useEffect(() => {
     loadCustomers();
@@ -2254,6 +2304,33 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
         </View>
       </View>
   );
+
+  if (isCheckingPosKasirPin) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#f59e0b" />
+        <Text style={{ marginTop: 16, color: '#6b7280' }}>Memeriksa otorisasi kasir...</Text>
+      </View>
+    );
+  }
+
+  if (!isPosKasirPinVerified) {
+    return (
+      <View style={[styles.container, { backgroundColor: '#f3f4f6' }]}>
+        <PosKasirPINModal
+          visible={showPosKasirPinModal}
+          onSuccess={() => {
+            setShowPosKasirPinModal(false);
+            setIsPosKasirPinVerified(true);
+          }}
+          onCancel={() => {
+            setShowPosKasirPinModal(false);
+            navigation.goBack();
+          }}
+        />
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>

@@ -107,6 +107,10 @@ const MainScreen = (): React.JSX.Element => {
       console.log('⏳ [DB] Waiting for token to be ready before fetching database info...');
       return;
     }
+    if (!user) {
+      console.log('⏳ [DB] No user logged in yet...');
+      return;
+    }
 
     const fetchDatabaseInfo = async () => {
       try {
@@ -132,7 +136,7 @@ const MainScreen = (): React.JSX.Element => {
     };
 
     fetchDatabaseInfo();
-  }, [isTokenReady, isAdmin]);
+  }, [isTokenReady, user, role]);
 
   const handleDatabaseSwitch = async (newDatabase: string) => {
     if (newDatabase === currentDatabase) {
@@ -145,6 +149,16 @@ const MainScreen = (): React.JSX.Element => {
       const response = await ApiService.setDatabase(newDatabase);
 
       if (response.status) {
+        if (response.token) {
+          console.log('[MAIN] Saving new database session token...');
+          await ApiService.storeDeviceTokens({
+            authToken: response.token,
+            token: response.token,
+            deviceId: await ApiService.getOrCreateDeviceId(),
+            user: { email: user?.email || '' },
+            authMethod: 'firebase'
+          });
+        }
         setCurrentDatabase(newDatabase);
         setShowDatabasePicker(false);
         Alert.alert(
