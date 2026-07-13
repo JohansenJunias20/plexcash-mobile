@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, useWindowDimensions, ActivityIndicator, FlatList, RefreshControl, Alert, Modal, Platform, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, useWindowDimensions, ActivityIndicator, FlatList, RefreshControl, Alert, Modal, Platform, StatusBar, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { TabView, TabBar } from 'react-native-tab-view';
 import { Ionicons } from '@expo/vector-icons';
@@ -43,6 +43,9 @@ export default function DiskonScreen({ navigation }: any) {
   const [loadingShopeeDetail, setLoadingShopeeDetail] = useState(false);
   const [editPriceMap, setEditPriceMap] = useState<Record<string, string>>({});
   const [savingPrice, setSavingPrice] = useState(false);
+  const [activeStatusMap, setActiveStatusMap] = useState<Record<string, boolean>>({});
+  const [initialActiveStatusMap, setInitialActiveStatusMap] = useState<Record<string, boolean>>({});
+  const [togglingItem, setTogglingItem] = useState<Record<string, boolean>>({});
 
   const [isAddModalVisible, setAddModalVisible] = useState(false);
   const [preselectedItems, setPreselectedItems] = useState<any[]>([]);
@@ -264,11 +267,15 @@ export default function DiskonScreen({ navigation }: any) {
       if (res && res.success) {
         setShopeeDetailItems(res.data || []);
         const map: Record<string, string> = {};
+        const activeMap: Record<string, boolean> = {};
         (res.data || []).forEach((item: any) => {
           const key = `${item.item_id}:${item.model_id || ''}`;
           map[key] = String(item.harga_promo || '');
+          activeMap[key] = item.status !== 0 && item.status !== '0' && item.status !== false;
         });
         setEditPriceMap(map);
+        setActiveStatusMap(activeMap);
+        setInitialActiveStatusMap({...activeMap});
       } else if (res && res.data) {
         setShopeeDetailItems(res.data);
       } else {
@@ -281,9 +288,14 @@ export default function DiskonScreen({ navigation }: any) {
     }
   };
 
+  const handleToggleItemStatus = (item: any, value: boolean) => {
+    const key = `${item.item_id}:${item.model_id || ''}`;
+    setActiveStatusMap(prev => ({...prev, [key]: value}));
+  };
+
   const handleSavePromoPrice = async () => {
     if (!detailPromo || !detailPromo.discount_id) return;
-    const itemsToUpdate = shopeeDetailItems.filter(item => {
+    const priceItemsToUpdate = shopeeDetailItems.filter(item => {
       const key = `${item.item_id}:${item.model_id || ''}`;
       if (editPriceMap[key] === undefined) return false;
       const cleanVal = editPriceMap[key].replace(/[^0-9]/g, '');
@@ -304,36 +316,79 @@ export default function DiskonScreen({ navigation }: any) {
       };
     }).filter(it => it.harga_promo > 0);
 
-    if (itemsToUpdate.length === 0) return Alert.alert('Info', 'Tidak ada perubahan harga.');
+    const statusItemsToUpdate = shopeeDetailItems.filter(item => {
+      const key = `${item.item_id}:${item.model_id || ''}`;
+      return activeStatusMap[key] !== initialActiveStatusMap[key];
+    });
+
+    if (priceItemsToUpdate.length === 0 && statusItemsToUpdate.length === 0) {
+      return Alert.alert('Info', 'Tidak ada perubahan harga atau status.');
+    }
 
     setSavingPrice(true);
     try {
-      const res = await ApiService.post('/update/live_promo_price', {
-        discount_id: detailPromo.discount_id,
-        id_ecommerce: detailPromo.id_ecommerce,
-        items: itemsToUpdate
-      });
-      if (res.success || res.status) {
-        Alert.alert('Sukses', 'Harga promo berhasil diperbarui!');
-        // Update local state to avoid backend cache returning old data
-        const updatedItems = shopeeDetailItems.map(it => {
-          const key = `${it.item_id}:${it.model_id || ''}`;
-          if (editPriceMap[key] !== undefined) {
-             const cleanVal = editPriceMap[key].replace(/[^0-9]/g, '');
-             if (cleanVal) return { ...it, harga_promo: parseFloat(cleanVal) };
-          }
-          return it;
+      let statusError = false;
+      for (const item of statusItemsToUpdate) {
+        const key = `${item.item_id}:${item.model_id || ''}`;
+        const value = activeStatusMap[key];
+        const resStatus = await ApiService.post('/update/live_promo_item_status', {
+          discount_id: detailPromo.discount_id,
+          id_ecommerce: detailPromo.id_ecommerce,
+          item_id: item.item_id,
+          model_id: item.model_id ? Number(item.model_id) : 0,
+          action: value ? 'activate' : 'deactivate',
+          harga_promo: editPriceMap[key] ? parseFloat(editPriceMap[key].replace(/[^0-9]/g, '')) : item.harga_promo,
+          purchase_limit: item.purchase_limit ? Number(item.purchase_limit) : 0
         });
-        setShopeeDetailItems(updatedItems);
-        
-        const newMap: Record<string, string> = {};
-        updatedItems.forEach((it: any) => {
-          const key = `${it.item_id}:${it.model_id || ''}`;
-          newMap[key] = String(it.harga_promo || '');
+        if (!resStatus || !resStatus.success) {
+          statusError = true;
+        } else {
+          setInitialActiveStatusMap(prev => ({...prev, [key]: value}));
+        }
+      }
+
+      let priceSuccess = true;
+      if (priceItemsToUpdate.length > 0) {
+        const res = await ApiService.post('/update/live_promo_price', {
+          discount_id: detailPromo.discount_id,
+          id_ecommerce: detailPromo.id_ecommerce,
+          items: priceItemsToUpdate
         });
-        setEditPriceMap(newMap);
+        if (res.success || res.status) {
+          const updatedItems = shopeeDetailItems.map(it => {
+            const key = `${it.item_id}:${it.model_id || ''}`;
+            if (editPriceMap[key] !== undefined) {
+               const cleanVal = editPriceMap[key].replace(/[^0-9]/g, '');
+               if (cleanVal) return { ...it, harga_promo: parseFloat(cleanVal) };
+            }
+            return it;
+          });
+          setShopeeDetailItems(updatedItems);
+          
+          const newMap: Record<string, string> = {};
+          updatedItems.forEach((it: any) => {
+            const key = `${it.item_id}:${it.model_id || ''}`;
+            newMap[key] = String(it.harga_promo || '');
+          });
+          setEditPriceMap(newMap);
+        } else {
+          priceSuccess = false;
+        }
+      }
+
+      if (statusError && !priceSuccess) {
+        Alert.alert('Gagal', 'Terjadi kesalahan saat menyimpan harga dan status');
+      } else if (statusError) {
+        Alert.alert('Info', 'Harga berhasil disimpan, namun sebagian status gagal diperbarui.');
+      } else if (!priceSuccess && priceItemsToUpdate.length > 0) {
+        Alert.alert('Info', 'Status berhasil disimpan, namun harga gagal diperbarui.');
       } else {
-        Alert.alert('Gagal', res.message || 'Terjadi kesalahan');
+        Alert.alert('Sukses', 'Perubahan berhasil disimpan!\n\nCatatan: Perubahan status mungkin membutuhkan waktu 1-3 menit untuk sepenuhnya terupdate di Shopee.', [
+          { text: 'OK', onPress: () => {
+            setDetailModalVisible(false);
+            fetchLivePromos();
+          }}
+        ]);
       }
     } catch (e: any) {
       Alert.alert('Error', e.message || String(e));
@@ -824,12 +879,28 @@ export default function DiskonScreen({ navigation }: any) {
               contentContainerStyle={{ padding: 16 }}
               renderItem={({ item }) => (
                 <View style={{ backgroundColor: 'white', padding: 16, borderRadius: 12, marginBottom: 12, borderWidth: 1, borderColor: '#e2e8f0' }}>
-                  <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#1e293b', marginBottom: 4 }}>
-                    {item.item_name || item.nama || `Item #${item.item_id}`} {item.model_name ? `- ${item.model_name}` : ''}
-                  </Text>
-                  <Text style={{ fontSize: 13, color: '#64748b', marginBottom: 12 }}>
-                    {item.item_sku || item.model_sku || item.sku || ''}
-                  </Text>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
+                    <View style={{ flex: 1, paddingRight: 8 }}>
+                      <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#1e293b', marginBottom: 4 }}>
+                        {item.item_name || item.nama || `Item #${item.item_id}`} {item.model_name ? `- ${item.model_name}` : ''}
+                      </Text>
+                      <Text style={{ fontSize: 13, color: '#64748b', marginBottom: 12 }}>
+                        {item.item_sku || item.model_sku || item.sku || ''}
+                      </Text>
+                    </View>
+                    <View style={{ alignItems: 'center' }}>
+                      {togglingItem[`${item.item_id}:${item.model_id || ''}`] ? (
+                        <ActivityIndicator size="small" color="#f59e0b" style={{ marginVertical: 4 }} />
+                      ) : (
+                        <Switch 
+                          value={activeStatusMap[`${item.item_id}:${item.model_id || ''}`] ?? true}
+                          onValueChange={(val) => handleToggleItemStatus(item, val)}
+                          disabled={detailPromo?.status_api !== 'ongoing' && detailPromo?.status_api !== 'upcoming'}
+                        />
+                      )}
+                      <Text style={{ fontSize: 10, color: '#64748b', marginTop: 2 }}>{activeStatusMap[`${item.item_id}:${item.model_id || ''}`] !== false ? 'Aktif' : 'Nonaktif'}</Text>
+                    </View>
+                  </View>
                   
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
                     <Text style={{ color: '#475569' }}>Harga Normal</Text>

@@ -879,11 +879,18 @@ export default function ReturOnlineScreen() {
     if (filterScanout) {
       result = result.filter(dt => toBool(dt.scanout) || isValidTimestamp(dt.scanout_time));
     }
-    if (filterPrint) {
-      result = result.filter(dt => toBool(dt.print) || isValidTimestamp(dt.print_timestamp));
-    }
     if (filterPack) {
-      result = result.filter(dt => toBool(dt.pack) || isValidTimestamp(dt.pack_time));
+      result = result.filter(dt => {
+        const isScanned = toBool(dt.scanout) || isValidTimestamp(dt.scanout_time);
+        return toBool(dt.pack) || isValidTimestamp(dt.pack_time) || isScanned;
+      });
+    }
+    if (filterPrint) {
+      result = result.filter(dt => {
+        const isScanned = toBool(dt.scanout) || isValidTimestamp(dt.scanout_time);
+        const isPacked = toBool(dt.pack) || isValidTimestamp(dt.pack_time) || isScanned;
+        return toBool(dt.print) || isValidTimestamp(dt.print_timestamp) || isPacked;
+      });
     }
     return result;
   };
@@ -913,9 +920,9 @@ export default function ReturOnlineScreen() {
     const displayIdRetur = hasRealIdRetur ? item.id_retur : '-';
     
     // Status syncing based on boolean or timestamp existence using toBool and isValidTimestamp
-    const isPrinted = toBool(item.print) || isValidTimestamp(item.print_timestamp);
     const isScanned = toBool(item.scanout) || isValidTimestamp(item.scanout_time);
-    const isPacked = toBool(item.pack) || isValidTimestamp(item.pack_time);
+    const isPacked = toBool(item.pack) || isValidTimestamp(item.pack_time) || isScanned;
+    const isPrinted = toBool(item.print) || isValidTimestamp(item.print_timestamp) || isPacked;
 
     return (
       <View style={styles.card}>
@@ -1102,9 +1109,9 @@ export default function ReturOnlineScreen() {
     );
   };
 
-  const isPrinted = selectedRowForDetail ? (toBool(selectedRowForDetail.print) || isValidTimestamp(selectedRowForDetail.print_timestamp)) : false;
   const isScanned = selectedRowForDetail ? (toBool(selectedRowForDetail.scanout) || isValidTimestamp(selectedRowForDetail.scanout_time)) : false;
-  const isPacked = selectedRowForDetail ? (toBool(selectedRowForDetail.pack) || isValidTimestamp(selectedRowForDetail.pack_time)) : false;
+  const isPacked = selectedRowForDetail ? (toBool(selectedRowForDetail.pack) || isValidTimestamp(selectedRowForDetail.pack_time) || isScanned) : false;
+  const isPrinted = selectedRowForDetail ? (toBool(selectedRowForDetail.print) || isValidTimestamp(selectedRowForDetail.print_timestamp) || isPacked) : false;
 
   const matchedShopDetail = selectedRowForDetail ? ecommerceList.find(shop => Number(shop.id) === Number(selectedRowForDetail.id_ecommerce)) : null;
   const resolvedPlatformDetail = selectedRowForDetail?.platform || matchedShopDetail?.platform || detailPlatform || '';
