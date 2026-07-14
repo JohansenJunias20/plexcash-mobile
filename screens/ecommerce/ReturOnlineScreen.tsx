@@ -25,6 +25,8 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
 import BaganAkunSearchModal from './components/BaganAkunSearchModal';
 import RNPrint from 'react-native-print';
+import * as ImagePicker from 'expo-image-picker';
+import { Video, ResizeMode } from 'expo-av';
 
 // Platform UI Styling Utilities
 const PLATFORM_BRANDS: { [key: string]: { color: string; label: string; icon: string } } = {
@@ -162,11 +164,23 @@ export default function ReturOnlineScreen() {
   const [processingBulk, setProcessingBulk] = useState(false);
   const [processingRowId, setProcessingRowId] = useState<string | null>(null);
 
+  // Video Unboxing States
+  const [gdriveConnected, setGdriveConnected] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [videoUploaderStatus, setVideoUploaderStatus] = useState('');
+  
   // INITIAL MOUNT EFFECTS
   useEffect(() => {
     const initSetup = async () => {
       try {
         setFetching(true);
+        // Check GDrive connection
+        const gdriveRes = await ApiService.get('/google-drive/status');
+        if (gdriveRes?.status && gdriveRes?.connected) {
+          setGdriveConnected(true);
+        } else {
+          setGdriveConnected(false);
+        }
         // Fetch Ecommerce Shop List
         const shopRes = await ApiService.get('/get/ecommerce');
         if (shopRes?.status) {
@@ -1123,6 +1137,81 @@ export default function ReturOnlineScreen() {
                                selectedRowForDetail.id_retur !== selectedRowForDetail.invoice_tokped
                                ? selectedRowForDetail.id_retur : '';
 
+  const handleRecordVideo = async () => {
+    if (!gdriveConnected) {
+      Alert.alert('Error', 'Google Drive belum terhubung. Harap hubungkan di menu Setting terlebih dahulu.');
+      return;
+    }
+    
+    try {
+      // Request permissions
+      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permissionResult.granted) {
+        Alert.alert('Izin Ditolak', 'Anda harus memberikan izin akses kamera untuk merekam video.');
+        return;
+      }
+
+      // Record video
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['videos'],
+        allowsEditing: false,
+        quality: 0.7,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const videoAsset = result.assets[0];
+        
+        setIsRecording(true);
+        setVideoUploaderStatus('Mengunggah video ke Google Drive...');
+        
+        // Prepare FormData
+        const formData = new FormData();
+        const filename = videoAsset.fileName || `video_${Date.now()}.mp4`;
+        
+        // React Native FormData requires { uri, name, type } for files
+        formData.append('file', {
+          uri: videoAsset.uri,
+          name: filename,
+          type: videoAsset.mimeType || 'video/mp4',
+        } as any);
+
+        // Upload to Google Drive
+        const uploadResult = await ApiService.uploadFile('/google-drive/upload', formData);
+        
+        if (uploadResult && uploadResult.status && uploadResult.file_id) {
+          setVideoUploaderStatus('Menautkan video ke transaksi...');
+          
+          // Link video to retur
+          const linkResult = await ApiService.post('/returonline/video', {
+            id_retur: selectedRowForDetail?.id,
+            id_penjualan: selectedRowForDetail?.id_penjualan,
+            id_online: selectedRowForDetail?.id_online,
+            video_file_id: uploadResult.file_id,
+            video_web_view_link: uploadResult.web_view_link,
+          });
+
+          if (linkResult && linkResult.status !== false) { // Assuming status is true or undefined on success
+            Alert.alert('Sukses', 'Video berhasil diunggah dan ditautkan.');
+            fetchReturnsData(); // refresh list
+            setSelectedRowForDetail({
+               ...selectedRowForDetail, 
+               video_web_view_link: uploadResult.web_view_link 
+            });
+          } else {
+            Alert.alert('Peringatan', 'Video berhasil diunggah, tapi gagal ditautkan ke transaksi: ' + (linkResult?.reason || 'Unknown error'));
+          }
+        } else {
+           throw new Error(uploadResult?.reason || uploadResult?.message || 'Gagal mengunggah ke Google Drive');
+        }
+      }
+    } catch (error: any) {
+      console.error('Error recording/uploading video:', error);
+      Alert.alert('Error', error.message || 'Terjadi kesalahan saat merekam atau mengunggah video');
+    } finally {
+      setIsRecording(false);
+      setVideoUploaderStatus('');
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -1632,6 +1721,48 @@ export default function ReturOnlineScreen() {
                     </View>
                   ))
                 )}
+
+                {/* Video Unboxing Section */}
+                <View style={[styles.detailActionBox, { borderColor: '#d1d5db' }]}>
+                  <Text style={[styles.detailActionBoxTitle, { color: '#374151' }]}>VIDEO UNBOXING</Text>
+                  
+                  {selectedRowForDetail?.video_web_view_link ? (
+                    <View>
+                      <Text style={styles.detailActionBoxDesc}>Video unboxing sudah tersedia di Google Drive.</Text>
+                      <TouchableOpacity 
+                        style={[styles.actionBtnDetail, { backgroundColor: '#2563eb' }]}
+                        onPress={() => Linking.openURL(selectedRowForDetail.video_web_view_link)}
+                      >
+                        <Ionicons name="play" size={18} color="#fff" style={{ marginRight: 6 }} />
+                        <Text style={styles.actionBtnTextDetail}>PUTAR VIDEO</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <View>
+                      <Text style={styles.detailActionBoxDesc}>
+                        {!gdriveConnected 
+                          ? 'Google Drive belum terhubung. Harap hubungkan di menu Settings.' 
+                          : 'Belum ada video unboxing. Rekam sekarang.'}
+                      </Text>
+                      
+                      {videoUploaderStatus ? (
+                        <View style={{ alignItems: 'center', padding: 10 }}>
+                          <ActivityIndicator size="small" color="#4f46e5" />
+                          <Text style={{ marginTop: 8, fontSize: 12, color: '#4b5563' }}>{videoUploaderStatus}</Text>
+                        </View>
+                      ) : (
+                        <TouchableOpacity 
+                          style={[styles.actionBtnDetail, { backgroundColor: gdriveConnected ? '#4f46e5' : '#9ca3af' }]}
+                          onPress={handleRecordVideo}
+                          disabled={!gdriveConnected || isRecording}
+                        >
+                          <Ionicons name="videocam" size={18} color="#fff" style={{ marginRight: 6 }} />
+                          <Text style={styles.actionBtnTextDetail}>REKAM VIDEO UNBOXING</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  )}
+                </View>
 
                 {/* Internal PlexSeller Approval Form */}
                 {Tipe === 'komplain' && selectedRowForDetail?.id_database === 0 && (

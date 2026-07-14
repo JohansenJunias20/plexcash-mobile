@@ -895,6 +895,42 @@ class ApiService {
   }
 
   /**
+   * Upload file using FormData (multipart/form-data)
+   */
+  static async uploadFile(endpoint: string, formData: FormData): Promise<any> {
+    try {
+      console.log(`🌐 [AUTH-REQ] Uploading file to: ${endpoint}`);
+      const authHeader = await this.getAuthHeader();
+      
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        method: 'POST',
+        headers: {
+          ...authHeader,
+          // Do NOT set Content-Type header manually when using FormData
+          // The browser/fetch will automatically set it with the correct boundary
+        },
+        body: formData,
+      });
+
+      console.log(`🌐 [AUTH-REQ] Upload response status: ${response.status}`);
+      
+      if (response.status === 401 || response.status === 403) {
+        throw new Error('Unauthorized');
+      }
+
+      const responseText = await response.text();
+      try {
+        return JSON.parse(responseText);
+      } catch (e) {
+        return responseText;
+      }
+    } catch (error) {
+      console.error(`💥 [AUTH-REQ] Upload failed for ${endpoint}:`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Generic PATCH request
    */
   static async patch(endpoint: string, body: any): Promise<any> {

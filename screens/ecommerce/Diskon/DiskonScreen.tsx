@@ -267,15 +267,15 @@ export default function DiskonScreen({ navigation }: any) {
       if (res && res.success) {
         setShopeeDetailItems(res.data || []);
         const map: Record<string, string> = {};
-        const activeMap: Record<string, boolean> = {};
-        (res.data || []).forEach((item: any) => {
-          const key = `${item.item_id}:${item.model_id || ''}`;
-          map[key] = String(item.harga_promo || '');
-          activeMap[key] = item.status !== 0 && item.status !== '0' && item.status !== false;
+        const statusMap: Record<string, boolean> = {};
+        (res.data || []).forEach((it: any) => {
+          const key = `${it.item_id}:${it.model_id || ''}`;
+          map[key] = String(it.harga_promo || '');
+          statusMap[key] = it.is_active !== false;
         });
         setEditPriceMap(map);
-        setActiveStatusMap(activeMap);
-        setInitialActiveStatusMap({...activeMap});
+        setActiveStatusMap(statusMap);
+        setInitialActiveStatusMap({...statusMap});
       } else if (res && res.data) {
         setShopeeDetailItems(res.data);
       } else {
@@ -288,9 +288,58 @@ export default function DiskonScreen({ navigation }: any) {
     }
   };
 
-  const handleToggleItemStatus = (item: any, value: boolean) => {
+  const performToggle = async (item: any, action: string) => {
     const key = `${item.item_id}:${item.model_id || ''}`;
-    setActiveStatusMap(prev => ({...prev, [key]: value}));
+    setTogglingItem(prev => ({ ...prev, [key]: true }));
+    try {
+      let harga_promo = editPriceMap[key] ? parseFloat(editPriceMap[key].replace(/[^0-9]/g, '')) : Number(item.harga_promo || item.harga_jual_2 || 0);
+      
+      const res = await ApiService.post('/update/live_promo_item_status', {
+        discount_id: detailPromo?.discount_id,
+        id_ecommerce: detailPromo?.id_ecommerce,
+        item_id: item.item_id,
+        model_id: item.model_id || null,
+        action,
+        harga_promo,
+        purchase_limit: item.purchase_limit ? Number(item.purchase_limit) : 0
+      });
+      
+      if (res && res.success) {
+        Alert.alert('Sukses', action === 'activate' ? 'Promo berhasil diaktifkan!' : 'Promo berhasil dinonaktifkan!');
+        if (detailPromo) {
+          openShopeeDetail(detailPromo);
+        }
+      } else {
+        Alert.alert('Gagal', res?.message || 'Gagal mengubah status');
+      }
+    } catch (e: any) {
+      Alert.alert('Error', e.message || String(e));
+    } finally {
+      setTogglingItem(prev => ({ ...prev, [key]: false }));
+    }
+  };
+
+  const handleToggleItemStatus = (item: any, value: boolean) => {
+    const action = value ? 'activate' : 'deactivate';
+    if (action === 'deactivate') {
+      Alert.alert(
+        'Konfirmasi',
+        `Apakah Anda yakin ingin menonaktifkan promo untuk "${item.model_name || item.item_name || item.nama}"?`,
+        [
+          { text: 'Batal', style: 'cancel' },
+          { text: 'Nonaktifkan', onPress: () => performToggle(item, action) }
+        ]
+      );
+    } else {
+      Alert.alert(
+        'Konfirmasi',
+        `Aktifkan promo untuk "${item.model_name || item.item_name || item.nama}"?`,
+        [
+          { text: 'Batal', style: 'cancel' },
+          { text: 'Aktifkan', onPress: () => performToggle(item, action) }
+        ]
+      );
+    }
   };
 
   const handleSavePromoPrice = async () => {
@@ -316,79 +365,44 @@ export default function DiskonScreen({ navigation }: any) {
       };
     }).filter(it => it.harga_promo > 0);
 
-    const statusItemsToUpdate = shopeeDetailItems.filter(item => {
-      const key = `${item.item_id}:${item.model_id || ''}`;
-      return activeStatusMap[key] !== initialActiveStatusMap[key];
-    });
-
-    if (priceItemsToUpdate.length === 0 && statusItemsToUpdate.length === 0) {
-      return Alert.alert('Info', 'Tidak ada perubahan harga atau status.');
+    if (priceItemsToUpdate.length === 0) {
+      return Alert.alert('Info', 'Tidak ada perubahan harga untuk disimpan.');
     }
 
     setSavingPrice(true);
     try {
-      let statusError = false;
-      for (const item of statusItemsToUpdate) {
-        const key = `${item.item_id}:${item.model_id || ''}`;
-        const value = activeStatusMap[key];
-        const resStatus = await ApiService.post('/update/live_promo_item_status', {
-          discount_id: detailPromo.discount_id,
-          id_ecommerce: detailPromo.id_ecommerce,
-          item_id: item.item_id,
-          model_id: item.model_id ? Number(item.model_id) : 0,
-          action: value ? 'activate' : 'deactivate',
-          harga_promo: editPriceMap[key] ? parseFloat(editPriceMap[key].replace(/[^0-9]/g, '')) : item.harga_promo,
-          purchase_limit: item.purchase_limit ? Number(item.purchase_limit) : 0
-        });
-        if (!resStatus || !resStatus.success) {
-          statusError = true;
-        } else {
-          setInitialActiveStatusMap(prev => ({...prev, [key]: value}));
-        }
-      }
+      const res = await ApiService.post('/update/live_promo_price', {
+        discount_id: detailPromo.discount_id,
+        id_ecommerce: detailPromo.id_ecommerce,
+        items: priceItemsToUpdate
+      });
 
-      let priceSuccess = true;
-      if (priceItemsToUpdate.length > 0) {
-        const res = await ApiService.post('/update/live_promo_price', {
-          discount_id: detailPromo.discount_id,
-          id_ecommerce: detailPromo.id_ecommerce,
-          items: priceItemsToUpdate
-        });
-        if (res.success || res.status) {
-          const updatedItems = shopeeDetailItems.map(it => {
-            const key = `${it.item_id}:${it.model_id || ''}`;
-            if (editPriceMap[key] !== undefined) {
-               const cleanVal = editPriceMap[key].replace(/[^0-9]/g, '');
-               if (cleanVal) return { ...it, harga_promo: parseFloat(cleanVal) };
-            }
-            return it;
-          });
-          setShopeeDetailItems(updatedItems);
-          
-          const newMap: Record<string, string> = {};
-          updatedItems.forEach((it: any) => {
-            const key = `${it.item_id}:${it.model_id || ''}`;
-            newMap[key] = String(it.harga_promo || '');
-          });
-          setEditPriceMap(newMap);
-        } else {
-          priceSuccess = false;
-        }
-      }
-
-      if (statusError && !priceSuccess) {
-        Alert.alert('Gagal', 'Terjadi kesalahan saat menyimpan harga dan status');
-      } else if (statusError) {
-        Alert.alert('Info', 'Harga berhasil disimpan, namun sebagian status gagal diperbarui.');
-      } else if (!priceSuccess && priceItemsToUpdate.length > 0) {
-        Alert.alert('Info', 'Status berhasil disimpan, namun harga gagal diperbarui.');
-      } else {
-        Alert.alert('Sukses', 'Perubahan berhasil disimpan!\n\nCatatan: Perubahan status mungkin membutuhkan waktu 1-3 menit untuk sepenuhnya terupdate di Shopee.', [
+      if (res.success || res.status) {
+        Alert.alert('Sukses', 'Perubahan harga berhasil disimpan!', [
           { text: 'OK', onPress: () => {
             setDetailModalVisible(false);
             fetchLivePromos();
           }}
         ]);
+        
+        const updatedItems = shopeeDetailItems.map(it => {
+          const key = `${it.item_id}:${it.model_id || ''}`;
+          if (editPriceMap[key] !== undefined) {
+             const cleanVal = editPriceMap[key].replace(/[^0-9]/g, '');
+             if (cleanVal) return { ...it, harga_promo: parseFloat(cleanVal) };
+          }
+          return it;
+        });
+        setShopeeDetailItems(updatedItems);
+        
+        const newMap: Record<string, string> = {};
+        updatedItems.forEach((it: any) => {
+          const key = `${it.item_id}:${it.model_id || ''}`;
+          newMap[key] = String(it.harga_promo || '');
+        });
+        setEditPriceMap(newMap);
+      } else {
+        Alert.alert('Gagal', res?.message || 'Gagal menyimpan harga promo');
       }
     } catch (e: any) {
       Alert.alert('Error', e.message || String(e));
