@@ -144,9 +144,13 @@ export default function EcommerceChatDetailScreen() {
 
   // Handle back button - navigate back to chat list
   const handleBack = () => {
-    // Navigate back to EcommerceChat screen instead of using goBack()
+    // Navigate back to EcommerceChatMain screen instead of using goBack()
     // This ensures we always go to the chat list, not the main screen
-    (navigation as any).navigate('EcommerceChat');
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      (navigation as any).navigate('EcommerceChatMain');
+    }
   };
 
   // Handle send text
