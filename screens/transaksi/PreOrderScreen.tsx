@@ -41,6 +41,7 @@ interface PreOrderData {
   notes: string;
   items: PreOrderItem[];
   id_pembelian?: number;
+  status?: string;
 }
 
 interface FilterState {
@@ -143,6 +144,32 @@ export default function PreOrderScreen() {
     fetchPreOrders();
     fetchSuppliers();
   }, []);
+
+  // Handle new item from BarangEdit screen
+  useEffect(() => {
+    const params = route.params as any;
+    if (params?.newBarang) {
+      const item = params.newBarang;
+      const newPreOrderItem: PreOrderItem = {
+        id_masterbarang: item.id || 0,
+        nama: item.nama || '',
+        qty: 1,
+        harga: item.hargabeli || item.hargajual || 0,
+        merk: item.merk || '',
+        satuan: item.satuan || 'pcs',
+      };
+      
+      setCurrentPreOrder(prev => ({
+        ...prev,
+        items: [...prev.items, newPreOrderItem]
+      }));
+      
+      setShowDialog(true);
+      
+      // Clear param
+      navigation.setParams({ newBarang: undefined } as any);
+    }
+  }, [route.params]);
 
   // Handle transfer data from PesanBarang screen
   useEffect(() => {
@@ -248,7 +275,8 @@ export default function PreOrderScreen() {
 
       // Filter by status
       if (filters.status !== 'all') {
-        const poStatus = po.id_pembelian ? 'converted' : 'pending';
+        const isConverted = po.id_pembelian || po.status === 'merge' || po.status === 'merged' || po.status === 'converted';
+        const poStatus = isConverted ? 'converted' : 'pending';
         if (poStatus !== filters.status) return false;
       }
 
@@ -368,7 +396,8 @@ export default function PreOrderScreen() {
       return;
     }
 
-    if (preOrder.id_pembelian) {
+    const isConverted = preOrder.id_pembelian || preOrder.status === 'merge' || preOrder.status === 'merged' || preOrder.status === 'converted';
+    if (isConverted) {
       Alert.alert('Error', 'Cannot delete pre-order that has been converted to pembelian');
       return;
     }
@@ -510,8 +539,9 @@ export default function PreOrderScreen() {
 
   const renderPreOrderItem = ({ item, index }: { item: PreOrderData; index: number }) => {
     const isSelected = selectedPreOrders.includes(index);
-    const status = item.id_pembelian ? 'Converted' : 'Pending';
-    const statusColor = item.id_pembelian ? '#10b981' : '#f59e0b';
+    const isConverted = item.id_pembelian || item.status === 'merge' || item.status === 'merged' || item.status === 'converted';
+    const status = isConverted ? 'Converted' : 'Pending';
+    const statusColor = isConverted ? '#10b981' : '#f59e0b';
 
     return (
       <TouchableOpacity
@@ -568,18 +598,18 @@ export default function PreOrderScreen() {
             <Text style={styles.actionButtonText}>Edit</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.actionButton, !!item.id_pembelian && styles.actionButtonDisabled]}
+            style={[styles.actionButton, !!isConverted && styles.actionButtonDisabled]}
             onPress={() => handleDeletePreOrder(item)}
-            disabled={!!item.id_pembelian}
+            disabled={!!isConverted}
           >
             <Ionicons
               name="trash-outline"
               size={20}
-              color={item.id_pembelian ? '#9CA3AF' : '#ef4444'}
+              color={isConverted ? '#9CA3AF' : '#ef4444'}
             />
             <Text style={[
               styles.actionButtonText,
-              !!item.id_pembelian && styles.actionButtonTextDisabled
+              !!isConverted && styles.actionButtonTextDisabled
             ]}>
               Hapus
             </Text>
@@ -888,6 +918,10 @@ export default function PreOrderScreen() {
         onSelect={handleSelectBarang}
         multiSelect={true}
         excludeIds={currentPreOrder.items.map(item => item.id_masterbarang)}
+        onAddNewItem={() => {
+          setShowBarangModal(false);
+          (navigation as any).navigate('BarangEdit', { returnTo: 'PreOrderMain' });
+        }}
       />
 
       {/* Filter Pre Order Modal */}

@@ -6,7 +6,7 @@
 // For Android Emulator: use http://10.0.2.2 (maps to host's localhost)
 // For Physical Device: use your computer's IP address (e.g., http://192.168.1.210)
 export const API_BASE_URL = "https://app.plexseller.com"; // PRODUCTION - jangan dipakai saat development
-// export const API_BASE_URL = "http://127.0.0.1:8080"; // DEVELOPMENT - local server (using adb reverse tcp:8080 tcp:80)
+// export const API_BASE_URL = "http://192.168.0.102:3000"; // DEVELOPMENT - local server (Physical Device)
 
 // Debug: Log the actual environment variables being used
 console.log('[API] Environment Debug:', {
@@ -222,8 +222,9 @@ class ApiService {
           message: result.message || 'QR code authentication failed'
         };
       }
-    } catch (error) {
-      console.error('QR code authentication error1:', JSON.stringify(error));
+    } catch (error: any) {
+      console.error('QR code authentication error1:', error?.message || error);
+      console.error('Full error:', error);
       return {
         success: false,
         message: 'Network error. Please check your connection and try again.'
@@ -901,7 +902,7 @@ class ApiService {
     try {
       console.log(`🌐 [AUTH-REQ] Uploading file to: ${endpoint}`);
       const authHeader = await this.getAuthHeader();
-      
+
       const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         method: 'POST',
         headers: {
@@ -913,7 +914,7 @@ class ApiService {
       });
 
       console.log(`🌐 [AUTH-REQ] Upload response status: ${response.status}`);
-      
+
       if (response.status === 401 || response.status === 403) {
         throw new Error('Unauthorized');
       }

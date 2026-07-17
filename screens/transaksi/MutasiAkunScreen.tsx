@@ -52,7 +52,7 @@ const groupWD = (data: any[]): any[] => {
   const grouped: Record<string, any> = {};
   const result: any[] = [];
   data.forEach((item: any) => {
-    if (item.id && item.id.toString().startsWith('WD/')) {
+    if (item.id && /^WD\d*\//.test(item.id.toString())) {
       const key = `${item.tanggal}_${item.kodeba}`;
       if (grouped[key]) {
         grouped[key].debit += item.debit || 0;
@@ -62,6 +62,7 @@ const groupWD = (data: any[]): any[] => {
       } else {
         grouped[key] = { 
           ...item, 
+          id: item.id.toString().startsWith("WDO/") ? item.id.replace("WDO/", "WD/") : item.id,
           debit: item.debit || 0, 
           kredit: item.kredit || 0, 
           keterangan: '', 
@@ -327,7 +328,7 @@ export default function MutasiAkunScreen() {
   const totalKredit = items.reduce((a, i) => a + i.kredit, 0);
 
   const handleIdClick = (item: TransaksiItem) => {
-    if (item.isGrouped && item.id.toString().startsWith('WD/')) {
+    if (item.isGrouped && item.id && /^WD\d*\//.test(item.id.toString())) {
       setSelectedWD(item);
       setShowWDModal(true);
       return;

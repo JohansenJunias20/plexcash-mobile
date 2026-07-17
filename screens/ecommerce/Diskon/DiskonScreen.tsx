@@ -950,6 +950,15 @@ export default function DiskonScreen({ navigation }: any) {
                       <Text style={{ fontSize: 12, color: '#64748b' }}>Margin Promo</Text>
                       <Text style={{ fontSize: 12, fontWeight: 'bold', color: item.harga_promo - item.hpp > 0 ? '#16a34a' : '#ef4444' }}>
                         Rp {Number(item.harga_promo - item.hpp).toLocaleString('id-ID')}
+                        {(() => {
+                          const hppVal = Number(item.hpp) || 0;
+                          const promoVal = Number(item.harga_promo) || 0;
+                          if (hppVal > 0) {
+                            const perc = (((promoVal - hppVal) / hppVal) * 100).toFixed(1);
+                            return ` (${perc}%)`;
+                          }
+                          return ' (-)';
+                        })()}
                       </Text>
                     </View>
                   </View>

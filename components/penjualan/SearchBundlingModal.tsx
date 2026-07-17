@@ -38,7 +38,7 @@ interface Props {
   exceptions?: number[]; // id_bundling yang sudah dipilih
 }
 
-export default function SearchBundlingModal({ visible, onClose, onSelect, exceptions = [] }: Props) {
+export default function SearchBundlingModal({ visible, onClose, onSelect, exceptions }: Props) {
   const [searchQuery, setSearchQuery] = useState('');
   const [bundlings, setBundlings] = useState<BundlingItem[]>([]);
   const [filteredBundlings, setFilteredBundlings] = useState<BundlingItem[]>([]);
@@ -72,12 +72,13 @@ export default function SearchBundlingModal({ visible, onClose, onSelect, except
   }, [visible]);
 
   useEffect(() => {
+    const exc = exceptions || [];
     if (searchQuery.trim() === '') {
-      setFilteredBundlings(bundlings.filter(b => !exceptions.includes(b.id)));
+      setFilteredBundlings(bundlings.filter(b => !exc.includes(b.id)));
     } else {
       const filtered = bundlings.filter(
         (bundling) =>
-          !exceptions.includes(bundling.id) &&
+          !exc.includes(bundling.id) &&
           ((bundling.nama || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
             (bundling.sku || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
             (bundling.satuan || '').toLowerCase().includes(searchQuery.toLowerCase()))

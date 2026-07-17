@@ -110,6 +110,7 @@ const PerangkatStack = createNativeStackNavigator();
 const PembelianStack = createNativeStackNavigator();
 const PenjualanStack = createNativeStackNavigator();
 const JurnalStack = createNativeStackNavigator();
+const PreOrderStack = createNativeStackNavigator();
 
 const ScanSearchStack = createNativeStackNavigator();
 
@@ -302,6 +303,13 @@ const JurnalStackScreen = () => (
   </JurnalStack.Navigator>
 );
 
+const PreOrderStackScreen = () => (
+  <PreOrderStack.Navigator screenOptions={{ headerShown: false }}>
+    <PreOrderStack.Screen name="PreOrderMain" component={PreOrderScreen} />
+    <PreOrderStack.Screen name="BarangEdit" component={BarangEditScreen} />
+  </PreOrderStack.Navigator>
+);
+
 const DrawerNavigatorContent = () => {
   return (
     <Drawer.Navigator
@@ -337,7 +345,7 @@ const DrawerNavigatorContent = () => {
       <Drawer.Screen name="PembelianPelunasan" component={PembelianPelunasanScreen} />
       <Drawer.Screen name="PembelianRetur" component={PembelianReturScreen} />
       <Drawer.Screen name="PembelianDPBeli" component={PembelianDPBeliScreen} />
-      <Drawer.Screen name="PreOrder" component={PreOrderScreen} />
+      <Drawer.Screen name="PreOrder" component={PreOrderStackScreen} />
 
       {/* TRANSAKSI Section - Penjualan - Using Stack Navigator */}
       <Drawer.Screen name="PenjualanTambah" component={PenjualanTambahScreen} />

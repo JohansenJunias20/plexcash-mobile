@@ -490,6 +490,7 @@ export default function PesananV2Screen() {
       const CHUNK_SIZE = 5;
       let successCount = 0;
       let failCount = 0;
+      let errorReasons: string[] = [];
 
       for (let i = 0; i < ordersToProcess.length; i += CHUNK_SIZE) {
           const chunk = ordersToProcess.slice(i, i + CHUNK_SIZE);
@@ -500,7 +501,9 @@ export default function PesananV2Screen() {
                   try {
                       // Fetch detail for latest items
                       const detailRes = await ApiService.authenticatedRequest(`/get/ecommerce/order?id=${o.id_online}&id_ecommerce=${o.ecommerce_id}`);
-                      if (!detailRes?.status) return null;
+                      if (!detailRes?.status) {
+                          return { _error: true, message: detailRes?.reason || detailRes?.message || `Gagal mengambil detail pesanan ${o.id_online}` };
+                      }
                       const d = detailRes.data;
                       return {
                           platform: d.from || o.platform,
@@ -522,27 +525,54 @@ export default function PesananV2Screen() {
                           isBookingOrder: !!d.booking_sn,
                           update_stok: true // Optional config
                       };
-                  } catch { return null; }
+                  } catch (e: any) {
+                      return { _error: true, message: e?.message || `Error mengambil detail pesanan ${o.id_online}` };
+                  }
               }));
 
-              const validPayloads = payloads.filter(p => p !== null);
+              const validPayloads = payloads.filter(p => !p._error);
+              const errorPayloads = payloads.filter(p => p._error);
+
+              failCount += errorPayloads.length;
+              errorPayloads.forEach(p => errorReasons.push(p.message));
+
               if (validPayloads.length > 0) {
                   const res = await ApiService.authenticatedRequest('/ecommerce/pesanan', {
                       method: 'POST',
                       body: JSON.stringify(validPayloads)
                   });
-                  if (res?.status) successCount += validPayloads.length;
-                  else failCount += validPayloads.length;
+                  if (res?.status) {
+                      successCount += validPayloads.length;
+                  } else {
+                      failCount += validPayloads.length;
+                      const err = res?.reason || res?.message || res?.error || res?.data;
+                      if (typeof err === 'string') {
+                          if (err.includes('<html') || err.includes('<!DOCTYPE')) {
+                              errorReasons.push('Terjadi kesalahan 500 Internal Server Error di backend.');
+                          } else {
+                              errorReasons.push(err);
+                          }
+                      } else if (err) {
+                          errorReasons.push(JSON.stringify(err));
+                      } else if (typeof res === 'string' && (res.includes('<html') || res.includes('<!DOCTYPE'))) {
+                          errorReasons.push('Terjadi kesalahan 500 Internal Server Error di backend.');
+                      } else {
+                          errorReasons.push(`Gagal membuat penjualan.`);
+                      }
+                  }
               }
-          } catch (e) {
+          } catch (e: any) {
               failCount += chunk.length;
+              if (e?.message) errorReasons.push(e.message);
           }
 
           setBuatProgress(prev => ({ ...prev, processed: i + chunk.length }));
       }
 
       setBuatProgress({ open: false, processed: 0, total: 0, status: '', title: '' });
-      Alert.alert('Hasil Buat Penjualan', `Berhasil: ${successCount}\nGagal: ${failCount}`);
+      const uniqueErrors = Array.from(new Set(errorReasons)).filter(Boolean);
+      const errorText = uniqueErrors.length > 0 ? `\n\nAlasan:\n- ${uniqueErrors.join('\n- ')}` : '';
+      Alert.alert('Hasil Buat Penjualan', `Berhasil: ${successCount}\nGagal: ${failCount}${errorText}`);
       setSelectedOrders(new Set());
       fetchOrders({ page: 1 });
   };
@@ -571,6 +601,8 @@ export default function PesananV2Screen() {
       const CHUNK_SIZE = 5;
       let successCount = 0;
       let failCount = 0;
+      let errorReasons: string[] = [];
+      let successIds: string[] = [];
 
       for (let i = 0; i < ordersToProcess.length; i += CHUNK_SIZE) {
           const chunk = ordersToProcess.slice(i, i + CHUNK_SIZE);
@@ -581,7 +613,9 @@ export default function PesananV2Screen() {
                   try {
                       // Fetch detail for latest items
                       const detailRes = await ApiService.authenticatedRequest(`/get/ecommerce/order?id=${o.id_online}&id_ecommerce=${o.ecommerce_id}`);
-                      if (!detailRes?.status) return null;
+                      if (!detailRes?.status) {
+                          return { _error: true, message: detailRes?.reason || detailRes?.message || `Gagal mengambil detail pesanan ${o.id_online}` };
+                      }
                       const d = detailRes.data;
                       return {
                           platform: d.from || o.platform,
@@ -603,27 +637,56 @@ export default function PesananV2Screen() {
                           isBookingOrder: !!d.booking_sn,
                           update_stok: true
                       };
-                  } catch { return null; }
+                  } catch (e: any) {
+                      return { _error: true, message: e?.message || `Error mengambil detail pesanan ${o.id_online}` };
+                  }
               }));
 
-              const validPayloads = payloads.filter(p => p !== null);
+              const validPayloads = payloads.filter(p => !p._error);
+              const errorPayloads = payloads.filter(p => p._error);
+
+              failCount += errorPayloads.length;
+              errorPayloads.forEach(p => errorReasons.push(p.message));
+
               if (validPayloads.length > 0) {
-                  const res = await ApiService.authenticatedRequest('/ecommerce/retur', {
+                  const res = await ApiService.authenticatedRequest('/ecommerce/pembatalan', {
                       method: 'POST',
                       body: JSON.stringify(validPayloads)
                   });
-                  if (res?.status) successCount += validPayloads.length;
-                  else failCount += validPayloads.length;
+                  if (res?.status) {
+                      successCount += validPayloads.length;
+                      validPayloads.forEach(p => successIds.push(p.id));
+                  } else {
+                      failCount += validPayloads.length;
+                      const err = res?.reason || res?.message || res?.error || res?.data;
+                      if (typeof err === 'string') {
+                          if (err.includes('<html') || err.includes('<!DOCTYPE')) {
+                              errorReasons.push('Terjadi kesalahan 500 Internal Server Error di backend.');
+                          } else {
+                              errorReasons.push(err);
+                          }
+                      } else if (err) {
+                          errorReasons.push(JSON.stringify(err));
+                      } else if (typeof res === 'string' && (res.includes('<html') || res.includes('<!DOCTYPE'))) {
+                          errorReasons.push('Terjadi kesalahan 500 Internal Server Error di backend.');
+                      } else {
+                          errorReasons.push(`Gagal membuat retur.`);
+                      }
+                  }
               }
-          } catch (e) {
+          } catch (e: any) {
               failCount += chunk.length;
+              if (e?.message) errorReasons.push(e.message);
           }
 
           setBuatProgress(prev => ({ ...prev, processed: i + chunk.length }));
       }
 
       setBuatProgress({ open: false, processed: 0, total: 0, status: '', title: '' });
-      Alert.alert('Hasil Buat Retur', `Berhasil: ${successCount}\nGagal: ${failCount}`);
+      const uniqueErrors = Array.from(new Set(errorReasons)).filter(Boolean);
+      const errorText = uniqueErrors.length > 0 ? `\n\nAlasan Gagal:\n- ${uniqueErrors.join('\n- ')}` : '';
+      const successText = successIds.length > 0 ? `\n\nPesanan berikut berhasil diretur:\n- ${successIds.join('\n- ')}` : '';
+      Alert.alert('Hasil Buat Retur', `Berhasil: ${successCount}\nGagal: ${failCount}${successText}${errorText}`);
       setSelectedOrders(new Set());
       fetchOrders({ page: 1 });
   };

@@ -432,8 +432,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#f9fafb',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '88%',
-    minHeight: '60%',
+    maxHeight: '95%',
+    minHeight: '90%',
     overflow: 'hidden',
   },
   header: {

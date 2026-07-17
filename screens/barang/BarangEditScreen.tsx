@@ -86,7 +86,11 @@ export default function BarangEditScreen(): JSX.Element {
         const json = await res.json();
         if (!json.status) throw new Error(json.reason || 'Update failed');
         Alert.alert('Success', 'Saved');
-        navigation.navigate('BarangList');
+        if (navigation.canGoBack()) {
+          navigation.goBack();
+        } else {
+          navigation.navigate('BarangList');
+        }
       } else {
         const res = await fetch(`${API_BASE_URL}/masterbarang`, {
           method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -99,7 +103,32 @@ export default function BarangEditScreen(): JSX.Element {
         const json = await res.json();
         if (!json.status) throw new Error(json.reason || 'Create failed');
         Alert.alert('Success', 'Created');
-        navigation.navigate('BarangList');
+        
+        let newId = json.id || json.insertId || (json.data && json.data.id) || (json.data && json.data[0] && json.data[0].id);
+        if (!newId && form.sku) {
+          try {
+            const resCheck = await fetch(`${API_BASE_URL}/get/masterbarang/condition/and/sku:equal:${form.sku}`, {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            const jsonCheck = await resCheck.json();
+            if (jsonCheck.status && jsonCheck.data?.[0]) {
+              newId = jsonCheck.data[0].id;
+            }
+          } catch(e) {}
+        }
+
+        const returnTo = (route.params as any)?.returnTo;
+        if (returnTo) {
+          navigation.navigate({
+            name: returnTo,
+            params: { newBarang: { ...form, id: newId || 0 } },
+            merge: true,
+          } as any);
+        } else if (navigation.canGoBack()) {
+          navigation.goBack();
+        } else {
+          navigation.navigate('BarangList');
+        }
       }
     } catch (e: any) {
       Alert.alert('Error', e.message || 'Save failed');

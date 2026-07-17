@@ -1598,6 +1598,18 @@ export default function ReturOnlineScreen() {
                     <Text style={styles.detailMetaVal}>{customReasonMessage(selectedRowForDetail?.reason)}</Text>
                   </View>
                   <View style={styles.detailMetaRow}>
+                    <Text style={styles.detailMetaLabel}>Catatan Pembeli</Text>
+                    <Text style={styles.detailMetaVal}>
+                      {selectedRowForDetail?.catatan_pembeli || selectedRowForDetail?.catatan || selectedRowForDetail?.buyer_note || selectedRowForDetail?.note || '-'}
+                    </Text>
+                  </View>
+                  <View style={styles.detailMetaRow}>
+                    <Text style={styles.detailMetaLabel}>Pesan Komplain</Text>
+                    <Text style={styles.detailMetaVal}>
+                      {selectedRowForDetail?.pesan_pembeli || selectedRowForDetail?.pesan || selectedRowForDetail?.message || selectedRowForDetail?.buyer_comment || selectedRowForDetail?.keterangan || '-'}
+                    </Text>
+                  </View>
+                  <View style={styles.detailMetaRow}>
                     <Text style={styles.detailMetaLabel}>Tanggal</Text>
                     <Text style={styles.detailMetaVal}>
                       {selectedRowForDetail?.tanggal ? moment(selectedRowForDetail.tanggal).format('DD-MM-YYYY HH:mm:ss') : '-'}

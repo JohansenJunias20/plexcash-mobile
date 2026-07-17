@@ -41,6 +41,7 @@ interface SearchBarangModalProps {
   multiSelect?: boolean;
   excludeIds?: number[]; // IDs to exclude from search results
   title?: string;
+  onAddNewItem?: () => void;
 }
 
 const SearchBarangModal: React.FC<SearchBarangModalProps> = ({
@@ -50,6 +51,7 @@ const SearchBarangModal: React.FC<SearchBarangModalProps> = ({
   multiSelect = false,
   excludeIds = [],
   title = 'Cari Barang',
+  onAddNewItem,
 }) => {
   const [query, setQuery] = useState('');
   const [items, setItems] = useState<BarangItem[]>([]);
@@ -346,9 +348,17 @@ const SearchBarangModal: React.FC<SearchBarangModalProps> = ({
           {/* Header */}
           <View style={styles.header}>
             <Text style={styles.title}>{title}</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <Ionicons name="close" size={24} color="#374151" />
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              {onAddNewItem && (
+                <TouchableOpacity onPress={onAddNewItem} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEF3C7', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 }}>
+                  <Ionicons name="add" size={16} color="#D97706" />
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: '#D97706', marginLeft: 4 }}>Barang Baru</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                <Ionicons name="close" size={24} color="#374151" />
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Search Bar */}

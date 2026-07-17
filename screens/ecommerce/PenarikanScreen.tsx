@@ -271,8 +271,8 @@ export default function PenarikanScreen() {
 
     if (dateEnd.isBefore(start)) {
       setDateEnd(start.clone());
-    } else if (dateEnd.diff(start, 'months', true) > 1) {
-      setDateEnd(start.clone().add(1, 'month'));
+    } else if (dateEnd.diff(start, 'months', true) > 2) {
+      setDateEnd(start.clone().add(2, 'months'));
     }
   };
 
@@ -286,9 +286,9 @@ export default function PenarikanScreen() {
       return;
     }
 
-    if (end.diff(dateStart, 'months', true) > 1) {
-      Alert.alert('Peringatan', 'Jarak maksimal tanggal adalah 1 bulan.');
-      setDateEnd(dateStart.clone().add(1, 'month'));
+    if (end.diff(dateStart, 'months', true) > 2) {
+      Alert.alert('Peringatan', 'Jarak maksimal tanggal adalah 2 bulan.');
+      setDateEnd(dateStart.clone().add(2, 'months'));
       setDateChanged(true);
       return;
     }
