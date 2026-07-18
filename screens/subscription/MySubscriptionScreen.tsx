@@ -57,8 +57,19 @@ interface ProgressiveCalcData {
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
-const formatRupiah = (value: number | null | undefined): string => {
-  if (value === null || value === undefined) return 'Rp –';
+const getBalanceTotal = (val: any): number | null => {
+  if (val === null || val === undefined) return null;
+  if (typeof val === 'number') return val;
+  if (typeof val === 'object' && val !== null) {
+    if (val.total !== undefined) return Number(val.total);
+    if (val.balance !== undefined) return Number(val.balance);
+  }
+  return Number(val) || 0;
+};
+
+const formatRupiah = (rawValue: any): string => {
+  const value = getBalanceTotal(rawValue);
+  if (value === null || value === undefined || isNaN(value)) return 'Rp –';
   return new Intl.NumberFormat('id-ID', {
     style: 'currency',
     currency: 'IDR',
@@ -67,8 +78,10 @@ const formatRupiah = (value: number | null | undefined): string => {
   }).format(value);
 };
 
-const formatRupiahInput = (value: number): string => {
-  if (!value) return '';
+const formatRupiahInput = (rawValue: any): string => {
+  const value = getBalanceTotal(rawValue);
+  if (value === null || value === undefined || isNaN(value)) return '';
+  if (value === 0) return '0';
   return new Intl.NumberFormat('id-ID').format(value);
 };
 
@@ -209,7 +222,11 @@ const BalanceTab: React.FC<BalanceTabProps> = ({ balance, priceData, progCalc, l
                 <View style={styles.progCalcRow}>
                   <View style={styles.progCalcItem}>
                     <Text style={styles.progCalcLabel}>Order Bulan Ini</Text>
-                    <Text style={styles.progCalcValue}>{progCalc.order_count} order</Text>
+                    <Text style={styles.progCalcValue}>
+                      {typeof progCalc.order_count === 'object' && progCalc.order_count !== null 
+                        ? (progCalc.order_count as any).total || 0 
+                        : progCalc.order_count} order
+                    </Text>
                   </View>
                   <View style={styles.progCalcDivider} />
                   <View style={styles.progCalcItem}>
@@ -623,7 +640,8 @@ const MySubscriptionScreen: React.FC<Props> = ({ navigation }) => {
         try {
           const dbRes = await ApiService.getCurrentDatabase();
           if (!cancelled && dbRes.status && dbRes.data) {
-            setCurrentDbName(dbRes.data);
+            const dbData = dbRes.data;
+            setCurrentDbName(typeof dbData === 'string' ? dbData : dbData.name || JSON.stringify(dbData));
           }
         } catch (e) {
           console.warn('Could not verify active database:', e);
@@ -698,7 +716,7 @@ const MySubscriptionScreen: React.FC<Props> = ({ navigation }) => {
           <View>
             <Text style={styles.headerTitle}>Info Langganan</Text>
             <Text style={styles.headerSubtitle} numberOfLines={1}>
-              {currentDbName ? `📦 ${currentDbName}` : ((user as any)?.email || 'Akun Anda')}
+              {currentDbName ? `📦 ${currentDbName}` : (user as any)?.email ? String((user as any).email) : 'Akun Anda'}
             </Text>
           </View>
         </View>

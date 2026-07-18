@@ -25,9 +25,11 @@ import ApiService from '../../services/api';
 
 type FeeType = 'fixed' | 'progressive';
 
+type BalanceValue = number | { offline: number; online: number; total: number };
+
 interface BalanceInfo {
-  balance: number;
-  history_balance: number;
+  balance: BalanceValue;
+  history_balance: BalanceValue;
   last_checked_at: string | null;
 }
 
@@ -60,8 +62,19 @@ const DEVELOPER_EMAILS = ['johansen.junias17@gmail.com', 'josoft.josoft@gmail.co
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const formatRupiah = (value: number | null | undefined): string => {
-  if (value === null || value === undefined) return 'Rp –';
+const getBalanceTotal = (val: any): number | null => {
+  if (val === null || val === undefined) return null;
+  if (typeof val === 'number') return val;
+  if (typeof val === 'object' && val !== null) {
+    if (val.total !== undefined) return Number(val.total);
+    if (val.balance !== undefined) return Number(val.balance); // Just in case
+  }
+  return Number(val) || 0;
+};
+
+const formatRupiah = (rawValue: any): string => {
+  const value = getBalanceTotal(rawValue);
+  if (value === null || value === undefined || isNaN(value)) return 'Rp –';
   return new Intl.NumberFormat('id-ID', {
     style: 'currency',
     currency: 'IDR',
@@ -84,12 +97,16 @@ const formatDate = (iso: string | null | undefined): string => {
 };
 
 const parseRupiahInput = (raw: string): number => {
+  const isNegative = raw.includes('-');
   const cleaned = raw.replace(/[^\d]/g, '');
-  return parseInt(cleaned || '0', 10);
+  const val = parseInt(cleaned || '0', 10);
+  return isNegative ? -val : val;
 };
 
-const formatRupiahInput = (value: number): string => {
-  if (!value) return '';
+const formatRupiahInput = (rawValue: any): string => {
+  const value = getBalanceTotal(rawValue);
+  if (value === null || value === undefined || isNaN(value)) return '';
+  if (value === 0) return '0';
   return new Intl.NumberFormat('id-ID').format(value);
 };
 
@@ -101,9 +118,16 @@ const FeeBadge: React.FC<{ type: FeeType }> = ({ type }) => (
   </View>
 );
 
-const SyncIndicator: React.FC<{ balance: number | null; historyBalance: number | null }> = ({
+const SyncIndicator: React.FC<{ 
+  balance: number | null; 
+  historyBalance: number | null;
+  onSync?: () => void;
+  syncing?: boolean;
+}> = ({
   balance,
   historyBalance,
+  onSync,
+  syncing = false
 }) => {
   const outOfSync =
     balance !== null &&
@@ -122,11 +146,21 @@ const SyncIndicator: React.FC<{ balance: number | null; historyBalance: number |
         <Text style={[styles.balanceValue, outOfSync && styles.balanceOutOfSync]}>
           {formatRupiah(historyBalance)}
         </Text>
-        {outOfSync && (
-          <View style={styles.outOfSyncBadge}>
-            <Ionicons name="warning" size={10} color="#DC2626" />
-            <Text style={styles.outOfSyncText}>Tidak sinkron</Text>
-          </View>
+        {outOfSync && onSync && (
+          <TouchableOpacity 
+            style={styles.btnSync} 
+            onPress={onSync}
+            disabled={syncing}
+          >
+            {syncing ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <>
+                <Ionicons name="sync" size={12} color="#fff" />
+                <Text style={styles.btnSyncText}>Sync</Text>
+              </>
+            )}
+          </TouchableOpacity>
         )}
       </View>
     </View>
@@ -387,6 +421,14 @@ const DetailModal: React.FC<DetailModalProps> = ({
   const [saving, setSaving] = useState(false);
   const [showAddTier, setShowAddTier] = useState(false);
 
+  const [isEditingBalance, setIsEditingBalance] = useState(false);
+  const [editBalance, setEditBalance] = useState('');
+  const [editBalanceRaw, setEditBalanceRaw] = useState(0);
+  const [editHistoryBalance, setEditHistoryBalance] = useState('');
+  const [editHistoryBalanceRaw, setEditHistoryBalanceRaw] = useState(0);
+  const [savingBalance, setSavingBalance] = useState(false);
+  const [syncingBalance, setSyncingBalance] = useState(false);
+
   // Load data when opened
   useEffect(() => {
     if (!visible || !database) return;
@@ -396,6 +438,14 @@ const DetailModal: React.FC<DetailModalProps> = ({
     setFlatPriceRaw(raw);
     setFlatPrice(formatRupiahInput(raw));
     setShowAddTier(false);
+
+    setIsEditingBalance(false);
+    const bRaw = database.balance ?? 0;
+    const hbRaw = database.history_balance ?? 0;
+    setEditBalanceRaw(bRaw);
+    setEditBalance(formatRupiahInput(bRaw));
+    setEditHistoryBalanceRaw(hbRaw);
+    setEditHistoryBalance(formatRupiahInput(hbRaw));
 
     if (database.fee_type === 'progressive') {
       loadTiers(database.name);
@@ -419,6 +469,24 @@ const DetailModal: React.FC<DetailModalProps> = ({
     }
   };
 
+  const handleSyncBalance = async () => {
+    if (!database || database.history_balance === null) return;
+    setSyncingBalance(true);
+    try {
+      const res = await ApiService.syncDatabaseHistory(database.name);
+      if (res.status) {
+        Alert.alert('Berhasil', res.message || 'Saldo berhasil disinkronkan!');
+        onSaved();
+      } else {
+        Alert.alert('Error', res.reason || 'Gagal menyinkronkan saldo');
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Gagal menyinkronkan saldo. Coba lagi.');
+    } finally {
+      setSyncingBalance(false);
+    }
+  };
+
   const handleFeeTypeToggle = async (type: FeeType) => {
     if (type === feeType || isReadOnly || !database) return;
     try {
@@ -429,6 +497,28 @@ const DetailModal: React.FC<DetailModalProps> = ({
       }
     } catch (e) {
       Alert.alert('Error', 'Gagal mengubah tipe biaya. Coba lagi.');
+    }
+  };
+
+  const handleSaveBalance = async () => {
+    if (!database) return;
+    setSavingBalance(true);
+    try {
+      const res = await ApiService.setDatabaseBalance(
+        database.name,
+        editBalanceRaw
+      );
+      if (res.status) {
+        Alert.alert('Berhasil', 'Saldo berhasil diubah!');
+        setIsEditingBalance(false);
+        onSaved();
+      } else {
+        Alert.alert('Error', res.reason || 'Gagal mengubah saldo');
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Gagal mengubah saldo. Coba lagi.');
+    } finally {
+      setSavingBalance(false);
     }
   };
 
@@ -538,8 +628,74 @@ const DetailModal: React.FC<DetailModalProps> = ({
           <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
             {/* Balance summary */}
             <View style={styles.modalSection}>
-              <Text style={styles.sectionLabel}>RINGKASAN SALDO</Text>
-              <SyncIndicator balance={database.balance} historyBalance={database.history_balance} />
+              <View style={styles.sectionLabelRow}>
+                <Text style={styles.sectionLabel}>RINGKASAN SALDO</Text>
+                {!isReadOnly && !isEditingBalance && (
+                  <TouchableOpacity
+                    style={styles.btnAddTierSmall}
+                    onPress={() => setIsEditingBalance(true)}
+                  >
+                    <Ionicons name="pencil" size={14} color="#7C3AED" />
+                    <Text style={styles.btnAddTierSmallText}>Edit</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {isEditingBalance ? (
+                <View style={{ marginTop: 12 }}>
+
+                  <View style={styles.tierInputRow}>
+                    <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+                      <Text style={styles.inputLabel}>Saldo Terkini</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="0"
+                        placeholderTextColor="#9CA3AF"
+                        keyboardType="numeric"
+                        value={editBalance}
+                        onChangeText={(text) => {
+                          let formattedText = text;
+                          if (text === '-') {
+                             setEditBalanceRaw(0);
+                             setEditBalance('-');
+                             return;
+                          }
+                          const raw = parseRupiahInput(text);
+                          setEditBalanceRaw(raw);
+                          setEditBalance(text.includes('-') && raw === 0 ? '-0' : formatRupiahInput(raw));
+                        }}
+                      />
+                    </View>
+                  </View>
+                  <View style={styles.addTierActions}>
+                    <TouchableOpacity style={styles.btnCancel} onPress={() => setIsEditingBalance(false)}>
+                      <Text style={styles.btnCancelText}>Batal</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.btnAdd, savingBalance && { opacity: 0.7 }]}
+                      onPress={handleSaveBalance}
+                      disabled={savingBalance}
+                    >
+                      {savingBalance ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <>
+                          <Ionicons name="save" size={16} color="#fff" />
+                          <Text style={styles.btnAddText}>Simpan</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : (
+                <SyncIndicator 
+                  balance={database.balance} 
+                  historyBalance={database.history_balance} 
+                  onSync={!isReadOnly ? handleSyncBalance : undefined}
+                  syncing={syncingBalance}
+                />
+              )}
+
               <View style={styles.lastCheckRow}>
                 <Ionicons name="time-outline" size={14} color="#9CA3AF" />
                 <Text style={styles.lastCheckText}>
@@ -713,7 +869,14 @@ const ManageSubscriptionScreen: React.FC = () => {
       ]);
 
       if (dbRes.status && Array.isArray(dbRes.data)) {
-        setDatabases(dbRes.data);
+        const validDbs = dbRes.data.map(d => {
+          if (typeof d === 'string') return d;
+          if (d && typeof d === 'object') {
+            return d.name || d.database_name || d.database || JSON.stringify(d);
+          }
+          return String(d);
+        });
+        setDatabases(validDbs);
       }
       if (balRes.status && balRes.data) {
         setBalances(balRes.data);
@@ -748,8 +911,8 @@ const ManageSubscriptionScreen: React.FC = () => {
       const priceInfo = prices.find(p => p.database_name === name);
       return {
         name,
-        balance: bal?.balance ?? null,
-        history_balance: bal?.history_balance ?? null,
+        balance: getBalanceTotal(bal?.balance),
+        history_balance: getBalanceTotal(bal?.history_balance),
         last_checked_at: bal?.last_checked_at ?? null,
         price: priceInfo?.price ?? null,
         fee_type: priceInfo?.fee_type ?? 'fixed',
@@ -792,8 +955,8 @@ const ManageSubscriptionScreen: React.FC = () => {
                 ...prev,
                 price: newPriceInfo?.price ?? prev.price,
                 fee_type: newPriceInfo?.fee_type ?? prev.fee_type,
-                balance: newBal?.balance ?? prev.balance,
-                history_balance: newBal?.history_balance ?? prev.history_balance,
+                balance: newBal ? getBalanceTotal(newBal.balance) : prev.balance,
+                history_balance: newBal ? getBalanceTotal(newBal.history_balance) : prev.history_balance,
                 last_checked_at: newBal?.last_checked_at ?? prev.last_checked_at,
               }
             : prev
@@ -1111,16 +1274,21 @@ const styles = StyleSheet.create({
   balanceOutOfSync: {
     color: '#DC2626',
   },
-  outOfSyncBadge: {
+  btnSync: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    marginTop: 3,
+    backgroundColor: '#7C3AED',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    marginTop: 6,
+    gap: 4,
+    alignSelf: 'flex-start',
   },
-  outOfSyncText: {
+  btnSyncText: {
+    color: '#fff',
     fontSize: 10,
-    color: '#DC2626',
-    fontWeight: '600',
+    fontWeight: 'bold',
   },
 
   // ── Card footer

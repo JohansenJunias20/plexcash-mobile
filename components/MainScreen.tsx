@@ -120,13 +120,21 @@ const MainScreen = (): React.JSX.Element => {
         // Fetch current database name
         const dbResponse = await ApiService.getCurrentDatabase();
         if (dbResponse.status && dbResponse.data) {
-          setCurrentDatabase(dbResponse.data);
+          const dbData = dbResponse.data;
+          setCurrentDatabase(typeof dbData === 'string' ? dbData : dbData.name || JSON.stringify(dbData));
         }
 
         // Fetch database list for everyone (backend handles permissions)
         const listResponse = await ApiService.getDatabaseList();
-        if (listResponse.status && listResponse.data) {
-          setDatabases(listResponse.data);
+        if (listResponse.status && Array.isArray(listResponse.data)) {
+          const validDbs = listResponse.data.map((d: any) => {
+            if (typeof d === 'string') return d;
+            if (d && typeof d === 'object') {
+              return d.name || d.database_name || d.database || JSON.stringify(d);
+            }
+            return String(d);
+          });
+          setDatabases(validDbs);
         }
       } catch (error) {
         console.error('Error fetching database info:', error);

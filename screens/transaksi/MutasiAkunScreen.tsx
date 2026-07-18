@@ -280,7 +280,13 @@ export default function MutasiAkunScreen() {
 
       if (trxData.status) {
         let running = initSaldo;
-        let rows: any[] = trxData.data.filter((r: any) => r.kredit || r.debit);
+        let rows: any[] = trxData.data
+          .filter((r: any) => r.kredit || r.debit)
+          .map((r: any) => ({
+            ...r,
+            debit: parseFloat(r.debit || '0'),
+            kredit: parseFloat(r.kredit || '0')
+          }));
         rows = groupWD(rows);
         rows.sort((a: any, b: any) =>
           new Date(a.tanggal.replace(' ', 'T')).getTime() -
@@ -408,14 +414,14 @@ export default function MutasiAkunScreen() {
       <View style={s.rowAmounts}>
         <View style={s.amountCol}>
           <Text style={s.amountLabel}>Debit</Text>
-          <Text style={[s.amountValue, item.debit > 0 && s.debitColor]}>
-            {item.debit > 0 ? currency(item.debit) : '-'}
+          <Text style={[s.amountValue, item.debit !== 0 && s.debitColor]}>
+            {item.debit !== 0 ? currency(item.debit) : '-'}
           </Text>
         </View>
         <View style={s.amountCol}>
           <Text style={s.amountLabel}>Kredit</Text>
-          <Text style={[s.amountValue, item.kredit > 0 && s.kreditColor]}>
-            {item.kredit > 0 ? currency(item.kredit) : '-'}
+          <Text style={[s.amountValue, item.kredit !== 0 && s.kreditColor]}>
+            {item.kredit !== 0 ? currency(item.kredit) : '-'}
           </Text>
         </View>
         <View style={[s.amountCol, { alignItems: 'flex-end' }]}>

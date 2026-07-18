@@ -155,14 +155,22 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ navigation, s
         const dbResponse = await ApiService.getCurrentDatabase();
         console.log('[DRAWER-DEBUG] dbResponse:', dbResponse);
         if (dbResponse.status && dbResponse.data) {
-          setCurrentDatabase(dbResponse.data);
+          const dbData = dbResponse.data;
+          setCurrentDatabase(typeof dbData === 'string' ? dbData : dbData.name || JSON.stringify(dbData));
         }
 
         const listResponse = await ApiService.getDatabaseList();
         console.log('[DRAWER-DEBUG] listResponse:', listResponse);
-        if (listResponse.status && listResponse.data) {
-          setDatabases(listResponse.data);
-          console.log('[DRAWER-DEBUG] databases set to:', listResponse.data);
+        if (listResponse.status && Array.isArray(listResponse.data)) {
+          const validDbs = listResponse.data.map((d: any) => {
+            if (typeof d === 'string') return d;
+            if (d && typeof d === 'object') {
+              return d.name || d.database_name || d.database || JSON.stringify(d);
+            }
+            return String(d);
+          });
+          setDatabases(validDbs);
+          console.log('[DRAWER-DEBUG] databases set to:', validDbs);
         }
       } catch (error) {
         console.error('[DRAWER-DEBUG] Error fetching database info:', error);
@@ -254,7 +262,7 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ navigation, s
             <Ionicons name="person-circle" size={56} color="#fff" />
             <View style={styles.headerText}>
               <Text style={styles.headerTitle}>Welcome Back!</Text>
-              <Text style={styles.headerSubtitle}>{(user as any)?.email || 'Guest'}</Text>
+              <Text style={styles.headerSubtitle}>{String((user as any)?.email || 'Guest')}</Text>
             </View>
           </View>
         </View>

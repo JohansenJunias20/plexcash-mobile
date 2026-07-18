@@ -5,8 +5,8 @@
 // TEMPORARY FIX: Use computer's IP address for mobile device access
 // For Android Emulator: use http://10.0.2.2 (maps to host's localhost)
 // For Physical Device: use your computer's IP address (e.g., http://192.168.1.210)
-export const API_BASE_URL = "https://app.plexseller.com"; // PRODUCTION - jangan dipakai saat development
-// export const API_BASE_URL = "http://192.168.0.102:3000"; // DEVELOPMENT - local server (Physical Device)
+// export const API_BASE_URL = "https://app.plexseller.com"; // PRODUCTION - jangan dipakai saat development
+export const API_BASE_URL = "http://192.168.0.102:3000"; // DEVELOPMENT - local server (Physical Device)
 
 // Debug: Log the actual environment variables being used
 console.log('[API] Environment Debug:', {
@@ -1112,6 +1112,50 @@ class ApiService {
     } catch (error) {
       console.error('Error fetching database balances:', error);
       return { status: false, reason: 'Failed to fetch database balances' };
+    }
+  }
+
+  /**
+   * Set balance and history balance for a tenant database (developer only)
+   */
+  static async setDatabaseBalance(databaseName: string, targetBalance: number): Promise<{ status: boolean; reason?: string }> {
+    try {
+      const response = await this.authenticatedRequest('/admin/balance/adjust', {
+        method: 'POST',
+        body: JSON.stringify({
+          store: databaseName,
+          target_balance: targetBalance,
+          description: "Sync / Edit dari mobile app"
+        }),
+      });
+
+      return {
+        status: response.status,
+        reason: response.reason || response.message,
+      };
+    } catch (error) {
+      console.error('API setDatabaseBalance Error:', error);
+      return { status: false, reason: (error as Error).message };
+    }
+  }
+
+  /**
+   * Sync balance history to match the current actual balance (adds adjustment transaction)
+   */
+  static async syncDatabaseHistory(databaseName: string): Promise<{ status: boolean; message?: string; reason?: string }> {
+    try {
+      const response = await this.authenticatedRequest('/admin/balance/sync-history', {
+        method: 'POST',
+        body: JSON.stringify({ database_name: databaseName }),
+      });
+      return {
+        status: response.status,
+        message: response.message,
+        reason: response.reason || response.message,
+      };
+    } catch (error) {
+      console.error('API syncDatabaseHistory Error:', error);
+      return { status: false, reason: (error as Error).message };
     }
   }
 
