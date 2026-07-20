@@ -5,8 +5,8 @@
 // TEMPORARY FIX: Use computer's IP address for mobile device access
 // For Android Emulator: use http://10.0.2.2 (maps to host's localhost)
 // For Physical Device: use your computer's IP address (e.g., http://192.168.1.210)
-// export const API_BASE_URL = "https://app.plexseller.com"; // PRODUCTION - jangan dipakai saat development
-export const API_BASE_URL = "http://192.168.0.102:3000"; // DEVELOPMENT - local server (Physical Device)
+export const API_BASE_URL = "https://app.plexseller.com"; // PRODUCTION - jangan dipakai saat development
+// export const API_BASE_URL = "http://192.168.0.102:3000"; // DEVELOPMENT - local server (Physical Device)
 
 // Debug: Log the actual environment variables being used
 console.log('[API] Environment Debug:', {
