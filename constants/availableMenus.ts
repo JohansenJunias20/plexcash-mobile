@@ -58,7 +58,7 @@ export const AVAILABLE_MENUS: MenuItem[] = [
   // ECOMMERCE
   { id: 'KesehatanToko', label: 'Kesehatan Toko', subtitle: 'Account Health', icon: 'heart-half-outline', route: 'KesehatanToko', category: 'ECOMMERCE', accessKey: 'ecommerce.kesehatan_toko' },
   { id: 'DiskonScreen', label: 'Diskon & Promo', subtitle: 'Promo & Harga Coret', icon: 'pricetag-outline', route: 'DiskonScreen', category: 'ECOMMERCE', accessKey: 'ecommerce.diskon' },
-  { id: 'Pesanan', label: 'Pesanan V1', subtitle: 'Legacy Orders', icon: 'cart-outline', route: 'Pesanan', category: 'ECOMMERCE', accessKey: 'ecommerce.pesanan' },
+
   { id: 'PesananV2', label: 'Pesanan V2', subtitle: 'Ecommerce Orders', icon: 'cart', route: 'PesananV2', category: 'ECOMMERCE', accessKey: 'ecommerce.pesanan' },
   { id: 'EcommerceChat', label: 'Chat', subtitle: 'Customer Chat', icon: 'chatbubbles-outline', route: 'EcommerceChat', category: 'ECOMMERCE', accessKey: 'ecommerce.ecommerce_chat' },
   { id: 'Notifikasi', label: 'Notifikasi', subtitle: 'Notifications', icon: 'notifications-outline', route: 'Notifikasi', category: 'ECOMMERCE', accessKey: 'ecommerce.notifikasi' },

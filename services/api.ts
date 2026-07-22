@@ -724,8 +724,14 @@ class ApiService {
       console.log(`🌐 [AUTH-REQ] Response status for ${endpoint}: ${response.status}`);
 
       // Task 4: Handle 401 errors with token refresh and retry
-      if (response.status === 401 || response.status === 403) {
-        console.log(`❌ [AUTH-REQ] UNAUTHORIZED (${response.status})`);
+      // 403 is FORBIDDEN (user lacks permissions, e.g. not an admin). Do NOT refresh token for 403.
+      if (response.status === 403) {
+        console.log(`❌ [AUTH-REQ] FORBIDDEN (403) for ${endpoint}. User lacks permissions.`);
+        throw new Error('Forbidden');
+      }
+
+      if (response.status === 401) {
+        console.log(`❌ [AUTH-REQ] UNAUTHORIZED (401)`);
         console.log(`❌ [AUTH-REQ] Endpoint: ${endpoint}`);
         console.log(`❌ [AUTH-REQ] Retry count: ${retryCount}`);
 
@@ -817,8 +823,12 @@ class ApiService {
         console.log(`⚠️ [AUTH-REQ] Response is not JSON for ${endpoint}, returning as text`);
         return responseText;
       }
-    } catch (error) {
-      console.error(`💥 [AUTH-REQ] Request failed for ${endpoint}:`, error);
+    } catch (error: any) {
+      if (error.message === 'Forbidden') {
+        console.log(`⚠️ [AUTH-REQ] Request forbidden (403) for ${endpoint}`);
+      } else {
+        console.error(`💥 [AUTH-REQ] Request failed for ${endpoint}:`, error);
+      }
       throw error;
     }
   }
@@ -856,8 +866,10 @@ class ApiService {
     try {
       const response = await this.authenticatedRequest('/get/database/list');
       return response;
-    } catch (error) {
-      console.error('Error fetching database list:', error);
+    } catch (error: any) {
+      if (error.message !== 'Forbidden') {
+        console.error('Error fetching database list:', error);
+      }
       return { status: false, reason: 'Failed to fetch database list' };
     }
   }

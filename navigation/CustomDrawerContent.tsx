@@ -159,18 +159,21 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ navigation, s
           setCurrentDatabase(typeof dbData === 'string' ? dbData : dbData.name || JSON.stringify(dbData));
         }
 
-        const listResponse = await ApiService.getDatabaseList();
-        console.log('[DRAWER-DEBUG] listResponse:', listResponse);
-        if (listResponse.status && Array.isArray(listResponse.data)) {
-          const validDbs = listResponse.data.map((d: any) => {
-            if (typeof d === 'string') return d;
-            if (d && typeof d === 'object') {
-              return d.name || d.database_name || d.database || JSON.stringify(d);
-            }
-            return String(d);
-          });
-          setDatabases(validDbs);
-          console.log('[DRAWER-DEBUG] databases set to:', validDbs);
+        // Only fetch database list if the user is an admin, avoiding 403 Forbidden errors in logs
+        if (isAdminRole) {
+          const listResponse = await ApiService.getDatabaseList();
+          console.log('[DRAWER-DEBUG] listResponse:', listResponse);
+          if (listResponse.status && Array.isArray(listResponse.data)) {
+            const validDbs = listResponse.data.map((d: any) => {
+              if (typeof d === 'string') return d;
+              if (d && typeof d === 'object') {
+                return d.name || d.database_name || d.database || JSON.stringify(d);
+              }
+              return String(d);
+            });
+            setDatabases(validDbs);
+            console.log('[DRAWER-DEBUG] databases set to:', validDbs);
+          }
         }
       } catch (error) {
         console.error('[DRAWER-DEBUG] Error fetching database info:', error);
@@ -340,7 +343,7 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ navigation, s
       {/* ECOMMERCE Section */}
       {hasAnyTrue(a?.ecommerce) && <SectionHeader title="ECOMMERCE" />}
       {checkAccess(a?.ecommerce?.diskon) && <DrawerItem label="Diskon & Promo" icon="pricetag-outline" onPress={() => navigation.navigate('DiskonScreen')} active={currentRoute === 'DiskonScreen'} />}
-      {checkAccess(a?.ecommerce?.pesanan) && <DrawerItem label="Pesanan" icon="list" onPress={() => navigation.navigate('Pesanan')} active={currentRoute === 'Pesanan'} />}
+
       {checkAccess(a?.ecommerce?.pesanan) && <DrawerItem label="Pesanan V2" icon="list-circle" onPress={() => navigation.navigate('PesananV2')} active={currentRoute === 'PesananV2'} badge="NEW" />}
       {checkAccess(a?.ecommerce?.ecommerce_chat) && <DrawerItem label="Chat" icon="chatbubbles" onPress={() => navigation.navigate('EcommerceChat')} active={currentRoute === 'EcommerceChat'} />}
       {checkAccess(a?.ecommerce?.notifikasi) && <DrawerItem label="Notifikasi" icon="notifications" onPress={() => navigation.navigate('Notifikasi')} active={currentRoute === 'Notifikasi'} />}

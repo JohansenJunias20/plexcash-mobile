@@ -72,6 +72,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           return;
         }
 
+        // If we already have a Firebase session stored, don't blindly exchange token again on startup.
+        // The backend token might contain tenant-specific claims (multitenant) which would be lost
+        // if we exchange for a new generic token. Let api.ts handle refresh ONLY when 401 occurs.
+        const existingAuthToken = await AsyncStorage.getItem('authToken');
+        if (firebaseUser && storedAuthMethod === 'firebase' && existingAuthToken) {
+           console.log('✅ [AUTH-STATE-CHANGED] Firebase user detected, but stored session exists. Skipping token exchange to preserve multitenant claims.');
+           setUser(Object.assign(firebaseUser, { authMethod: 'firebase' as const }));
+           setIsAuthenticated(true);
+           setIsTokenReady(true);
+           setIsLoading(false);
+           return;
+        }
+
         // CRITICAL FIX: Always set isLoading = true when processing auth state change
         // But we'll set it to false at the end to ensure navigation works
         logStateChange('Setting isLoading = true (processing auth state change)');
@@ -276,41 +289,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setIsAuthenticated(true);
             setIsLoading(false);
 
-            // Background token refresh: wait for Firebase to initialize, then re-exchange token
-            (async () => {
-              try {
-                console.log('⏳ [AUTH-STARTUP] Waiting for Firebase to restore session (up to 15s)...');
-                const firebaseUser = await ApiService.waitForFirebaseUser(15000);
-                if (firebaseUser) {
-                  console.log('🔥 [AUTH-STARTUP] Firebase user ready:', firebaseUser.email, '- refreshing token...');
-                  const freshToken = await firebaseUser.getIdToken(true);
-                  const backendResponse = await ApiService.exchangeFirebaseToken(freshToken);
-                  if (backendResponse.status) {
-                    const tokenToStore = backendResponse.persistentToken || freshToken;
-                    await ApiService.storeDeviceTokens({
-                      authToken: tokenToStore,
-                      token: tokenToStore,
-                      deviceId: await ApiService.getOrCreateDeviceId(),
-                      user: { email: firebaseUser.email ?? '' },
-                      authMethod: 'firebase',
-                    });
-                    console.log('✅ [AUTH-STARTUP] Firebase token refreshed and stored successfully!');
-                  } else {
-                    console.log('⚠️ [AUTH-STARTUP] Backend exchange failed, keeping existing token:', backendResponse.message);
-                  }
-                } else {
-                  console.log('⚠️ [AUTH-STARTUP] Firebase user still null after 15s - keeping stored token as fallback');
-                }
-              } catch (bgError) {
-                console.error('❌ [AUTH-STARTUP] Background token refresh failed (session kept):', bgError);
-              } finally {
-                // Mark token as ready regardless of refresh outcome.
-                // The stored token (even if not refreshed) will be used, and
-                // the 401 retry mechanism in api.ts will handle any expiry.
-                console.log('✅ [AUTH-STARTUP] Token ready signal sent to app');
-                setIsTokenReady(true);
-              }
-            })();
+            // REMOVED BACKGROUND TOKEN REFRESH
+            // Exchanging token on startup would overwrite the user's multitenant token 
+            // that contains their specific database access claims.
+            // We rely on api.ts to handle 401 errors and refresh ONLY when needed.
+            console.log('✅ [AUTH-STARTUP] Token ready signal sent to app (background refresh disabled for multitenant support)');
+            setIsTokenReady(true);
 
             return; // User is already set as authenticated above
           }

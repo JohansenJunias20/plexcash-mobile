@@ -1,5 +1,6 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Firebase configuration - same as web app
 const firebaseConfig = {
@@ -16,14 +17,16 @@ const firebaseConfig = {
 const firebaseApp = initializeApp(firebaseConfig);
 
 // Initialize Firebase Auth
-// For React Native, Firebase automatically uses AsyncStorage for persistence
-// when @react-native-async-storage/async-storage is installed
+// For React Native with Firebase JS SDK v9+, persistence must be explicitly 
+// initialized using getReactNativePersistence to ensure permanent login.
 // This auth instance is used by:
 // - context/AuthContext.tsx: onAuthStateChanged listener and signOut
 // - components/AuthTest.tsx: checking currentUser
 // - services/api.ts: getting Firebase ID token for API requests
 // - services/googleAuth.ts: signInWithCustomToken (imported dynamically from 'firebase/auth')
-const auth = getAuth(firebaseApp);
+const auth = initializeAuth(firebaseApp, {
+  persistence: getReactNativePersistence(AsyncStorage)
+});
 
 // Export only what's actually used by the mobile app
 // Note: Other Firebase auth functions (signInWithCustomToken, onAuthStateChanged, etc.)
