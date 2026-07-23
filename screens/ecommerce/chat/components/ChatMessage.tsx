@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, Modal, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, Modal, Pressable, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 import { IChatMessageProps } from '../types/chat.types';
 
 /**
@@ -8,10 +9,81 @@ import { IChatMessageProps } from '../types/chat.types';
  * Displays individual message bubble
  */
 const ChatMessage: React.FC<IChatMessageProps> = ({ message, isCurrentUser }) => {
+  const navigation = useNavigation<any>();
   const isSeller = message.from === 'seller';
   const isSystem = message.from === 'system';
   const [imagePreviewVisible, setImagePreviewVisible] = useState(false);
   const [previewImageUrl, setPreviewImageUrl] = useState<string>('');
+
+  // Helper to parse order link from text like "/ecommerce/pesanan/10/26072199C34PMM" or "/ecommerce/pesanan/10/260712"
+  const parseOrderLink = (text?: string) => {
+    if (!text || typeof text !== 'string') return null;
+    const regex = /(?:\/ecommerce)?\/pesanan\/(\d+)\/([A-Za-z0-9_-]+)/i;
+    const match = text.match(regex);
+    if (match) {
+      const idEcommerce = parseInt(match[1], 10);
+      const orderSn = match[2];
+      const remainingText = text.replace(match[0], '').trim();
+      return {
+        idEcommerce,
+        orderSn,
+        remainingText,
+      };
+    }
+    return null;
+  };
+
+  // Render Order Card (Bubble Card for order links)
+  const renderOrderCard = (orderSn: string, idEcommerce: number, remainingText?: string) => {
+    return (
+      <View style={styles.orderCardWrapper}>
+        {remainingText ? (
+          <Text style={[styles.messageText, isSeller && styles.messageTextSeller, { marginBottom: 8 }]}>
+            {remainingText}
+          </Text>
+        ) : null}
+        <TouchableOpacity
+          style={[
+            styles.orderBubbleCard,
+            isSeller ? styles.orderBubbleCardSeller : styles.orderBubbleCardBuyer,
+          ]}
+          onPress={() => {
+            console.log('📦 [ChatMessage] Opening OrderDetail for order:', orderSn, 'idEcommerce:', idEcommerce);
+            navigation.navigate('OrderDetail', {
+              id: orderSn,
+              id_ecommerce: idEcommerce,
+            });
+          }}
+          activeOpacity={0.85}
+        >
+          <View style={styles.orderBubbleHeader}>
+            <View style={styles.orderBubbleIconBg}>
+              <Ionicons name="bag-handle" size={20} color="#f59e0b" />
+            </View>
+            <View style={styles.orderBubbleHeaderText}>
+              <Text style={styles.orderBubbleTitle}>Pesanan E-Commerce</Text>
+              <Text style={styles.orderBubbleSubtitle}>Tap untuk lihat detail pesanan</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+          </View>
+
+          <View style={styles.orderBubbleDivider} />
+
+          <View style={styles.orderBubbleBody}>
+            <Text style={styles.orderBubbleLabel}>No. Pesanan:</Text>
+            <Text style={styles.orderBubbleValue} numberOfLines={1}>
+              {orderSn}
+            </Text>
+          </View>
+
+          <View style={styles.orderBubbleFooter}>
+            <Text style={styles.orderBubbleActionText}>Buka Detail Pesanan</Text>
+            <Ionicons name="open-outline" size={14} color="#f59e0b" />
+          </View>
+        </TouchableOpacity>
+      </View>
+    );
+  };
 
   // Format timestamp
   const formatTime = (timestamp: number): string => {
@@ -24,7 +96,7 @@ const ChatMessage: React.FC<IChatMessageProps> = ({ message, isCurrentUser }) =>
 
   // Handle showing image preview (for both product and regular images)
   const handleShowImagePreview = (imageUrl: string) => {
-    console.log('�️ [ChatMessage] Opening image preview:', imageUrl);
+    console.log('🖼️ [ChatMessage] Opening image preview:', imageUrl);
     setPreviewImageUrl(imageUrl);
     setImagePreviewVisible(true);
   };
@@ -38,8 +110,36 @@ const ChatMessage: React.FC<IChatMessageProps> = ({ message, isCurrentUser }) =>
 
   // Render message content based on type
   const renderMessageContent = () => {
-    // Handle missing or invalid message content
-    if (!message.msg || typeof message.msg !== 'object') {
+    // Extract any text content from message object or string
+    let rawText = '';
+    if (typeof message.msg === 'string') {
+      rawText = message.msg;
+    } else if (message.msg && typeof message.msg === 'object') {
+      rawText = message.msg.text || message.msg.content || (message.msg as any).msg || '';
+    }
+    if (!rawText) {
+      rawText = (message as any).content || (message as any).text || (message as any).msg || '';
+    }
+
+    // 1. ALWAYS check if text contains an order link (/ecommerce/pesanan/12/...)
+    const orderLinkInfo = parseOrderLink(rawText);
+    if (orderLinkInfo) {
+      return renderOrderCard(
+        orderLinkInfo.orderSn,
+        orderLinkInfo.idEcommerce,
+        orderLinkInfo.remainingText
+      );
+    }
+
+    // Handle missing or invalid message content object
+    if (!message.msg) {
+      if (rawText) {
+        return (
+          <Text style={[styles.messageText, isSeller && styles.messageTextSeller]}>
+            {rawText}
+          </Text>
+        );
+      }
       return (
         <View style={styles.unsupportedContainer}>
           <Ionicons name="alert-circle-outline" size={16} color="#9CA3AF" />
@@ -48,24 +148,28 @@ const ChatMessage: React.FC<IChatMessageProps> = ({ message, isCurrentUser }) =>
       );
     }
 
-    switch (message.msg.type) {
+    const msgObj = typeof message.msg === 'object' ? message.msg : { type: 'text', text: rawText };
+    const msgType = msgObj.type || 'text';
+
+    switch (msgType) {
       case 'text':
+      case 'chat':
         return (
           <Text style={[styles.messageText, isSeller && styles.messageTextSeller]}>
-            {message.msg.text || ''}
+            {rawText}
           </Text>
         );
 
       case 'image':
         return (
           <View>
-            {message.msg.image && (
+            {msgObj.image && (
               <TouchableOpacity
-                onPress={() => handleShowImagePreview(message.msg.image!)}
+                onPress={() => handleShowImagePreview(msgObj.image!)}
                 activeOpacity={0.9}
               >
                 <Image
-                  source={{ uri: message.msg.image }}
+                  source={{ uri: msgObj.image }}
                   style={styles.messageImage}
                   resizeMode="cover"
                 />
@@ -77,9 +181,9 @@ const ChatMessage: React.FC<IChatMessageProps> = ({ message, isCurrentUser }) =>
       case 'sticker':
         return (
           <View>
-            {message.msg.sticker_url && (
+            {msgObj.sticker_url && (
               <Image
-                source={{ uri: message.msg.sticker_url }}
+                source={{ uri: msgObj.sticker_url }}
                 style={styles.stickerImage}
                 resizeMode="contain"
               />
@@ -88,78 +192,54 @@ const ChatMessage: React.FC<IChatMessageProps> = ({ message, isCurrentUser }) =>
         );
 
       case 'product':
-        console.log('🛍️ [ChatMessage] Rendering product:', {
-          has_image: !!message.msg.product_image,
-          image_url: message.msg.product_image,
-          product_name: message.msg.text,
-        });
-
         return (
           <View style={styles.productCard}>
-            {/* Product Image */}
-            {message.msg.product_image && (
+            {msgObj.product_image && (
               <TouchableOpacity
-                onPress={() => handleShowImagePreview(message.msg.product_image!)}
+                onPress={() => handleShowImagePreview(msgObj.product_image!)}
                 activeOpacity={0.9}
               >
                 <View style={styles.productImageContainer}>
                   <Image
-                    source={{ uri: message.msg.product_image }}
+                    source={{ uri: msgObj.product_image }}
                     style={styles.productImage}
                     resizeMode="cover"
-                    onError={(error) => {
-                      console.error('❌ [ChatMessage] Image load error:', {
-                        error: error.nativeEvent.error,
-                        url: message.msg.product_image,
-                      });
-                    }}
-                    onLoad={() => {
-                      console.log('✅ [ChatMessage] Image loaded successfully:', {
-                        url: message.msg.product_image,
-                      });
-                    }}
-                    onLoadStart={() => {
-                      console.log('🔄 [ChatMessage] Image loading started:', {
-                        url: message.msg.product_image,
-                      });
-                    }}
                   />
                 </View>
               </TouchableOpacity>
             )}
-
-            {/* Product Name */}
-            {message.msg.text && (
+            {rawText ? (
               <Text style={styles.productName} numberOfLines={2}>
-                {message.msg.text}
+                {rawText}
               </Text>
-            )}
-
-            {/* Product Price */}
-            {message.msg.product_price && (
+            ) : null}
+            {msgObj.product_price ? (
               <Text style={styles.productPrice}>
-                {message.msg.product_price}
+                {msgObj.product_price}
               </Text>
-            )}
+            ) : null}
           </View>
         );
 
-      case 'order':
+      case 'order': {
+        const orderSn = msgObj.order_id || rawText;
+        if (orderSn) {
+          return renderOrderCard(orderSn, 0);
+        }
         return (
           <View>
             <View style={styles.orderContainer}>
               <Ionicons name="receipt-outline" size={20} color="#3B82F6" />
               <Text style={styles.orderText}>Order</Text>
             </View>
-            {message.msg.text && (
-              <Text
-                style={[styles.messageText, isSeller && styles.messageTextSeller]}
-              >
-                {message.msg.text}
+            {rawText ? (
+              <Text style={[styles.messageText, isSeller && styles.messageTextSeller]}>
+                {rawText}
               </Text>
-            )}
+            ) : null}
           </View>
         );
+      }
 
       case 'unsupported':
         return (
@@ -172,7 +252,7 @@ const ChatMessage: React.FC<IChatMessageProps> = ({ message, isCurrentUser }) =>
       default:
         return (
           <Text style={[styles.messageText, isSeller && styles.messageTextSeller]}>
-            {message.msg.text || 'No content'}
+            {rawText || 'No content'}
           </Text>
         );
     }
@@ -479,6 +559,89 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: '#059669',
+  },
+  // Order Bubble Card Styles
+  orderCardWrapper: {
+    width: '100%',
+    minWidth: 230,
+    maxWidth: 290,
+  },
+  orderBubbleCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1.5,
+    borderColor: '#FCD34D',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  orderBubbleCardSeller: {
+    backgroundColor: '#FFFBEB',
+  },
+  orderBubbleCardBuyer: {
+    backgroundColor: '#FFFFFF',
+  },
+  orderBubbleHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  orderBubbleIconBg: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FEF3C7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  orderBubbleHeaderText: {
+    flex: 1,
+  },
+  orderBubbleTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  orderBubbleSubtitle: {
+    fontSize: 10,
+    color: '#6B7280',
+  },
+  orderBubbleDivider: {
+    height: 1,
+    backgroundColor: '#F3F4F6',
+    marginVertical: 8,
+  },
+  orderBubbleBody: {
+    marginBottom: 6,
+  },
+  orderBubbleLabel: {
+    fontSize: 11,
+    color: '#6B7280',
+    marginBottom: 2,
+  },
+  orderBubbleValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#D97706',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
+  orderBubbleFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 4,
+    marginTop: 4,
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+  orderBubbleActionText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#D97706',
   },
 });
 

@@ -234,6 +234,17 @@ const EcommerceChatStackScreen = () => (
   >
     <EcommerceChatStack.Screen name="EcommerceChatMain" component={EcommerceChatScreen} />
     <EcommerceChatStack.Screen name="EcommerceChatDetail" component={EcommerceChatDetailScreen} />
+    <EcommerceChatStack.Screen
+      name="OrderDetail"
+      component={OrderDetailScreen}
+      options={{
+        headerShown: true,
+        headerStyle: { backgroundColor: '#f59e0b' },
+        headerTintColor: '#fff',
+        headerTitleStyle: { fontWeight: '600' },
+        title: 'Detail Pesanan',
+      }}
+    />
   </EcommerceChatStack.Navigator>
 );
 

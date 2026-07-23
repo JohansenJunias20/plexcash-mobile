@@ -110,7 +110,7 @@ interface CustomDrawerContentProps {
 }
 
 const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ navigation, state }) => {
-  const { user } = useAuth();
+  const { user, isTokenReady } = useAuth();
   const { access, role, isLoading: accessLoading } = useAccess();
   const a = access as any;
   const [currentDatabase, setCurrentDatabase] = useState<string>('');
@@ -145,8 +145,10 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ navigation, s
 
   useEffect(() => {
     const fetchDatabaseInfo = async () => {
-      if (!user) {
-        console.log('[DRAWER-DEBUG] No user found yet.');
+      if (!isTokenReady || !user) {
+        console.log('[DRAWER-DEBUG] Token not ready or no user found yet.');
+        setCurrentDatabase('');
+        setDatabases([]);
         return;
       }
       try {
@@ -159,21 +161,19 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ navigation, s
           setCurrentDatabase(typeof dbData === 'string' ? dbData : dbData.name || JSON.stringify(dbData));
         }
 
-        // Only fetch database list if the user is an admin, avoiding 403 Forbidden errors in logs
-        if (isAdminRole) {
-          const listResponse = await ApiService.getDatabaseList();
-          console.log('[DRAWER-DEBUG] listResponse:', listResponse);
-          if (listResponse.status && Array.isArray(listResponse.data)) {
-            const validDbs = listResponse.data.map((d: any) => {
-              if (typeof d === 'string') return d;
-              if (d && typeof d === 'object') {
-                return d.name || d.database_name || d.database || JSON.stringify(d);
-              }
-              return String(d);
-            });
-            setDatabases(validDbs);
-            console.log('[DRAWER-DEBUG] databases set to:', validDbs);
-          }
+        // Fetch database list for user
+        const listResponse = await ApiService.getDatabaseList();
+        console.log('[DRAWER-DEBUG] listResponse:', listResponse);
+        if (listResponse && listResponse.status && Array.isArray(listResponse.data)) {
+          const validDbs = listResponse.data.map((d: any) => {
+            if (typeof d === 'string') return d;
+            if (d && typeof d === 'object') {
+              return d.name || d.database_name || d.database || JSON.stringify(d);
+            }
+            return String(d);
+          });
+          setDatabases(validDbs);
+          console.log('[DRAWER-DEBUG] databases set to:', validDbs);
         }
       } catch (error) {
         console.error('[DRAWER-DEBUG] Error fetching database info:', error);
@@ -183,7 +183,7 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ navigation, s
     };
 
     fetchDatabaseInfo();
-  }, [user, role]);
+  }, [isTokenReady, user, role]);
 
   const handleDatabaseSwitch = async (newDatabase: string) => {
     if (newDatabase === currentDatabase) {
@@ -397,111 +397,107 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ navigation, s
       </DrawerContentScrollView>
 
       {/* Database Selector at Bottom */}
-      {(isAdmin || databases.length > 1) && (
-        <View style={styles.databaseSelectorBottom}>
-          <TouchableOpacity
-            style={styles.databaseSelector}
-            onPress={() => setShowDatabasePicker(true)}
-            disabled={loadingDatabase}
-          >
-            <Ionicons name="server" size={20} color="#f59e0b" />
-            <View style={styles.databaseSelectorText}>
-              <Text style={styles.databaseSelectorLabel}>Database</Text>
-              <Text style={styles.databaseSelectorValue}>
-                {loadingDatabase ? 'Loading...' : currentDatabase || 'Unknown'}
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
-          </TouchableOpacity>
-        </View>
-      )}
+      <View style={styles.databaseSelectorBottom}>
+        <TouchableOpacity
+          style={styles.databaseSelector}
+          onPress={() => (isAdmin || databases.length > 1) && setShowDatabasePicker(true)}
+          disabled={loadingDatabase || (!isAdmin && databases.length <= 1)}
+        >
+          <Ionicons name="server" size={20} color="#f59e0b" />
+          <View style={styles.databaseSelectorText}>
+            <Text style={styles.databaseSelectorLabel}>Database</Text>
+            <Text style={styles.databaseSelectorValue}>
+              {loadingDatabase ? 'Loading...' : currentDatabase || 'Unknown'}
+            </Text>
+          </View>
+          {(isAdmin || databases.length > 1) ? <Ionicons name="chevron-forward" size={20} color="#9CA3AF" /> : null}
+        </TouchableOpacity>
+      </View>
 
       {/* Database Picker Modal */}
-      {(isAdmin || databases.length > 1) && (
-        <Modal
-          visible={showDatabasePicker}
-          transparent={true}
-          animationType="slide"
-          onRequestClose={() => { setShowDatabasePicker(false); setDbSearch(''); }}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Switch Database</Text>
-                <TouchableOpacity onPress={() => { setShowDatabasePicker(false); setDbSearch(''); }}>
-                  <Ionicons name="close" size={24} color="#374151" />
+      <Modal
+        visible={showDatabasePicker}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => { setShowDatabasePicker(false); setDbSearch(''); }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Switch Database</Text>
+              <TouchableOpacity onPress={() => { setShowDatabasePicker(false); setDbSearch(''); }}>
+                <Ionicons name="close" size={24} color="#374151" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Search Bar */}
+            <View style={styles.dbSearchContainer}>
+              <Ionicons name="search" size={18} color="#9CA3AF" style={styles.dbSearchIcon} />
+              <TextInput
+                style={styles.dbSearchInput}
+                placeholder="Cari database..."
+                placeholderTextColor="#9CA3AF"
+                value={dbSearch}
+                onChangeText={setDbSearch}
+                autoCorrect={false}
+                autoCapitalize="none"
+              />
+              {dbSearch.length > 0 && (
+                <TouchableOpacity onPress={() => setDbSearch('')}>
+                  <Ionicons name="close-circle" size={18} color="#9CA3AF" />
                 </TouchableOpacity>
-              </View>
-
-              {/* Search Bar */}
-              <View style={styles.dbSearchContainer}>
-                <Ionicons name="search" size={18} color="#9CA3AF" style={styles.dbSearchIcon} />
-                <TextInput
-                  style={styles.dbSearchInput}
-                  placeholder="Cari database..."
-                  placeholderTextColor="#9CA3AF"
-                  value={dbSearch}
-                  onChangeText={setDbSearch}
-                  autoCorrect={false}
-                  autoCapitalize="none"
-                />
-                {dbSearch.length > 0 && (
-                  <TouchableOpacity onPress={() => setDbSearch('')}>
-                    <Ionicons name="close-circle" size={18} color="#9CA3AF" />
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              {switchingDatabase ? (
-                <View style={styles.loadingContainer}>
-                  <ActivityIndicator size="large" color="#f59e0b" />
-                  <Text style={styles.loadingText}>Switching database...</Text>
-                </View>
-              ) : (
-                <ScrollView style={styles.databaseList}>
-                  {databases
-                    .filter(db => db.toLowerCase().includes(dbSearch.toLowerCase()))
-                    .map((db) => (
-                    <TouchableOpacity
-                      key={db}
-                      style={[
-                        styles.databaseItem,
-                        db === currentDatabase && styles.databaseItemActive,
-                      ]}
-                      onPress={() => handleDatabaseSwitch(db)}
-                    >
-                      <View style={styles.databaseItemLeft}>
-                        <Ionicons
-                          name="server"
-                          size={20}
-                          color={db === currentDatabase ? '#f59e0b' : '#6B7280'}
-                        />
-                        <Text
-                          style={[
-                            styles.databaseItemText,
-                            db === currentDatabase && styles.databaseItemTextActive,
-                          ]}
-                        >
-                          {db}
-                        </Text>
-                      </View>
-                      {db === currentDatabase && (
-                        <Ionicons name="checkmark-circle" size={20} color="#f59e0b" />
-                      )}
-                    </TouchableOpacity>
-                  ))}
-                  {databases.filter(db => db.toLowerCase().includes(dbSearch.toLowerCase())).length === 0 && (
-                    <View style={styles.dbSearchEmpty}>
-                      <Ionicons name="search-outline" size={32} color="#D1D5DB" />
-                      <Text style={styles.dbSearchEmptyText}>Tidak ada database "{dbSearch}"</Text>
-                    </View>
-                  )}
-                </ScrollView>
               )}
             </View>
+
+            {switchingDatabase ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#f59e0b" />
+                <Text style={styles.loadingText}>Switching database...</Text>
+              </View>
+            ) : (
+              <ScrollView style={styles.databaseList}>
+                {(databases || [])
+                  .filter(db => typeof db === 'string' && db.toLowerCase().includes(dbSearch.toLowerCase()))
+                  .map((db) => (
+                  <TouchableOpacity
+                    key={db}
+                    style={[
+                      styles.databaseItem,
+                      db === currentDatabase && styles.databaseItemActive,
+                    ]}
+                    onPress={() => handleDatabaseSwitch(db)}
+                  >
+                    <View style={styles.databaseItemLeft}>
+                      <Ionicons
+                        name="server"
+                        size={20}
+                        color={db === currentDatabase ? '#f59e0b' : '#6B7280'}
+                      />
+                      <Text
+                        style={[
+                          styles.databaseItemText,
+                          db === currentDatabase && styles.databaseItemTextActive,
+                        ]}
+                      >
+                        {db}
+                      </Text>
+                    </View>
+                    {db === currentDatabase ? (
+                      <Ionicons name="checkmark-circle" size={20} color="#f59e0b" />
+                    ) : null}
+                  </TouchableOpacity>
+                ))}
+                {(databases || []).filter(db => typeof db === 'string' && db.toLowerCase().includes(dbSearch.toLowerCase())).length === 0 ? (
+                  <View style={styles.dbSearchEmpty}>
+                    <Ionicons name="search-outline" size={32} color="#D1D5DB" />
+                    <Text style={styles.dbSearchEmptyText}>Tidak ada database &quot;{dbSearch}&quot;</Text>
+                  </View>
+                ) : null}
+              </ScrollView>
+            )}
           </View>
-        </Modal>
-      )}
+        </View>
+      </Modal>
     </View>
   );
 };

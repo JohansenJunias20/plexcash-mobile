@@ -160,27 +160,43 @@ export const filterOrdersByBuyer = (
     return [];
   }
 
-  const buyerNameLower = buyerName.toLowerCase().trim();
+  const buyerNameLower = buyerName ? buyerName.toLowerCase().trim() : '';
+  const buyerIdLower = buyerId ? String(buyerId).toLowerCase().trim() : '';
 
-  return orders.filter((order: IOrder) => {
-    // Try to match by shop_name (most reliable)
-    if (order.shop_name) {
-      const orderShopName = order.shop_name.toLowerCase().trim();
+  return orders.filter((order: any) => {
+    // Collect all candidate fields from order
+    const candidates = [
+      order.shop_name,
+      order.buyer_username,
+      order.buyer_name,
+      order.buyer?.username,
+      order.buyer?.name,
+      order.customer_name,
+      order.recipient_name,
+      order.username,
+      order.buyer_id,
+      order.user_id,
+    ]
+      .filter(Boolean)
+      .map((s: any) => String(s).toLowerCase().trim());
 
-      // Exact match
-      if (orderShopName === buyerNameLower) {
+    if (buyerNameLower) {
+      // Exact match against any candidate
+      if (candidates.some((c) => c === buyerNameLower)) {
         return true;
       }
-
-      // Contains match (for partial names)
-      if (orderShopName.includes(buyerNameLower) || buyerNameLower.includes(orderShopName)) {
+      // Substring match in either direction
+      if (
+        candidates.some(
+          (c) => c.includes(buyerNameLower) || buyerNameLower.includes(c)
+        )
+      ) {
         return true;
       }
     }
 
-    // Try to match by buyer ID if available
-    if (buyerId && order.id) {
-      if (order.id === buyerId) {
+    if (buyerIdLower) {
+      if (candidates.some((c) => c === buyerIdLower) || String(order.id || '').toLowerCase() === buyerIdLower) {
         return true;
       }
     }

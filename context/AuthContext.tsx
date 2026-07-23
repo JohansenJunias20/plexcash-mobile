@@ -378,6 +378,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       setUser({ ...qrUser, authMethod: 'qr-code' });
       setIsAuthenticated(true);
+      setIsTokenReady(true);
 
       return { success: true };
     } catch (error: any) {
@@ -412,6 +413,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           deviceId: result.deviceId,
         });
         setIsAuthenticated(true);
+        setIsTokenReady(true);
 
         return { success: true, message: result.message || 'Device authorized successfully! You will stay logged in.' };
       } else {
@@ -451,6 +453,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           deviceId: result.deviceId,
         });
         setIsAuthenticated(true);
+        setIsTokenReady(true);
 
         return { success: true, message: result.message || 'Device authorized successfully with PIN! You will stay logged in.' };
       } else {
@@ -467,28 +470,42 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const signOut = async () => {
     try {
       console.log('🚪 [AUTH] Signing out user...');
+      const currentUserEmail = user?.email;
 
-      // Fix: Wrap Firebase signout in try/catch and ignore errors
+      // 1. Immediately reset React state so UI drops old session
+      setUser(null);
+      setIsAuthenticated(false);
+      setIsTokenReady(false);
+
+      // 2. Notify backend to clear server-side AUTH_CACHE
+      try {
+        const baseUrl = ApiService.getApiBaseUrl();
+        await fetch(`${baseUrl}/auth/logout`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: currentUserEmail })
+        });
+      } catch (e) {
+        console.warn('Backend logout notify error:', e);
+      }
+
+      // 3. Sign out of Firebase SDK
       try {
         await auth.signOut();
       } catch (e) {
         console.warn('Firebase sign out error (can be safely ignored):', e);
       }
 
-      // Fix: Always clear everything to ensure we don't end up in an invalid state
+      // 4. Clear all device tokens and wipe AsyncStorage completely
       await ApiService.clearDeviceAuth();
-      await AsyncStorage.removeItem('isAuthenticated');
-      await AsyncStorage.removeItem('userEmail');
-      await AsyncStorage.removeItem('authToken');
-      await AsyncStorage.removeItem('authMethod');
+      await AsyncStorage.clear();
 
-      setUser(null);
-      setIsAuthenticated(false);
-      setIsTokenReady(false);
-      console.log('✅ [AUTH] User signed out successfully');
+      const { clearTokenAuth } = require('../services/token');
+      await clearTokenAuth();
+
+      console.log('✅ [AUTH] User signed out and cache wiped successfully');
     } catch (error) {
       console.error('❌ [AUTH] Sign out error:', error);
-      // Force state update anyway
       setUser(null);
       setIsAuthenticated(false);
       setIsTokenReady(false);

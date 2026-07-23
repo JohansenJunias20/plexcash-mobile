@@ -4,7 +4,7 @@
  * Displays a collapsible panel with list of orders for the current buyer
  */
 
-import React, { memo, useState } from 'react';
+import React, { memo, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -13,15 +13,18 @@ import {
   FlatList,
   ActivityIndicator,
   Image,
+  TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import moment from 'moment';
-import { IOrder, formatPrice, getOrderStatusColor } from '../../../../services/ecommerce/orderService';
+import { IOrder, formatPrice, getOrderStatusColor, filterOrdersByBuyer } from '../../../../services/ecommerce/orderService';
 import { LoadingProgress } from '../../../../services/ecommerce/loadingTimeEstimator';
+import { IChatBuyer } from '../types/chat.types';
 
 interface IOrderListPanelProps {
   visible: boolean;
   orders: IOrder[];
+  buyer?: IChatBuyer;
   loading: boolean;
   loadingProgress?: LoadingProgress | null;
   onClose: () => void;
@@ -64,6 +67,7 @@ const OrderImage: React.FC<{ imageUrl?: string; itemName: string }> = ({ imageUr
 const OrderListPanel: React.FC<IOrderListPanelProps> = ({
   visible,
   orders,
+  buyer,
   loading,
   loadingProgress,
   onClose,
@@ -71,6 +75,52 @@ const OrderListPanel: React.FC<IOrderListPanelProps> = ({
   onAcceptOrder,
   onCancelLoading,
 }) => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState<'buyer' | 'all'>('buyer');
+
+  // Filter orders by buyer
+  const buyerOrders = useMemo(() => {
+    if (!buyer || !buyer.name) return orders;
+    return filterOrdersByBuyer(orders, buyer.name, buyer.id);
+  }, [orders, buyer]);
+
+  // Selected base list based on tab
+  const baseOrders = useMemo(() => {
+    if (activeTab === 'buyer' && buyer && buyer.name) {
+      return buyerOrders;
+    }
+    return orders;
+  }, [activeTab, buyerOrders, orders, buyer]);
+
+  // Filtered by search query
+  const displayedOrders = useMemo(() => {
+    if (!searchQuery.trim()) return baseOrders;
+    const q = searchQuery.toLowerCase().trim();
+    return baseOrders.filter((item) => {
+      const inv = (item.invoice || '').toLowerCase();
+      const orderNum = (item.order_number || '').toLowerCase();
+      const idStr = String(item.id || '').toLowerCase();
+      const bookingSn = (item.booking_sn || '').toLowerCase();
+      const statusStr = (item.status || '').toLowerCase();
+
+      const items = item.items || item.products || [];
+      const itemMatch = items.some((it: any) => {
+        const name = (it.name || it.productName || it.product_name || '').toLowerCase();
+        const sku = (it.sku || '').toLowerCase();
+        return name.includes(q) || sku.includes(q);
+      });
+
+      return (
+        inv.includes(q) ||
+        orderNum.includes(q) ||
+        idStr.includes(q) ||
+        bookingSn.includes(q) ||
+        statusStr.includes(q) ||
+        itemMatch
+      );
+    });
+  }, [baseOrders, searchQuery]);
+
   if (!visible) return null;
 
   const renderOrderCard = ({ item }: { item: IOrder }) => {
@@ -79,15 +129,6 @@ const OrderListPanel: React.FC<IOrderListPanelProps> = ({
     const firstItem = items[0];
     const itemImage = firstItem?.image || firstItem?.productImage || firstItem?.product_image;
     const itemName = firstItem?.name || firstItem?.productName || firstItem?.product_name || 'Product';
-
-    // Debug: Log image URL
-    if (!itemImage) {
-      console.log('⚠️ [OrderListPanel] No image found for order:', {
-        orderNumber: item.invoice || item.id,
-        firstItem: firstItem,
-        itemsCount: items.length,
-      });
-    }
 
     // Get order info
     const orderNumber = item.invoice || item.order_number || item.id || 'N/A';
@@ -168,11 +209,65 @@ const OrderListPanel: React.FC<IOrderListPanelProps> = ({
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Ionicons name="receipt" size={20} color="#f59e0b" />
-          <Text style={styles.headerTitle}>Order List ({orders.length})</Text>
+          <Text style={styles.headerTitle}>Order List ({displayedOrders.length})</Text>
         </View>
         <TouchableOpacity onPress={onClose} style={styles.closeButton}>
           <Ionicons name="close" size={24} color="#6B7280" />
         </TouchableOpacity>
+      </View>
+
+      {/* Search & Buyer Filter Bar */}
+      <View style={styles.searchSection}>
+        <View style={styles.searchContainer}>
+          <Ionicons name="search" size={16} color="#9CA3AF" style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Cari no. pesanan, produk, status..."
+            placeholderTextColor="#9CA3AF"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearSearchButton}>
+              <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {buyer && buyer.name ? (
+          <View style={styles.tabsContainer}>
+            <TouchableOpacity
+              style={[styles.tabButton, activeTab === 'buyer' && styles.tabButtonActive]}
+              onPress={() => setActiveTab('buyer')}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name="person-outline"
+                size={13}
+                color={activeTab === 'buyer' ? '#FFFFFF' : '#6B7280'}
+              />
+              <Text style={[styles.tabText, activeTab === 'buyer' && styles.tabTextActive]}>
+                Pesanan {buyer.name} ({buyerOrders.length})
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.tabButton, activeTab === 'all' && styles.tabButtonActive]}
+              onPress={() => setActiveTab('all')}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name="list-outline"
+                size={13}
+                color={activeTab === 'all' ? '#FFFFFF' : '#6B7280'}
+              />
+              <Text style={[styles.tabText, activeTab === 'all' && styles.tabTextActive]}>
+                Semua ({orders.length})
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
       </View>
 
       {/* Content */}
@@ -238,14 +333,28 @@ const OrderListPanel: React.FC<IOrderListPanelProps> = ({
               </TouchableOpacity>
             )}
           </View>
-        ) : orders.length === 0 ? (
+        ) : displayedOrders.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="file-tray-outline" size={48} color="#D1D5DB" />
-            <Text style={styles.emptyText}>No orders found</Text>
+            <Text style={styles.emptyText}>
+              {searchQuery
+                ? `Tidak ada pesanan cocok dengan "${searchQuery}"`
+                : activeTab === 'buyer' && buyer
+                ? `Belum ada pesanan untuk buyer ${buyer.name}`
+                : 'Tidak ada pesanan ditemukan'}
+            </Text>
+            {activeTab === 'buyer' && buyerOrders.length === 0 && orders.length > 0 ? (
+              <TouchableOpacity
+                style={styles.showAllButton}
+                onPress={() => setActiveTab('all')}
+              >
+                <Text style={styles.showAllButtonText}>Tampilkan Semua ({orders.length}) Pesanan</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         ) : (
           <FlatList
-            data={orders}
+            data={displayedOrders}
             renderItem={renderOrderCard}
             keyExtractor={(item, index) => item.id || item.invoice || index.toString()}
             showsVerticalScrollIndicator={false}
@@ -256,11 +365,6 @@ const OrderListPanel: React.FC<IOrderListPanelProps> = ({
             windowSize={5}
             removeClippedSubviews={true}
             updateCellsBatchingPeriod={50}
-            getItemLayout={(data, index) => ({
-              length: 100, // Approximate height of each order card
-              offset: 100 * index,
-              index,
-            })}
           />
         )}
       </View>
@@ -273,14 +377,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
-    height: 320, // Fixed height instead of maxHeight
+    height: 380, // Increased height to fit search & tabs nicely
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
@@ -297,8 +401,60 @@ const styles = StyleSheet.create({
   closeButton: {
     padding: 4,
   },
+  searchSection: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    height: 36,
+  },
+  searchIcon: {
+    marginRight: 6,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 13,
+    color: '#1F2937',
+    paddingVertical: 0,
+  },
+  clearSearchButton: {
+    padding: 2,
+  },
+  tabsContainer: {
+    flexDirection: 'row',
+    marginTop: 8,
+    gap: 8,
+  },
+  tabButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+    backgroundColor: '#F3F4F6',
+  },
+  tabButtonActive: {
+    backgroundColor: '#f59e0b',
+  },
+  tabText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  tabTextActive: {
+    color: '#FFFFFF',
+  },
   content: {
-    height: 268, // Fixed height: 320 (container) - 52 (header height)
+    flex: 1,
   },
   loadingContainer: {
     flex: 1,
@@ -361,11 +517,27 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: 40,
+    paddingHorizontal: 20,
   },
   emptyText: {
     marginTop: 12,
     fontSize: 14,
     color: '#9CA3AF',
+    textAlign: 'center',
+  },
+  showAllButton: {
+    marginTop: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+  },
+  showAllButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#D97706',
   },
   listContent: {
     padding: 12,

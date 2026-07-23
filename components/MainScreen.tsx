@@ -109,6 +109,8 @@ const MainScreen = (): React.JSX.Element => {
     }
     if (!user) {
       console.log('⏳ [DB] No user logged in yet...');
+      setCurrentDatabase('');
+      setDatabases([]);
       return;
     }
 

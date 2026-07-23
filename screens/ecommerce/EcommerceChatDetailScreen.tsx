@@ -285,11 +285,21 @@ export default function EcommerceChatDetailScreen() {
     setShowOrderList(false);
   };
 
-  // Handle order press - show detail sheet
+  // Handle order press - navigate directly to OrderDetail screen
   const handleOrderPress = (order: IOrder) => {
-    console.log('📦 [ChatDetail] Order pressed:', order.invoice || order.id);
-    setSelectedOrder(order);
-    setShowOrderDetail(true);
+    const orderId = order.invoice || order.order_number || order.id || order.booking_sn || '';
+    console.log('📦 [ChatDetail] Order pressed, navigating to OrderDetail screen:', orderId, 'id_ecommerce:', order.id_ecommerce || idEcommerce);
+
+    if (orderId) {
+      (navigation as any).navigate('OrderDetail', {
+        id: orderId,
+        id_ecommerce: order.id_ecommerce || idEcommerce,
+        booking_sn: order.booking_sn || undefined,
+      });
+    } else {
+      setSelectedOrder(order);
+      setShowOrderDetail(true);
+    }
   };
 
   // Handle close order detail sheet
@@ -588,6 +598,7 @@ export default function EcommerceChatDetailScreen() {
         <OrderListPanel
           visible={showOrderList}
           orders={orderListData}
+          buyer={buyer}
           loading={loadingOrders}
           loadingProgress={loadingProgress}
           onClose={() => setShowOrderList(false)}

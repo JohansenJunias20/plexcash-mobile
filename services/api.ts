@@ -68,6 +68,10 @@ class ApiService {
     this.authErrorHandler = handler;
   }
 
+  static getApiBaseUrl() {
+    return API_BASE_URL;
+  }
+
   // getFirebaseUser removed since persistent tokens are used instead
   /**
    * Get comprehensive device information
@@ -496,9 +500,12 @@ class ApiService {
       await AsyncStorage.multiRemove([
         'authToken',
         'refreshToken',
+        'tokenExpiry',
+        'refreshTokenExpiry',
         'isDeviceAuthorized',
         'userEmail',
-        'authMethod'
+        'authMethod',
+        'isAuthenticated'
       ]);
 
       // ALSO clear from SecureStore
