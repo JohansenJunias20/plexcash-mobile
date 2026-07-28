@@ -67,6 +67,8 @@ if [ "$BUILD_CHOICE" = "2" ]; then
     OUTPUT_DIR="$ANDROID_DIR/app/build/outputs/apk/${FLAVOR}/release"
     APK_FILE="$OUTPUT_DIR/app-${FLAVOR}-release.apk"
     REQUIRES_SIGNING=true
+    # Force production API URL for release build
+    export EXPO_PUBLIC_API_BASE_URL="https://app.plexseller.com"
 else
     BUILD_TYPE="debug"
     FLAVOR="production"
@@ -270,7 +272,7 @@ else
 fi
 
 # Convert to MB
-FILE_SIZE_MB=$(echo "scale=2; $FILE_SIZE / 1048576" | bc)
+FILE_SIZE_MB=$(awk "BEGIN {printf \"%.2f\", $FILE_SIZE/1048576}")
 
 print_success "APK file created successfully!"
 echo ""
