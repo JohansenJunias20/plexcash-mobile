@@ -83,7 +83,13 @@ function PembelianTable({ data }: { data: any[] }) {
         <Text style={[tableStyles.th, { flex: 0.7 }]}>Qty</Text>
         <Text style={[tableStyles.th, { flex: 1.6 }]}>Harga Beli</Text>
       </View>
-      <FlatList data={data} keyExtractor={(_, i) => i.toString()} renderItem={renderItem} contentContainerStyle={{ paddingBottom: 16 }} />
+      <FlatList
+        data={data}
+        keyExtractor={(_, i) => i.toString()}
+        renderItem={renderItem}
+        contentContainerStyle={{ paddingBottom: 16 }}
+        nestedScrollEnabled={true}
+      />
     </View>
   );
 }
@@ -105,7 +111,13 @@ function ReturPembelianTable({ data }: { data: any[] }) {
         <Text style={[tableStyles.th, { flex: 0.7 }]}>Qty Retur</Text>
         <Text style={[tableStyles.th, { flex: 1.6 }]}>Harga Beli</Text>
       </View>
-      <FlatList data={data} keyExtractor={(_, i) => i.toString()} renderItem={renderItem} contentContainerStyle={{ paddingBottom: 16 }} />
+      <FlatList
+        data={data}
+        keyExtractor={(_, i) => i.toString()}
+        renderItem={renderItem}
+        contentContainerStyle={{ paddingBottom: 16 }}
+        nestedScrollEnabled={true}
+      />
     </View>
   );
 }
@@ -127,7 +139,13 @@ function PenjualanTable({ data }: { data: any[] }) {
         <Text style={[tableStyles.th, { flex: 0.7 }]}>Qty</Text>
         <Text style={[tableStyles.th, { flex: 1.6 }]}>Harga Jual</Text>
       </View>
-      <FlatList data={data} keyExtractor={(_, i) => i.toString()} renderItem={renderItem} contentContainerStyle={{ paddingBottom: 16 }} />
+      <FlatList
+        data={data}
+        keyExtractor={(_, i) => i.toString()}
+        renderItem={renderItem}
+        contentContainerStyle={{ paddingBottom: 16 }}
+        nestedScrollEnabled={true}
+      />
     </View>
   );
 }
@@ -149,7 +167,13 @@ function ReturPenjualanTable({ data }: { data: any[] }) {
         <Text style={[tableStyles.th, { flex: 0.7 }]}>Qty Retur</Text>
         <Text style={[tableStyles.th, { flex: 1.6 }]}>Harga Jual</Text>
       </View>
-      <FlatList data={data} keyExtractor={(_, i) => i.toString()} renderItem={renderItem} contentContainerStyle={{ paddingBottom: 16 }} />
+      <FlatList
+        data={data}
+        keyExtractor={(_, i) => i.toString()}
+        renderItem={renderItem}
+        contentContainerStyle={{ paddingBottom: 16 }}
+        nestedScrollEnabled={true}
+      />
     </View>
   );
 }
@@ -157,54 +181,70 @@ function ReturPenjualanTable({ data }: { data: any[] }) {
 function BookingTable({ data }: { data: any[] }) {
   const renderItem = ({ item, index }: { item: any; index: number }) => (
     <View style={[tableStyles.row, index % 2 === 0 && tableStyles.rowEven]}>
-      <Text style={[tableStyles.td, { flex: 1.2 }]}>{formatDate(item.tanggal)}</Text>
-      <Text style={[tableStyles.td, { flex: 1 }]}>{item.movement ?? '-'}</Text>
-      <Text style={[tableStyles.td, { flex: 0.6 }]}>{item.qty_out ?? '-'}</Text>
-      <Text style={[tableStyles.td, { flex: 0.6 }]}>{item.qty_in ?? '-'}</Text>
-      <Text style={[tableStyles.td, { flex: 0.8 }]}>{item.booking_id ?? '-'}</Text>
-      <Text style={[tableStyles.td, { flex: 0.8 }]}>{item.platform ?? '-'}</Text>
+      <Text style={[tableStyles.td, { width: 100 }]}>{formatDate(item.tanggal)}</Text>
+      <Text style={[tableStyles.td, { width: 90 }]}>{item.movement ?? '-'}</Text>
+      <Text style={[tableStyles.td, { width: 60 }]}>{item.qty_out ?? '-'}</Text>
+      <Text style={[tableStyles.td, { width: 60 }]}>{item.qty_in ?? '-'}</Text>
+      <Text style={[tableStyles.td, { width: 90 }]}>{item.booking_id ?? '-'}</Text>
+      <Text style={[tableStyles.td, { width: 90 }]}>{item.platform ?? '-'}</Text>
     </View>
   );
   return (
-    <View style={[tableStyles.container, { flex: 1 }]}>
-      <View style={tableStyles.headerRow}>
-        <Text style={[tableStyles.th, { flex: 1.2 }]}>Tanggal</Text>
-        <Text style={[tableStyles.th, { flex: 1 }]}>Movement</Text>
-        <Text style={[tableStyles.th, { flex: 0.6 }]}>Keluar</Text>
-        <Text style={[tableStyles.th, { flex: 0.6 }]}>Masuk</Text>
-        <Text style={[tableStyles.th, { flex: 0.8 }]}>Booking ID</Text>
-        <Text style={[tableStyles.th, { flex: 0.8 }]}>Platform</Text>
+    <ScrollView horizontal showsHorizontalScrollIndicator={true} style={{ flex: 1 }}>
+      <View style={[tableStyles.container, { flex: 1, minWidth: 500 }]}>
+        <View style={tableStyles.headerRow}>
+          <Text style={[tableStyles.th, { width: 100 }]}>Tanggal</Text>
+          <Text style={[tableStyles.th, { width: 90 }]}>Movement</Text>
+          <Text style={[tableStyles.th, { width: 60 }]}>Keluar</Text>
+          <Text style={[tableStyles.th, { width: 60 }]}>Masuk</Text>
+          <Text style={[tableStyles.th, { width: 90 }]}>Booking ID</Text>
+          <Text style={[tableStyles.th, { width: 90 }]}>Platform</Text>
+        </View>
+        <FlatList
+          data={data}
+          keyExtractor={(_, i) => i.toString()}
+          renderItem={renderItem}
+          contentContainerStyle={{ paddingBottom: 16 }}
+          nestedScrollEnabled={true}
+        />
       </View>
-      <FlatList data={data} keyExtractor={(_, i) => i.toString()} renderItem={renderItem} contentContainerStyle={{ paddingBottom: 16 }} />
-    </View>
+    </ScrollView>
   );
 }
 
 function GabunganTable({ data }: { data: any[] }) {
   const renderItem = ({ item, index }: { item: any; index: number }) => (
     <View style={[tableStyles.row, index % 2 === 0 && tableStyles.rowEven]}>
-      <Text style={[tableStyles.td, { flex: 1.1 }]}>{formatDate(item.tanggal)}</Text>
-      <Text style={[tableStyles.td, { flex: 0.8 }]}>{item.from ?? '-'}</Text>
-      <Text style={[tableStyles.td, { flex: 0.5 }]}>{item.id ?? '-'}</Text>
-      <Text style={[tableStyles.td, { flex: 0.6 }]}>{item.masuk ?? '-'}</Text>
-      <Text style={[tableStyles.td, { flex: 0.6 }]}>{item.keluar ?? '-'}</Text>
-      <Text style={[tableStyles.td, { flex: 0.7 }]}>{item.totalqty ?? '-'}</Text>
-      <Text style={[tableStyles.td, { flex: 1.3 }]}>{formatCurrency(item.harga)}</Text>
+      <Text style={[tableStyles.td, { width: 100 }]}>{formatDate(item.tanggal)}</Text>
+      <Text style={[tableStyles.td, { width: 80 }]}>{item.from ?? '-'}</Text>
+      <Text style={[tableStyles.td, { width: 50 }]}>{item.id ?? '-'}</Text>
+      <Text style={[tableStyles.td, { width: 60 }]}>{item.masuk ?? '-'}</Text>
+      <Text style={[tableStyles.td, { width: 60 }]}>{item.keluar ?? '-'}</Text>
+      <Text style={[tableStyles.td, { width: 70 }]}>{item.totalqty ?? '-'}</Text>
+      <Text style={[tableStyles.td, { width: 110 }]}>{formatCurrency(item.harga)}</Text>
     </View>
   );
   return (
-    <View style={[tableStyles.container, { flex: 1 }]}>
-      <View style={tableStyles.headerRow}>
-        <Text style={[tableStyles.th, { flex: 1.1 }]}>Tanggal</Text>
-        <Text style={[tableStyles.th, { flex: 0.8 }]}>From</Text>
-        <Text style={[tableStyles.th, { flex: 0.5 }]}>ID</Text>
-        <Text style={[tableStyles.th, { flex: 0.6 }]}>Masuk</Text>
-        <Text style={[tableStyles.th, { flex: 0.6 }]}>Keluar</Text>
-        <Text style={[tableStyles.th, { flex: 0.7 }]}>Total Qty</Text>
-        <Text style={[tableStyles.th, { flex: 1.3 }]}>Harga</Text>
+    <ScrollView horizontal showsHorizontalScrollIndicator={true} style={{ flex: 1 }}>
+      <View style={[tableStyles.container, { flex: 1, minWidth: 620 }]}>
+        <View style={tableStyles.headerRow}>
+          <Text style={[tableStyles.th, { width: 100 }]}>Tanggal</Text>
+          <Text style={[tableStyles.th, { width: 80 }]}>From</Text>
+          <Text style={[tableStyles.th, { width: 50 }]}>ID</Text>
+          <Text style={[tableStyles.th, { width: 60 }]}>Masuk</Text>
+          <Text style={[tableStyles.th, { width: 60 }]}>Keluar</Text>
+          <Text style={[tableStyles.th, { width: 70 }]}>Total Qty</Text>
+          <Text style={[tableStyles.th, { width: 110 }]}>Harga</Text>
+        </View>
+        <FlatList
+          data={data}
+          keyExtractor={(_, i) => i.toString()}
+          renderItem={renderItem}
+          contentContainerStyle={{ paddingBottom: 16 }}
+          nestedScrollEnabled={true}
+        />
       </View>
-      <FlatList data={data} keyExtractor={(_, i) => i.toString()} renderItem={renderItem} contentContainerStyle={{ paddingBottom: 16 }} />
-    </View>
+    </ScrollView>
   );
 }
 
@@ -295,8 +335,9 @@ export default function KartuStokModal({ visible, itemId, itemNama, onClose }: K
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <Pressable style={styles.overlay} onPress={onClose}>
-        <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+      <View style={styles.overlay}>
+        <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onClose} />
+        <View style={styles.sheet}>
 
           {/* ── Header ── */}
           <View style={styles.header}>
@@ -376,8 +417,8 @@ export default function KartuStokModal({ visible, itemId, itemNama, onClose }: K
             </View>
           )}
 
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }

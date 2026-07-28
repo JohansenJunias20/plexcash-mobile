@@ -106,7 +106,7 @@ export default function KartustokScreen(): JSX.Element {
             <Text style={[tStyles.th, { flex: 0.6 }]}>Qty</Text>
             <Text style={[tStyles.th, { flex: 1.7 }]}>Harga Beli</Text>
           </View>
-          <FlatList data={rows} keyExtractor={(_, i) => i.toString()} renderItem={renderItem} contentContainerStyle={{ paddingBottom: 16 }} />
+          <FlatList data={rows} keyExtractor={(_, i) => i.toString()} renderItem={renderItem} contentContainerStyle={{ paddingBottom: 16 }} nestedScrollEnabled={true} />
         </View>
       );
     }
@@ -127,7 +127,7 @@ export default function KartustokScreen(): JSX.Element {
             <Text style={[tStyles.th, { flex: 0.8 }]}>Qty Retur</Text>
             <Text style={[tStyles.th, { flex: 1.5 }]}>Harga Beli</Text>
           </View>
-          <FlatList data={rows} keyExtractor={(_, i) => i.toString()} renderItem={renderItem} contentContainerStyle={{ paddingBottom: 16 }} />
+          <FlatList data={rows} keyExtractor={(_, i) => i.toString()} renderItem={renderItem} contentContainerStyle={{ paddingBottom: 16 }} nestedScrollEnabled={true} />
         </View>
       );
     }
@@ -148,7 +148,7 @@ export default function KartustokScreen(): JSX.Element {
             <Text style={[tStyles.th, { flex: 0.6 }]}>Qty</Text>
             <Text style={[tStyles.th, { flex: 1.7 }]}>Harga Jual</Text>
           </View>
-          <FlatList data={rows} keyExtractor={(_, i) => i.toString()} renderItem={renderItem} contentContainerStyle={{ paddingBottom: 16 }} />
+          <FlatList data={rows} keyExtractor={(_, i) => i.toString()} renderItem={renderItem} contentContainerStyle={{ paddingBottom: 16 }} nestedScrollEnabled={true} />
         </View>
       );
     }
@@ -169,7 +169,7 @@ export default function KartustokScreen(): JSX.Element {
             <Text style={[tStyles.th, { flex: 0.8 }]}>Qty Retur</Text>
             <Text style={[tStyles.th, { flex: 1.5 }]}>Harga Jual</Text>
           </View>
-          <FlatList data={rows} keyExtractor={(_, i) => i.toString()} renderItem={renderItem} contentContainerStyle={{ paddingBottom: 16 }} />
+          <FlatList data={rows} keyExtractor={(_, i) => i.toString()} renderItem={renderItem} contentContainerStyle={{ paddingBottom: 16 }} nestedScrollEnabled={true} />
         </View>
       );
     }
@@ -195,7 +195,7 @@ export default function KartustokScreen(): JSX.Element {
               <Text style={[tStyles.th, { width: 80 }]}>Booking ID</Text>
               <Text style={[tStyles.th, { width: 80 }]}>Platform</Text>
             </View>
-            <FlatList data={rows} keyExtractor={(_, i) => i.toString()} renderItem={renderItem} contentContainerStyle={{ paddingBottom: 16 }} />
+            <FlatList data={rows} keyExtractor={(_, i) => i.toString()} renderItem={renderItem} contentContainerStyle={{ paddingBottom: 16 }} nestedScrollEnabled={true} />
           </View>
         </ScrollView>
       );
@@ -228,7 +228,7 @@ export default function KartustokScreen(): JSX.Element {
             {/* DPP Hidden */}
             <Text style={[tStyles.th, { width: 110 }]}>HPP</Text>
           </View>
-          <FlatList data={rows} keyExtractor={(_, i) => i.toString()} renderItem={renderItem} contentContainerStyle={{ paddingBottom: 16 }} />
+          <FlatList data={rows} keyExtractor={(_, i) => i.toString()} renderItem={renderItem} contentContainerStyle={{ paddingBottom: 16 }} nestedScrollEnabled={true} />
         </View>
       </ScrollView>
     );
