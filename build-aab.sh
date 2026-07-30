@@ -59,6 +59,9 @@ FLAVOR="production"
 OUTPUT_DIR="$ANDROID_DIR/app/build/outputs/bundle/${FLAVOR}Release"
 AAB_FILE="$OUTPUT_DIR/app-${FLAVOR}-release.aab"
 
+# Force production API URL during build to avoid private/local IP being bundled
+export EXPO_PUBLIC_API_BASE_URL="https://app.plexseller.com"
+
 # ============================================
 # Check Prerequisites
 # ============================================
@@ -243,7 +246,7 @@ else
 fi
 
 # Convert to MB
-FILE_SIZE_MB=$(echo "scale=2; $FILE_SIZE / 1048576" | bc)
+FILE_SIZE_MB=$(awk "BEGIN {printf \"%.2f\", $FILE_SIZE/1048576}")
 
 print_success "AAB file created successfully!"
 echo ""

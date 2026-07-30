@@ -23,22 +23,22 @@ function Print-Header {
 
 function Print-Success {
     param([string]$Message)
-    Write-Host "✅ $Message" -ForegroundColor Green
+    Write-Host "[SUCCESS] $Message" -ForegroundColor Green
 }
 
 function Print-Error {
     param([string]$Message)
-    Write-Host "❌ $Message" -ForegroundColor Red
+    Write-Host "[ERROR] $Message" -ForegroundColor Red
 }
 
 function Print-Warning {
     param([string]$Message)
-    Write-Host "⚠️  $Message" -ForegroundColor Yellow
+    Write-Host "[WARNING] $Message" -ForegroundColor Yellow
 }
 
 function Print-Info {
     param([string]$Message)
-    Write-Host "ℹ️  $Message" -ForegroundColor Cyan
+    Write-Host "[INFO] $Message" -ForegroundColor Cyan
 }
 
 # ============================================
@@ -52,6 +52,9 @@ $ANDROID_DIR = Join-Path $PROJECT_DIR "android"
 $FLAVOR = "production"
 $OUTPUT_DIR = Join-Path $ANDROID_DIR "app\build\outputs\bundle\${FLAVOR}Release"
 $AAB_FILE = Join-Path $OUTPUT_DIR "app-${FLAVOR}-release.aab"
+
+# Force production API URL during build to avoid private/local IP being bundled
+$env:EXPO_PUBLIC_API_BASE_URL = "https://app.plexseller.com"
 
 # ============================================
 # Check Prerequisites
@@ -210,15 +213,15 @@ Print-Header "Build Summary"
 
 Print-Success "Android App Bundle built successfully!"
 Write-Host ""
-Print-Info "📦 AAB File Location:"
+Print-Info "AAB File Location:"
 Print-Info "   $AAB_FILE"
 Write-Host ""
-Print-Info "📊 File Details:"
+Print-Info "File Details:"
 Print-Info "   Size: $FILE_SIZE_MB MB"
 Print-Info "   Version: $VERSION_NAME (Code: $NEW_VERSION_CODE)"
 Print-Info "   Created: $FILE_TIME"
 Write-Host ""
-Print-Success "✅ Ready to upload to Google Play Store!"
+Print-Success "Ready to upload to Google Play Store!"
 Write-Host ""
 Print-Warning "Next Steps:"
 Print-Info "1. Go to Google Play Console"
@@ -246,6 +249,6 @@ if ($COPY_TO_DESKTOP -eq "y" -or $COPY_TO_DESKTOP -eq "Y") {
 }
 
 Write-Host ""
-Print-Success "Build script completed! 🚀"
+Print-Success "Build script completed!"
 Write-Host ""
 
