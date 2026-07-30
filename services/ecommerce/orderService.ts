@@ -171,11 +171,16 @@ export const filterOrdersByBuyer = (
       order.buyer_name,
       order.buyer?.username,
       order.buyer?.name,
+      order.buyer?.id,
+      order.buyer?.buyer_id,
       order.customer_name,
       order.recipient_name,
       order.username,
       order.buyer_id,
       order.user_id,
+      order.buyer_user_id,
+      order.open_id,
+      order.buyer_open_id,
     ]
       .filter(Boolean)
       .map((s: any) => String(s).toLowerCase().trim());

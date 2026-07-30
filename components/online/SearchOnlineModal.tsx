@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Alert,
   TextInput,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import ApiService from '../../services/api';
@@ -28,6 +29,10 @@ interface Product {
   category?: any;
   description?: string;
   images?: string[];
+  image_url?: string;
+  image?: string;
+  picture?: string;
+  foto?: string;
 }
 
 interface SearchOnlineModalProps {
@@ -128,11 +133,24 @@ export default function SearchOnlineModal({
         .join(' - ');
     }
 
+    const imgUri = item.image_url || item.image || item.picture || item.foto || (Array.isArray(item.images) && item.images[0]);
+
     return (
       <TouchableOpacity
         style={styles.productCard}
         onPress={() => handleSelect(item)}
       >
+        {imgUri ? (
+          <Image
+            source={{ uri: imgUri }}
+            style={{ width: 44, height: 44, borderRadius: 6, marginRight: 12, backgroundColor: '#f3f4f6' }}
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={{ width: 44, height: 44, borderRadius: 6, marginRight: 12, backgroundColor: '#f3f4f6', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#e5e7eb' }}>
+            <Ionicons name="cube-outline" size={20} color="#9CA3AF" />
+          </View>
+        )}
         <View style={styles.productInfo}>
           <Text style={styles.productName} numberOfLines={2}>
             {displayName}

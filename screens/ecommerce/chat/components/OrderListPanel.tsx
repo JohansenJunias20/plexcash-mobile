@@ -76,27 +76,18 @@ const OrderListPanel: React.FC<IOrderListPanelProps> = ({
   onCancelLoading,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'buyer' | 'all'>('buyer');
 
-  // Filter orders by buyer
+  // Filter orders strictly by buyer
   const buyerOrders = useMemo(() => {
-    if (!buyer || !buyer.name) return orders;
+    if (!buyer || (!buyer.name && !buyer.id)) return [];
     return filterOrdersByBuyer(orders, buyer.name, buyer.id);
   }, [orders, buyer]);
 
-  // Selected base list based on tab
-  const baseOrders = useMemo(() => {
-    if (activeTab === 'buyer' && buyer && buyer.name) {
-      return buyerOrders;
-    }
-    return orders;
-  }, [activeTab, buyerOrders, orders, buyer]);
-
   // Filtered by search query
   const displayedOrders = useMemo(() => {
-    if (!searchQuery.trim()) return baseOrders;
+    if (!searchQuery.trim()) return buyerOrders;
     const q = searchQuery.toLowerCase().trim();
-    return baseOrders.filter((item) => {
+    return buyerOrders.filter((item) => {
       const inv = (item.invoice || '').toLowerCase();
       const orderNum = (item.order_number || '').toLowerCase();
       const idStr = String(item.id || '').toLowerCase();
@@ -119,7 +110,7 @@ const OrderListPanel: React.FC<IOrderListPanelProps> = ({
         itemMatch
       );
     });
-  }, [baseOrders, searchQuery]);
+  }, [buyerOrders, searchQuery]);
 
   if (!visible) return null;
 
@@ -234,40 +225,6 @@ const OrderListPanel: React.FC<IOrderListPanelProps> = ({
             </TouchableOpacity>
           )}
         </View>
-
-        {buyer && buyer.name ? (
-          <View style={styles.tabsContainer}>
-            <TouchableOpacity
-              style={[styles.tabButton, activeTab === 'buyer' && styles.tabButtonActive]}
-              onPress={() => setActiveTab('buyer')}
-              activeOpacity={0.7}
-            >
-              <Ionicons
-                name="person-outline"
-                size={13}
-                color={activeTab === 'buyer' ? '#FFFFFF' : '#6B7280'}
-              />
-              <Text style={[styles.tabText, activeTab === 'buyer' && styles.tabTextActive]}>
-                Pesanan {buyer.name} ({buyerOrders.length})
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.tabButton, activeTab === 'all' && styles.tabButtonActive]}
-              onPress={() => setActiveTab('all')}
-              activeOpacity={0.7}
-            >
-              <Ionicons
-                name="list-outline"
-                size={13}
-                color={activeTab === 'all' ? '#FFFFFF' : '#6B7280'}
-              />
-              <Text style={[styles.tabText, activeTab === 'all' && styles.tabTextActive]}>
-                Semua ({orders.length})
-              </Text>
-            </TouchableOpacity>
-          </View>
-        ) : null}
       </View>
 
       {/* Content */}
@@ -339,18 +296,10 @@ const OrderListPanel: React.FC<IOrderListPanelProps> = ({
             <Text style={styles.emptyText}>
               {searchQuery
                 ? `Tidak ada pesanan cocok dengan "${searchQuery}"`
-                : activeTab === 'buyer' && buyer
-                ? `Belum ada pesanan untuk buyer ${buyer.name}`
+                : buyer?.name
+                ? `Belum ada pesanan untuk ${buyer.name}`
                 : 'Tidak ada pesanan ditemukan'}
             </Text>
-            {activeTab === 'buyer' && buyerOrders.length === 0 && orders.length > 0 ? (
-              <TouchableOpacity
-                style={styles.showAllButton}
-                onPress={() => setActiveTab('all')}
-              >
-                <Text style={styles.showAllButtonText}>Tampilkan Semua ({orders.length}) Pesanan</Text>
-              </TouchableOpacity>
-            ) : null}
           </View>
         ) : (
           <FlatList
@@ -428,31 +377,6 @@ const styles = StyleSheet.create({
   clearSearchButton: {
     padding: 2,
   },
-  tabsContainer: {
-    flexDirection: 'row',
-    marginTop: 8,
-    gap: 8,
-  },
-  tabButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderRadius: 14,
-    backgroundColor: '#F3F4F6',
-  },
-  tabButtonActive: {
-    backgroundColor: '#f59e0b',
-  },
-  tabText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#6B7280',
-  },
-  tabTextActive: {
-    color: '#FFFFFF',
-  },
   content: {
     flex: 1,
   },
@@ -524,20 +448,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#9CA3AF',
     textAlign: 'center',
-  },
-  showAllButton: {
-    marginTop: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    backgroundColor: '#FEF3C7',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#FCD34D',
-  },
-  showAllButtonText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#D97706',
   },
   listContent: {
     padding: 12,

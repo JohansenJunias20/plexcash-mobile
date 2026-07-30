@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import ApiService from '../../services/api';
@@ -30,6 +31,11 @@ interface Platform {
   price_match?: number;
   stok_platform?: number;
   tiktok_status?: string;
+  image_url?: string;
+  images?: string[];
+  foto?: string;
+  picture?: string;
+  image?: string;
 }
 
 interface ProductData {
@@ -39,6 +45,9 @@ interface ProductData {
   hargajual2: number;
   stok: number;
   berat: number;
+  foto?: string;
+  image_url?: string;
+  images?: string[];
 }
 
 interface EcommerceAccount {
@@ -127,6 +136,8 @@ export default function BindingTab({ productId, from = 'masterbarang' }: Binding
           price_match: p.price_match,
           stok_platform: p.stok_platform,
           tiktok_status: p.tiktok_status,
+          image_url: p.image_url || p.image || p.picture || p.foto || (Array.isArray(p.images) ? p.images[0] : undefined),
+          images: Array.isArray(p.images) ? p.images : (p.image_url ? [p.image_url] : []),
         }));
 
         console.log('🔍 [BINDING] Mapped platform data:', platformData);
@@ -155,6 +166,9 @@ export default function BindingTab({ productId, from = 'masterbarang' }: Binding
             hargajual2: data.hargajual2 || data.harga || data.hargajual || 0,
             stok: data.stok || 0,
             berat: data.berat || 0,
+            foto: data.foto || data.image_url || data.image || data.picture,
+            image_url: data.image_url || data.foto || data.image,
+            images: Array.isArray(data.images) ? data.images : [],
           });
         }
       }
@@ -533,12 +547,25 @@ export default function BindingTab({ productId, from = 'masterbarang' }: Binding
                 )}
               </View>
 
-              {/* Nama produk di marketplace */}
+              {/* Nama & Foto produk di marketplace */}
               <View style={styles.productNameContainer}>
-                <Text style={styles.productNameLabel}>Nama Produk:</Text>
-                <Text style={styles.productNameText} numberOfLines={3}>
-                  {platform.product_name || '(Nama produk belum tersedia)'}
-                </Text>
+                <Text style={styles.productNameLabel}>Produk Bind:</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
+                  {platform.image_url || platform.foto || platform.picture || platform.image || (Array.isArray(platform.images) && platform.images[0]) || productData?.foto || productData?.image_url ? (
+                    <Image
+                      source={{ uri: platform.image_url || platform.foto || platform.picture || platform.image || (Array.isArray(platform.images) && platform.images[0]) || productData?.foto || productData?.image_url }}
+                      style={{ width: 48, height: 48, borderRadius: 6, backgroundColor: '#f3f4f6' }}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <View style={{ width: 48, height: 48, borderRadius: 6, backgroundColor: '#f3f4f6', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#e5e7eb' }}>
+                      <Ionicons name="image-outline" size={22} color="#9CA3AF" />
+                    </View>
+                  )}
+                  <Text style={[styles.productNameText, { flex: 1, marginLeft: 10 }]} numberOfLines={3}>
+                    {platform.product_name || '(Nama produk belum tersedia)'}
+                  </Text>
+                </View>
               </View>
 
               {/* Badges */}
