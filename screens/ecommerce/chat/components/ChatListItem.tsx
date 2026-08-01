@@ -187,7 +187,7 @@ const ChatListItem: React.FC<IChatListItemProps> = ({ chat, onPress, isSelected 
               color={getPlatformColor()}
             />
             <Text style={[styles.platformText, { color: getPlatformColor() }]}>
-              {chat.platform}
+              {chat.shop_name || chat.toko_name || chat.name_ecommerce || chat.name || chat.platform}
             </Text>
           </View>
         </View>

@@ -24,6 +24,7 @@ export const useChatList = (): IUseChatListReturn => {
     platform: 'ALL',
     readStatus: 'ALL',
     searchQuery: '',
+    selectedShopId: 'ALL',
   });
 
   /**
@@ -40,18 +41,44 @@ export const useChatList = (): IUseChatListReturn => {
 
       console.log('📱 [useChatList] Fetching chat list...');
 
-      const data: IGetChatListResponse = await ApiService.authenticatedRequest('/get/ecommerce/chats', {
-        method: 'GET',
-      });
+      const [data, ecommerceRes]: [IGetChatListResponse, any] = await Promise.all([
+        ApiService.authenticatedRequest('/get/ecommerce/chats', {
+          method: 'GET',
+        }),
+        ApiService.authenticatedRequest('/get/ecommerce?shop_id_tiktok=1', {
+          method: 'GET',
+        }).catch(() => null),
+      ]);
 
       console.log('📱 [useChatList] Data received:', {
         status: data.status,
         count: data.data?.length || 0,
       });
 
+      const shopsMap: Record<number, string> = {};
+      if (ecommerceRes?.status && Array.isArray(ecommerceRes.data)) {
+        ecommerceRes.data.forEach((s: any) => {
+          if (s.id) {
+            shopsMap[s.id] = s.name || s.shop_name || s.toko_name || s.domain || '';
+          }
+        });
+      }
+
       if (data.status && data.data) {
+        // Enrich chats with shop_name (nama toko)
+        const enrichedChats = data.data.map((chat) => ({
+          ...chat,
+          shop_name:
+            chat.shop_name ||
+            chat.toko_name ||
+            chat.name_ecommerce ||
+            chat.name ||
+            shopsMap[chat.id_ecommerce] ||
+            chat.platform,
+        }));
+
         // Sort by timestamp (newest first)
-        const sortedChats = data.data.sort((a, b) => b.timestamp - a.timestamp);
+        const sortedChats = enrichedChats.sort((a, b) => b.timestamp - a.timestamp);
         setChats(sortedChats);
         console.log('✅ [useChatList] Chat list loaded:', sortedChats.length, 'chats');
       } else {
@@ -97,9 +124,18 @@ export const useChatList = (): IUseChatListReturn => {
         const buyerName = chat.buyer?.name?.toLowerCase() || '';
         // Safely check chat message
         const chatMessage = chat.chat?.toLowerCase() || '';
+        // Safely check shop name
+        const shopName = chat.shop_name?.toLowerCase() || '';
 
-        return buyerName.includes(query) || chatMessage.includes(query);
+        return buyerName.includes(query) || chatMessage.includes(query) || shopName.includes(query);
       });
+    }
+
+    // Filter by selected shop ID
+    if (filters.selectedShopId && filters.selectedShopId !== 'ALL') {
+      filtered = filtered.filter(
+        (chat) => Number(chat.id_ecommerce) === Number(filters.selectedShopId)
+      );
     }
 
     setFilteredChats(filtered);
@@ -107,6 +143,7 @@ export const useChatList = (): IUseChatListReturn => {
       platform: filters.platform,
       readStatus: filters.readStatus,
       searchQuery: filters.searchQuery,
+      selectedShopId: filters.selectedShopId,
       originalCount: chats.length,
       filteredCount: filtered.length,
     });
@@ -141,7 +178,7 @@ export const useChatList = (): IUseChatListReturn => {
   useEffect(() => {
     applyFilters();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chats, filters.platform, filters.readStatus, filters.searchQuery]);
+  }, [chats, filters.platform, filters.readStatus, filters.searchQuery, filters.selectedShopId]);
 
   return {
     chats: filteredChats,

@@ -39,6 +39,7 @@ type ChatDetailRouteParams = {
   idEcommerce: number;
   buyer: IChatBuyer;
   platform: string;
+  shopName?: string;
 };
 
 export default function EcommerceChatDetailScreen() {
@@ -47,7 +48,23 @@ export default function EcommerceChatDetailScreen() {
   const flatListRef = useRef<FlatList>(null);
   const { setCurrentActiveChatMsgId } = useGlobalChat();
 
-  const { msgId, idEcommerce, buyer, platform } = route.params;
+  const { msgId, idEcommerce, buyer, platform, shopName } = route.params;
+  const [resolvedShopName, setResolvedShopName] = useState<string | undefined>(shopName);
+
+  useEffect(() => {
+    if (!resolvedShopName && idEcommerce) {
+      ApiService.authenticatedRequest('/get/ecommerce?shop_id_tiktok=1')
+        .then((res) => {
+          if (res?.status && Array.isArray(res.data)) {
+            const found = res.data.find((s: any) => Number(s.id) === Number(idEcommerce));
+            if (found) {
+              setResolvedShopName(found.name || found.shop_name);
+            }
+          }
+        })
+        .catch(() => {});
+    }
+  }, [idEcommerce, resolvedShopName]);
 
   // Use custom hooks - pass buyer.id for Shopee send message
   const { messages, loading, error, sendMessage, sendImage, sendProduct, refresh } =
@@ -576,7 +593,7 @@ export default function EcommerceChatDetailScreen() {
     >
       <View style={styles.innerContainer}>
         {/* Header */}
-        <ChatHeader buyer={buyer} platform={platform} onBack={handleBack} />
+        <ChatHeader buyer={buyer} platform={platform} shopName={resolvedShopName || shopName} onBack={handleBack} />
 
         {/* Messages */}
         <FlatList

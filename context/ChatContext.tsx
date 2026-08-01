@@ -79,6 +79,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   idEcommerce: chat.id_ecommerce,
                   buyer: chat.buyer,
                   platform: chat.platform,
+                  shopName: chat.shop_name || chat.toko_name || chat.name_ecommerce || chat.name,
                 }
               });
             }

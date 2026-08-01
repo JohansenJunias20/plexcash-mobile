@@ -23,6 +23,10 @@ export interface IChatList {
   isRead: boolean;
   platform: string; // "SHOPEE" | "LAZADA" | "TOKOPEDIA" | "TIKTOK"
   last_message_type?: string; // Optional: "text" | "image" | "product" | etc. (for future server support)
+  shop_name?: string;
+  toko_name?: string;
+  name_ecommerce?: string;
+  name?: string;
 }
 
 // ============================================
@@ -103,6 +107,7 @@ export interface IChatFilters {
   platform: PlatformFilter;
   readStatus: ReadStatusFilter;
   searchQuery: string;
+  selectedShopId?: number | 'ALL';
 }
 
 // ============================================
@@ -133,6 +138,7 @@ export interface IChatInputProps {
 export interface IChatHeaderProps {
   buyer: IChatBuyer;
   platform: string;
+  shopName?: string;
   onBack: () => void;
 }
 

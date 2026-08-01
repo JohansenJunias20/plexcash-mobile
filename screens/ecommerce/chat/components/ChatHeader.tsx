@@ -7,10 +7,10 @@ import { IChatHeaderProps } from '../types/chat.types';
  * ChatHeader Component
  * Header for chat detail screen
  */
-const ChatHeader: React.FC<IChatHeaderProps> = ({ buyer, platform, onBack }) => {
+const ChatHeader: React.FC<IChatHeaderProps> = ({ buyer, platform, shopName, onBack }) => {
   // Get platform icon
   const getPlatformIcon = (): keyof typeof Ionicons.glyphMap => {
-    const platformUpper = platform.toUpperCase();
+    const platformUpper = (platform || '').toUpperCase();
     switch (platformUpper) {
       case 'SHOPEE':
         return 'cart-outline';
@@ -27,7 +27,7 @@ const ChatHeader: React.FC<IChatHeaderProps> = ({ buyer, platform, onBack }) => 
 
   // Get platform color
   const getPlatformColor = (): string => {
-    const platformUpper = platform.toUpperCase();
+    const platformUpper = (platform || '').toUpperCase();
     switch (platformUpper) {
       case 'SHOPEE':
         return '#EE4D2D';
@@ -75,7 +75,7 @@ const ChatHeader: React.FC<IChatHeaderProps> = ({ buyer, platform, onBack }) => 
             color={getPlatformColor()}
           />
           <Text style={[styles.platformText, { color: getPlatformColor() }]}>
-            {platform}
+            {shopName || platform}
           </Text>
         </View>
       </View>

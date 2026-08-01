@@ -9,7 +9,9 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
+  ScrollView,
 } from 'react-native';
+import ApiService from '../../services/api';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect, DrawerActions } from '@react-navigation/native';
@@ -30,9 +32,28 @@ export default function EcommerceChatScreen() {
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState<string>('');
   const [platformFilter, setPlatformFilter] = useState<PlatformFilter>('ALL');
   const [readStatusFilter, setReadStatusFilter] = useState<ReadStatusFilter>('ALL');
+  const [selectedShopId, setSelectedShopId] = useState<number | 'ALL'>('ALL');
+  const [shops, setShops] = useState<{ id: number; name: string }[]>([]);
 
   // Use custom hooks
   const { chats, loading, error, refreshing, filters, setFilters, refresh } = useChatList();
+
+  // Fetch shops list for Toko filter
+  useEffect(() => {
+    ApiService.authenticatedRequest('/get/ecommerce?shop_id_tiktok=1')
+      .then((res) => {
+        if (res?.status && Array.isArray(res.data)) {
+          const list = res.data
+            .filter((s: any) => s.status === 'APPROVED' || s.name || s.shop_name)
+            .map((s: any) => ({
+              id: Number(s.id),
+              name: s.name || s.shop_name || s.domain || `Toko #${s.id}`,
+            }));
+          setShops(list);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // WebSocket for real-time updates
   const handleChatReceived = (event: IWebSocketChatEvent) => {
@@ -78,13 +99,15 @@ export default function EcommerceChatScreen() {
       platform: platformFilter,
       readStatus: readStatusFilter,
       searchQuery: debouncedSearchQuery,
+      selectedShopId: selectedShopId,
     });
     setFilters({
       platform: platformFilter,
       readStatus: readStatusFilter,
       searchQuery: debouncedSearchQuery,
+      selectedShopId: selectedShopId,
     });
-  }, [debouncedSearchQuery, platformFilter, readStatusFilter, setFilters]);
+  }, [debouncedSearchQuery, platformFilter, readStatusFilter, selectedShopId, setFilters]);
 
   // Handle chat item press
   const handleChatPress = (chat: IChatList) => {
@@ -94,12 +117,58 @@ export default function EcommerceChatScreen() {
       idEcommerce: chat.id_ecommerce,
       buyer: chat.buyer,
       platform: chat.platform,
+      shopName: chat.shop_name || chat.toko_name || chat.name_ecommerce || chat.name,
     });
   };
 
   // Render filter buttons
   const renderFilterButtons = () => (
     <View style={styles.filterContainer}>
+      {/* Shop / Toko filters */}
+      {shops.length > 0 && (
+        <View style={styles.filterRow}>
+          <Text style={styles.filterLabel}>Toko:</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterButtons}>
+            <TouchableOpacity
+              style={[
+                styles.filterButton,
+                selectedShopId === 'ALL' && styles.filterButtonActive,
+              ]}
+              onPress={() => setSelectedShopId('ALL')}
+            >
+              <Text
+                style={[
+                  styles.filterButtonText,
+                  selectedShopId === 'ALL' && styles.filterButtonTextActive,
+                ]}
+              >
+                Semua Toko
+              </Text>
+            </TouchableOpacity>
+
+            {shops.map((shop) => (
+              <TouchableOpacity
+                key={shop.id}
+                style={[
+                  styles.filterButton,
+                  selectedShopId === shop.id && styles.filterButtonActive,
+                ]}
+                onPress={() => setSelectedShopId(shop.id)}
+              >
+                <Text
+                  style={[
+                    styles.filterButtonText,
+                    selectedShopId === shop.id && styles.filterButtonTextActive,
+                  ]}
+                >
+                  {shop.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
       {/* Platform filters */}
       <View style={styles.filterRow}>
         <Text style={styles.filterLabel}>Platform:</Text>
