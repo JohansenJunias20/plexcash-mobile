@@ -189,6 +189,9 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
   const [selectedVariantIndex, setSelectedVariantIndex] = useState<number>(0); // 0 = masterbarang, 1+ = bundling variants
   const [variantQty, setVariantQty] = useState<number>(1);
 
+  // POS Hide Variants setting
+  const [posHideVariants, setPosHideVariants] = useState(false);
+
   // Store settings
   const [storeSettings, setStoreSettings] = useState({
     name: 'PlexSeller',
@@ -563,6 +566,12 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
         if (pkpSetting) {
           setIsPkpActive(pkpSetting.value === '1' || pkpSetting.value === true);
         }
+
+        // Load pos_hide_variants setting
+        const hideVariantsSetting = data.data.find((s: any) => s.setting === 'pos_hide_variants');
+        const shouldHideVariants = hideVariantsSetting?.value === '1';
+        setPosHideVariants(shouldHideVariants);
+        console.log('📋 [SETTINGS] pos_hide_variants:', shouldHideVariants);
 
         // Load store settings for receipt printing
         const storeName = data.data.find((s: any) => s.setting === 'printer:nama_toko')?.value || 'PlexSeller';
@@ -988,12 +997,38 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
   const addToCart = (product: Product) => {
     // Check if product has bundling variants
     if (product.bundling_variants && product.bundling_variants.length > 0 && !product.is_bundling) {
-      // Show variant selection modal
-      setSelectedProductForVariant(product);
-      setSelectedVariantIndex(0); // Default to masterbarang
-      setVariantQty(1);
-      setShowVariantModal(true);
-      return;
+      if (posHideVariants) {
+        // Mode hide variants: sembunyikan opsi masterbarang, langsung ke bundling
+        if (product.bundling_variants.length === 1) {
+          // Hanya ada 1 bundling variant, langsung tambah tanpa modal
+          const variant = product.bundling_variants[0];
+          addToCartDirect({
+            id: variant.id,
+            nama: variant.nama,
+            sku: variant.sku,
+            hargajual: variant.hargajual,
+            hargabeli: 0,
+            stok: variant.stok,
+            satuan: variant.satuan || 'set',
+            is_bundling: true,
+          }, 1);
+          return;
+        } else {
+          // Ada multiple bundling variants, tampilkan modal tapi default ke index 1 (bundling pertama)
+          setSelectedProductForVariant(product);
+          setSelectedVariantIndex(1); // Default ke bundling pertama, bukan masterbarang
+          setVariantQty(1);
+          setShowVariantModal(true);
+          return;
+        }
+      } else {
+        // Mode normal: tampilkan modal dengan semua opsi termasuk masterbarang
+        setSelectedProductForVariant(product);
+        setSelectedVariantIndex(0); // Default to masterbarang
+        setVariantQty(1);
+        setShowVariantModal(true);
+        return;
+      }
     }
 
     // Direct add to cart (no variants)
@@ -2155,29 +2190,31 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
               keyExtractor={(item) => `${item.is_bundling ? 'b' : 'p'}-${item.id}`}
               renderItem={({ item }) => (
                 <TouchableOpacity
-                  style={styles.productItem}
+                  style={[styles.productItem, { position: 'relative' }]}
                   onPress={() => addToCart(item)}
                 >
                   <View style={styles.productInfo}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                      <Text style={styles.productName}>{item.nama}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Text style={[styles.productName, { flex: 1, flexShrink: 1 }]}>{item.nama}</Text>
                       {item.is_bundling && (
                         <View style={styles.bundlingBadge}>
                           <Text style={styles.bundlingBadgeText}>Bundling</Text>
-                        </View>
-                      )}
-                      {item.bundling_variants && item.bundling_variants.length > 0 && (
-                        <View style={styles.variantBadge}>
-                          <Text style={styles.variantBadgeText}>+{item.bundling_variants.length} varian</Text>
                         </View>
                       )}
                     </View>
                     <Text style={styles.productSku}>SKU: {item.sku}</Text>
                     <Text style={styles.productStock}>Stock: {item.stok} {item.satuan}</Text>
                   </View>
-                  <Text style={styles.productPrice}>
-                    Rp {(item.hargajual || 0).toLocaleString('id-ID')}
-                  </Text>
+                  <View style={{ alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                    <Text style={styles.productPrice}>
+                      Rp {(item.hargajual || 0).toLocaleString('id-ID')}
+                    </Text>
+                    {item.bundling_variants && item.bundling_variants.length > 0 && (
+                      <View style={styles.variantBadge}>
+                        <Text style={styles.variantBadgeText}>+{item.bundling_variants.length} varian</Text>
+                      </View>
+                    )}
+                  </View>
                 </TouchableOpacity>
               )}
               style={styles.productList}
@@ -2724,29 +2761,31 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
 
                   {/* Variant Options */}
                   <View style={styles.variantOptionsContainer}>
-                    {/* Masterbarang Option */}
-                    <TouchableOpacity
-                      style={[
-                        styles.variantOption,
-                        selectedVariantIndex === 0 && styles.variantOptionSelected
-                      ]}
-                      onPress={() => setSelectedVariantIndex(0)}
-                    >
-                      <View style={styles.variantRadio}>
-                        {selectedVariantIndex === 0 && <View style={styles.variantRadioInner} />}
-                      </View>
-                      <View style={styles.variantOptionInfo}>
-                        <Text style={styles.variantOptionName}>
-                          {selectedProductForVariant.nama} ({selectedProductForVariant.satuan})
-                        </Text>
-                        <Text style={styles.variantOptionPrice}>
-                          Rp {selectedProductForVariant.hargajual.toLocaleString('id-ID')}
-                        </Text>
-                        <Text style={styles.variantOptionStock}>
-                          Stok: {selectedProductForVariant.stok} {selectedProductForVariant.satuan}
-                        </Text>
-                      </View>
-                    </TouchableOpacity>
+                    {/* Masterbarang Option — sembunyikan jika pos_hide_variants aktif */}
+                    {!posHideVariants && (
+                      <TouchableOpacity
+                        style={[
+                          styles.variantOption,
+                          selectedVariantIndex === 0 && styles.variantOptionSelected
+                        ]}
+                        onPress={() => setSelectedVariantIndex(0)}
+                      >
+                        <View style={styles.variantRadio}>
+                          {selectedVariantIndex === 0 && <View style={styles.variantRadioInner} />}
+                        </View>
+                        <View style={styles.variantOptionInfo}>
+                          <Text style={styles.variantOptionName}>
+                            {selectedProductForVariant.nama} ({selectedProductForVariant.satuan})
+                          </Text>
+                          <Text style={styles.variantOptionPrice}>
+                            Rp {selectedProductForVariant.hargajual.toLocaleString('id-ID')}
+                          </Text>
+                          <Text style={styles.variantOptionStock}>
+                            Stok: {selectedProductForVariant.stok} {selectedProductForVariant.satuan}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    )}
 
                     {/* Bundling Variants */}
                     {selectedProductForVariant.bundling_variants?.map((variant, index) => (
@@ -2762,8 +2801,8 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
                           {selectedVariantIndex === index + 1 && <View style={styles.variantRadioInner} />}
                         </View>
                         <View style={styles.variantOptionInfo}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                            <Text style={styles.variantOptionName}>{variant.nama} (bundling)</Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                            <Text style={[styles.variantOptionName, { flex: 1 }]}>{variant.nama} (bundling)</Text>
                             <View style={styles.bundlingBadge}>
                               <Text style={styles.bundlingBadgeText}>Bundling</Text>
                             </View>
