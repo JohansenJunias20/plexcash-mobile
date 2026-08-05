@@ -9,6 +9,9 @@
 
 set -e  # Exit on error
 
+# Force set JAVA_HOME to fix the leading space issue from the system environment
+export JAVA_HOME="C:\Program Files\Android\Android Studio\jbr"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
