@@ -189,9 +189,6 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
   const [selectedVariantIndex, setSelectedVariantIndex] = useState<number>(0); // 0 = masterbarang, 1+ = bundling variants
   const [variantQty, setVariantQty] = useState<number>(1);
 
-  // POS Hide Variants setting
-  const [posHideVariants, setPosHideVariants] = useState(false);
-
   // Store settings
   const [storeSettings, setStoreSettings] = useState({
     name: 'PlexSeller',
@@ -737,6 +734,7 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
 
       // PART 1: Search masterbarang (existing logic)
       // Use the proper /get/masterbarang/search endpoint with OR logic
+      // pos=1: backend akan otomatis menyaring item dengan hide_pos_variant=1
       const qs = new URLSearchParams({
         nama: query,
         sku: query,
@@ -745,7 +743,8 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
         start: '0',
         end: '50', // Increase limit to capture all variants
         jumlah_online: '2147483647',
-        search_mode: 'or'
+        search_mode: 'or',
+        pos: '1',  // Filter: exclude items yang ditandai hide_pos_variant
       });
 
       console.log('🔍 [POS] Searching products and bundling...');
@@ -997,38 +996,12 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
   const addToCart = (product: Product) => {
     // Check if product has bundling variants
     if (product.bundling_variants && product.bundling_variants.length > 0 && !product.is_bundling) {
-      if (posHideVariants) {
-        // Mode hide variants: sembunyikan opsi masterbarang, langsung ke bundling
-        if (product.bundling_variants.length === 1) {
-          // Hanya ada 1 bundling variant, langsung tambah tanpa modal
-          const variant = product.bundling_variants[0];
-          addToCartDirect({
-            id: variant.id,
-            nama: variant.nama,
-            sku: variant.sku,
-            hargajual: variant.hargajual,
-            hargabeli: 0,
-            stok: variant.stok,
-            satuan: variant.satuan || 'set',
-            is_bundling: true,
-          }, 1);
-          return;
-        } else {
-          // Ada multiple bundling variants, tampilkan modal tapi default ke index 1 (bundling pertama)
-          setSelectedProductForVariant(product);
-          setSelectedVariantIndex(1); // Default ke bundling pertama, bukan masterbarang
-          setVariantQty(1);
-          setShowVariantModal(true);
-          return;
-        }
-      } else {
-        // Mode normal: tampilkan modal dengan semua opsi termasuk masterbarang
-        setSelectedProductForVariant(product);
-        setSelectedVariantIndex(0); // Default to masterbarang
-        setVariantQty(1);
-        setShowVariantModal(true);
-        return;
-      }
+      // Show variant selection modal
+      setSelectedProductForVariant(product);
+      setSelectedVariantIndex(0); // Default to masterbarang
+      setVariantQty(1);
+      setShowVariantModal(true);
+      return;
     }
 
     // Direct add to cart (no variants)
@@ -2761,31 +2734,29 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
 
                   {/* Variant Options */}
                   <View style={styles.variantOptionsContainer}>
-                    {/* Masterbarang Option — sembunyikan jika pos_hide_variants aktif */}
-                    {!posHideVariants && (
-                      <TouchableOpacity
-                        style={[
-                          styles.variantOption,
-                          selectedVariantIndex === 0 && styles.variantOptionSelected
-                        ]}
-                        onPress={() => setSelectedVariantIndex(0)}
-                      >
-                        <View style={styles.variantRadio}>
-                          {selectedVariantIndex === 0 && <View style={styles.variantRadioInner} />}
-                        </View>
-                        <View style={styles.variantOptionInfo}>
-                          <Text style={styles.variantOptionName}>
-                            {selectedProductForVariant.nama} ({selectedProductForVariant.satuan})
-                          </Text>
-                          <Text style={styles.variantOptionPrice}>
-                            Rp {selectedProductForVariant.hargajual.toLocaleString('id-ID')}
-                          </Text>
-                          <Text style={styles.variantOptionStock}>
-                            Stok: {selectedProductForVariant.stok} {selectedProductForVariant.satuan}
-                          </Text>
-                        </View>
-                      </TouchableOpacity>
-                    )}
+                    {/* Masterbarang Option */}
+                    <TouchableOpacity
+                      style={[
+                        styles.variantOption,
+                        selectedVariantIndex === 0 && styles.variantOptionSelected
+                      ]}
+                      onPress={() => setSelectedVariantIndex(0)}
+                    >
+                      <View style={styles.variantRadio}>
+                        {selectedVariantIndex === 0 && <View style={styles.variantRadioInner} />}
+                      </View>
+                      <View style={styles.variantOptionInfo}>
+                        <Text style={styles.variantOptionName}>
+                          {selectedProductForVariant.nama} ({selectedProductForVariant.satuan})
+                        </Text>
+                        <Text style={styles.variantOptionPrice}>
+                          Rp {selectedProductForVariant.hargajual.toLocaleString('id-ID')}
+                        </Text>
+                        <Text style={styles.variantOptionStock}>
+                          Stok: {selectedProductForVariant.stok} {selectedProductForVariant.satuan}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
 
                     {/* Bundling Variants */}
                     {selectedProductForVariant.bundling_variants?.map((variant, index) => (

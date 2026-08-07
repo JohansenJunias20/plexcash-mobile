@@ -310,7 +310,7 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ navigation, s
           {checkAccess(a?.transaksi?.pembelian?.retur) && <DrawerItem label="Retur" icon="return-down-back" onPress={() => navigation.navigate('PembelianRetur')} active={currentRoute === 'PembelianRetur'} nested />}
           {checkAccess(a?.transaksi?.pembelian?.dp_beli) && <DrawerItem label="DP Beli" icon="card" onPress={() => navigation.navigate('PembelianDPBeli')} active={currentRoute === 'PembelianDPBeli'} nested />}
           {checkAccess(a?.transaksi?.pembelian?.preorder) && <DrawerItem label="Pre Order" icon="calendar" onPress={() => navigation.navigate('PreOrder')} active={currentRoute === 'PreOrder'} nested />}
-          {checkAccess(a?.transaksi?.pembelian?.hutang) && <DrawerItem label="Hutang" icon="wallet" onPress={() => Alert.alert('Segera Hadir', 'Fitur Hutang Pembelian sedang dalam pengembangan.')} active={false} nested badge="Soon" />}
+          {checkAccess(a?.transaksi?.pembelian?.hutang) && <DrawerItem label="Hutang" icon="wallet" onPress={() => navigation.navigate('PembelianHutang')} active={currentRoute === 'PembelianHutang'} nested />}
         </CollapsibleSection>
       )}
 

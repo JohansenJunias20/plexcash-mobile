@@ -5,8 +5,8 @@
 // TEMPORARY FIX: Use computer's IP address for mobile device access
 // For Android Emulator: use http://10.0.2.2 (maps to host's localhost)
 // For Physical Device: use your computer's IP address (e.g., http://192.168.1.210)
-export const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || "https://app.plexseller.com";
-// export const API_BASE_URL = "http://127.0.0.1:3000";
+// export const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || "https://app.plexseller.com";
+export const API_BASE_URL = "http://127.0.0.1:3000";
 
 // Debug: Log the actual environment variables being used
 console.log('[API] Environment Debug:', {
@@ -1417,7 +1417,392 @@ class ApiService {
       return { status: false, reason: 'Failed to fetch progressive calculation' };
     }
   }
+
+  // =====================================================
+  // HUTANG (ACCOUNTS PAYABLE) ENDPOINTS
+  // =====================================================
+
+  /**
+   * Get suppliers with active debt
+   */
+  static async getHutangSuppliers(): Promise<{
+    status: boolean;
+    data?: Array<{
+      id_supplier: number;
+      nama_supplier: string;
+      total_sisa_hutang: number | string;
+    }>;
+    reason?: string;
+  }> {
+    try {
+      const response = await this.authenticatedRequest('/get/hutang/suppliers');
+      return response;
+    } catch (error) {
+      console.error('Error fetching suppliers with debt:', error);
+      return { status: false, reason: 'Failed to fetch suppliers with debt' };
+    }
+  }
+
+  /**
+   * Get paginated and filtered purchase debts
+   */
+  static async getHutangList(params: {
+    status?: 'all' | 'lunas' | 'belum_lunas';
+    dateStart?: string;
+    dateEnd?: string;
+    page?: number;
+    pageSize?: number;
+    sortBy?: string;
+    sortOrder?: 'ASC' | 'DESC';
+    id_supplier?: number;
+  }): Promise<{
+    status: boolean;
+    data?: any[];
+    pagination?: {
+      totalRows: number;
+      totalPages: number;
+    };
+    reason?: string;
+  }> {
+    try {
+      const queryParts: string[] = [];
+      if (params.status) queryParts.push(`status=${encodeURIComponent(params.status)}`);
+      if (params.dateStart) queryParts.push(`dateStart=${encodeURIComponent(params.dateStart)}`);
+      if (params.dateEnd) queryParts.push(`dateEnd=${encodeURIComponent(params.dateEnd)}`);
+      if (params.page) queryParts.push(`page=${params.page}`);
+      if (params.pageSize) queryParts.push(`pageSize=${params.pageSize}`);
+      if (params.sortBy) queryParts.push(`sortBy=${encodeURIComponent(params.sortBy)}`);
+      if (params.sortOrder) queryParts.push(`sortOrder=${encodeURIComponent(params.sortOrder)}`);
+      if (params.id_supplier !== undefined && params.id_supplier !== null) {
+        queryParts.push(`id_supplier=${params.id_supplier}`);
+      }
+
+      const queryString = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
+      const response = await this.authenticatedRequest(`/get/hutang${queryString}`);
+      return response;
+    } catch (error) {
+      console.error('Error fetching hutang list:', error);
+      return { status: false, reason: 'Failed to fetch hutang list' };
+    }
+  }
+
+  /**
+   * Get payment history for a specific purchase invoice
+   */
+  static async getDetailPelunasanHutang(pembelianId: number): Promise<{
+    status: boolean;
+    data?: Array<{
+      tanggal: string;
+      kodeBA: string | null;
+      keterangan: string | null;
+      saldo: number | string;
+    }>;
+    reason?: string;
+  }> {
+    try {
+      const response = await this.authenticatedRequest(`/get/detailpelunasanhutang/join/pelunasanhutang/${pembelianId}`);
+      return response;
+    } catch (error) {
+      console.error('Error fetching detail pelunasan hutang:', error);
+      return { status: false, reason: 'Failed to fetch detail pelunasan hutang' };
+    }
+  }
+
+  /**
+   * Update due date for purchase invoice
+   */
+  static async updateJatuhTempo(pembelianId: number, tgl_jatuh_tempo: string): Promise<{
+    status: boolean;
+    message?: string;
+    reason?: string;
+  }> {
+    try {
+      const response = await this.authenticatedRequest(`/update/pembelian/${pembelianId}/jatuh_tempo`, {
+        method: 'PATCH',
+        body: JSON.stringify({ tgl_jatuh_tempo }),
+      });
+      return response;
+    } catch (error) {
+      console.error('Error updating due date:', error);
+      return { status: false, reason: 'Failed to update due date' };
+    }
+  }
+
+  /**
+   * Bulk settle selected debts for a supplier
+   */
+  static async lunasiHutangTerpilih(id_pembelian: number[], id_supplier: number): Promise<{
+    status: boolean;
+    message?: string;
+    reason?: string;
+  }> {
+    try {
+      const response = await this.authenticatedRequest('/post/hutang/lunasi-terpilih', {
+        method: 'POST',
+        body: JSON.stringify({ id_pembelian, id_supplier }),
+      });
+      return response;
+    } catch (error) {
+      console.error('Error settling selected debts:', error);
+      return { status: false, reason: 'Failed to settle selected debts' };
+    }
+  }
+
+  // =====================================================
+  // PELUNASAN PEMBELIAN (AP SETTLEMENT) ENDPOINTS
+  // =====================================================
+
+  /**
+   * Generic table search endpoint used by search modals
+   */
+  static async searchTable(body: { table: string; shows?: any[]; fields?: string[]; query?: string }): Promise<{
+    status: boolean;
+    data?: any[];
+    reason?: string;
+  }> {
+    try {
+      const response = await this.authenticatedRequest('/search/table', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+      return response;
+    } catch (error) {
+      console.error('Error in searchTable:', error);
+      return { status: false, reason: 'Failed table search' };
+    }
+  }
+
+  /**
+   * Get single Pelunasan Hutang record by ID
+   */
+  static async getPelunasanHutangById(id: string | number): Promise<{
+    status: boolean;
+    data?: any[];
+    reason?: string;
+  }> {
+    try {
+      const response = await this.authenticatedRequest(`/get/pelunasanhutang/condition/and/id:equal:${id}`);
+      return response;
+    } catch (error) {
+      console.error('Error fetching pelunasan hutang by id:', error);
+      return { status: false, reason: 'Failed to fetch pelunasan hutang' };
+    }
+  }
+
+  /**
+   * Get Supplier info by ID
+   */
+  static async getSupplierById(id: number): Promise<{
+    status: boolean;
+    data?: any[];
+    reason?: string;
+  }> {
+    try {
+      const response = await this.authenticatedRequest(`/get/supplier/condition/and/id:equal:${id}`);
+      return response;
+    } catch (error) {
+      console.error('Error fetching supplier by id:', error);
+      return { status: false, reason: 'Failed to fetch supplier' };
+    }
+  }
+
+  /**
+   * Get Detail Pelunasan Hutang line items by pelunasan ID
+   */
+  static async getDetailPelunasanHutangById(id_pelunasan: string | number): Promise<{
+    status: boolean;
+    data?: any[];
+    reason?: string;
+  }> {
+    try {
+      const response = await this.authenticatedRequest(`/get/detailpelunasanhutang/condition/and/id_pelunasan:equal:${id_pelunasan}`);
+      return response;
+    } catch (error) {
+      console.error('Error fetching detail pelunasan hutang by id_pelunasan:', error);
+      return { status: false, reason: 'Failed to fetch detail pelunasan hutang' };
+    }
+  }
+
+  /**
+   * Get Pembelian records by multi-IDs (comma separated)
+   */
+  static async getPembelianByIds(ids: string): Promise<{
+    status: boolean;
+    data?: any[];
+    reason?: string;
+  }> {
+    try {
+      const response = await this.authenticatedRequest(`/get/pembelian/by-ids/${ids}`);
+      return response;
+    } catch (error) {
+      console.error('Error fetching pembelian by ids:', error);
+      return { status: false, reason: 'Failed to fetch pembelian list' };
+    }
+  }
+
+  /**
+   * Get single Pembelian record by ID
+   */
+  static async getPembelianById(id: number | string): Promise<{
+    status: boolean;
+    data?: any[];
+    reason?: string;
+  }> {
+    try {
+      const response = await this.authenticatedRequest(`/get/pembelian/condition/and/id:equal:${id}`);
+      return response;
+    } catch (error) {
+      console.error('Error fetching pembelian by id:', error);
+      return { status: false, reason: 'Failed to fetch pembelian' };
+    }
+  }
+
+  /**
+   * Get Retur Pembelian items by supplier ID
+   */
+  static async getReturPembelianBySupplier(supplierId: number): Promise<{
+    status: boolean;
+    data?: any[];
+    reason?: string;
+  }> {
+    try {
+      const response = await this.authenticatedRequest(`/get/returpembelian/join/pembelian/${supplierId}`);
+      return response;
+    } catch (error) {
+      console.error('Error fetching retur pembelian by supplier:', error);
+      return { status: false, reason: 'Failed to fetch retur pembelian' };
+    }
+  }
+
+  /**
+   * Get DP Beli sisa (remaining DP balance) items by supplier ID
+   */
+  static async getDPBeliSisaBySupplier(supplierId: number): Promise<{
+    status: boolean;
+    data?: any[];
+    reason?: string;
+  }> {
+    try {
+      const response = await this.authenticatedRequest(`/get/dpbeli/sisa/${supplierId}`);
+      return response;
+    } catch (error) {
+      console.error('Error fetching DP Beli sisa by supplier:', error);
+      return { status: false, reason: 'Failed to fetch DP Beli sisa' };
+    }
+  }
+
+  /**
+   * Get Pelunasan Pembelian records within date interval
+   */
+  static async getPelunasanPembelianInterval(dateStart: string, dateEnd: string): Promise<{
+    status: boolean;
+    data?: any[];
+    reason?: string;
+  }> {
+    try {
+      const response = await this.authenticatedRequest(`/get/pelunasanpembelian/interval/${dateStart}/${dateEnd}`);
+      return response;
+    } catch (error) {
+      console.error('Error fetching pelunasan pembelian interval:', error);
+      return { status: false, reason: 'Failed to fetch pelunasan list' };
+    }
+  }
+
+  /**
+   * Save new Pelunasan Hutang (POST /pelunasan/hutang)
+   */
+  static async createPelunasanHutang(payload: any): Promise<{
+    status: boolean;
+    id?: number | string;
+    reason?: string;
+  }> {
+    try {
+      const formattedItems = (payload.items || []).map((item: any) => ({
+        idPembelian: item.idPembelian || item.id_pembelian || 0,
+        idRetur: item.idRetur || item.id_retur || 0,
+        idDP: item.idDP || item.id_dp || 0,
+        total: item.total ?? item.totalhutang ?? "0",
+        bayar: item.bayar ?? item.saldo ?? "0",
+        ...(item.source_type ? { source_type: item.source_type } : {}),
+      }));
+
+      const formattedPayload = {
+        tanggal: payload.tanggal,
+        id_supplier: payload.id_supplier || payload.idSupplier || 0,
+        keterangan: payload.keterangan || "",
+        kodeBA: payload.kodeBA || payload.kode_baganAkun || "",
+        items: formattedItems,
+      };
+
+      const response = await this.authenticatedRequest('/pelunasan/hutang', {
+        method: 'POST',
+        body: JSON.stringify(formattedPayload),
+      });
+      return response;
+    } catch (error) {
+      console.error('Error creating pelunasan hutang:', error);
+      return { status: false, reason: 'Failed to save pelunasan' };
+    }
+  }
+
+  /**
+   * Update existing Pelunasan Hutang (PATCH /pelunasan/hutang)
+   */
+  static async updatePelunasanHutang(payload: any): Promise<{
+    status: boolean;
+    reason?: string;
+  }> {
+    try {
+      const formattedItems = (payload.items || []).map((item: any) => ({
+        idPembelian: item.idPembelian || item.id_pembelian || 0,
+        idRetur: item.idRetur || item.id_retur || 0,
+        idDP: item.idDP || item.id_dp || 0,
+        total: item.total ?? item.totalhutang ?? "0",
+        bayar: item.bayar ?? item.saldo ?? "0",
+        ...(item.source_type ? { source_type: item.source_type } : {}),
+      }));
+
+      const formattedPayload = {
+        id: payload.id,
+        tanggal: payload.tanggal,
+        id_supplier: payload.id_supplier || payload.idSupplier || 0,
+        keterangan: payload.keterangan || "",
+        kodeBA: payload.kodeBA || payload.kode_baganAkun || "",
+        items: formattedItems,
+      };
+
+      const response = await this.authenticatedRequest('/pelunasan/hutang', {
+        method: 'PATCH',
+        body: JSON.stringify(formattedPayload),
+      });
+      return response;
+    } catch (error) {
+      console.error('Error updating pelunasan hutang:', error);
+      return { status: false, reason: 'Failed to update pelunasan' };
+    }
+  }
+
+  /**
+   * Delete Pelunasan Hutang (DELETE /pelunasanpembelian)
+   */
+  static async deletePelunasanHutang(id: string): Promise<{
+    status: boolean;
+    reason?: string;
+  }> {
+    try {
+      const response = await this.authenticatedRequest('/pelunasanpembelian', {
+        method: 'DELETE',
+        body: JSON.stringify({ id }),
+      });
+      return response;
+    } catch (error) {
+      console.error('Error deleting pelunasan hutang:', error);
+      return { status: false, reason: 'Failed to delete pelunasan' };
+    }
+  }
 }
 
 export default ApiService;
+
+
 

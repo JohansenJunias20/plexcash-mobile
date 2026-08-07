@@ -48,6 +48,7 @@ import PembelianRincianScreen from '../screens/transaksi/pembelian/PembelianRinc
 import PembelianPelunasanScreen from '../screens/transaksi/pembelian/PembelianPelunasanScreen';
 import PembelianReturScreen from '../screens/transaksi/pembelian/PembelianReturScreen';
 import PembelianDPBeliScreen from '../screens/transaksi/pembelian/PembelianDPBeliScreen';
+import PembelianHutangScreen from '../screens/transaksi/pembelian/PembelianHutangScreen';
 import PreOrderScreen from '../screens/transaksi/PreOrderScreen';
 
 // TRANSAKSI Section - Penjualan
@@ -289,6 +290,8 @@ const PembelianStackScreen = () => (
   >
     <PembelianStack.Screen name="PembelianSearchMain" component={PembelianSearchScreen} />
     <PembelianStack.Screen name="PembelianRincian" component={PembelianRincianScreen} />
+    <PembelianStack.Screen name="PembelianHutang" component={PembelianHutangScreen} />
+    <PembelianStack.Screen name="PembelianPelunasan" component={PembelianPelunasanScreen} />
   </PembelianStack.Navigator>
 );
 
@@ -354,6 +357,7 @@ const DrawerNavigatorContent = () => {
       <Drawer.Screen name="PembelianTambah" component={PembelianTambahScreen} />
       <Drawer.Screen name="PembelianSearch" component={PembelianStackScreen} />
       <Drawer.Screen name="PembelianPelunasan" component={PembelianPelunasanScreen} />
+      <Drawer.Screen name="PembelianHutang" component={PembelianHutangScreen} />
       <Drawer.Screen name="PembelianRetur" component={PembelianReturScreen} />
       <Drawer.Screen name="PembelianDPBeli" component={PembelianDPBeliScreen} />
       <Drawer.Screen name="PreOrder" component={PreOrderStackScreen} />
