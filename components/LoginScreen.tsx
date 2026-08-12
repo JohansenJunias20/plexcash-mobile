@@ -5,6 +5,8 @@ import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import ApiService from '../services/api';
 import Settings from './Settings';
+import SimpleQRScanner from './SimpleQRScanner';
+import QRCodeInput from './QRCodeInput';
 import GoogleAuthService from '../services/googleAuth';
 import { useDeveloperMode } from '../context/DeveloperModeContext';
 // PIN Login disabled for Google Play Store compliance
@@ -13,12 +15,24 @@ import { useDeveloperMode } from '../context/DeveloperModeContext';
 const LoginScreen = (): JSX.Element => {
   const [isLoading, setIsLoading] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showQRScanner, setShowQRScanner] = useState(false);
+  const [showQRInput, setShowQRInput] = useState(false);
   // PIN Login disabled for Google Play Store compliance
   // Google Play requires reviewers to access all features without needing credentials from another device/platform
   // const [showPINLogin, setShowPINLogin] = useState(false);
   const { isDeveloperMode, toggleDeveloperMode } = useDeveloperMode();
 
-  const handleQRCodeLogin = () => setShowSettings(true);
+  const handleQRCodeLogin = () => {
+    Alert.alert(
+      'Autentikasi QR Code',
+      'Pilih metode autentikasi QR Code:',
+      [
+        { text: '📷 Pindai Kamera', onPress: () => setShowQRScanner(true) },
+        { text: '⌨️ Input QR Manual', onPress: () => setShowQRInput(true) },
+        { text: 'Batal', style: 'cancel' }
+      ]
+    );
+  };
   // const handlePINLogin = () => setShowPINLogin(true);
 
   const handleGoogleLogin = async () => {
@@ -93,6 +107,14 @@ const LoginScreen = (): JSX.Element => {
 
   const handleCloseSettings = () => setShowSettings(false);
   // const handleClosePINLogin = () => setShowPINLogin(false);
+
+  if (showQRScanner) {
+    return <SimpleQRScanner onScanSuccess={() => setShowQRScanner(false)} onCancel={() => setShowQRScanner(false)} />;
+  }
+
+  if (showQRInput) {
+    return <QRCodeInput onScanSuccess={() => setShowQRInput(false)} onCancel={() => setShowQRInput(false)} />;
+  }
 
   if (showSettings) {
     return <Settings onClose={handleCloseSettings} />;

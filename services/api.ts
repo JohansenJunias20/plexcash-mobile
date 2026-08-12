@@ -6,14 +6,14 @@
 // For Android Emulator: use http://10.0.2.2 (maps to host's localhost)
 // For Physical Device: use your computer's IP address (e.g., http://192.168.1.210)
 export const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || "https://app.plexseller.com";
-// export const API_BASE_URL = "http://127.0.0.1:3000";
+// export const API_BASE_URL = "http://192.168.1.18:3000";
 
 // Debug: Log the actual environment variables being used
 console.log('[API] Environment Debug:', {
   EXPO_PUBLIC_API_BASE_URL: process.env.EXPO_PUBLIC_API_BASE_URL,
   API_BASE_URL_ENV: process.env.API_BASE_URL,
   Final_API_BASE_URL: API_BASE_URL,
-  FORCED_TO_IP: '192.168.1.210:80'
+  FORCED_TO_IP: '192.168.1.18:3000'
 });
 
 // For development/testing - set this to true to simulate successful backend responses

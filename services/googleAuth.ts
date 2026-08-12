@@ -5,9 +5,12 @@ import { Linking, Platform } from 'react-native';
 import ApiService from './api';
 import { logger, logGoogleAuth, logError, logCritical } from '../utils/logger';
 
+import { API_BASE_URL } from './api';
+
 WebBrowser.maybeCompleteAuthSession();
 
 // Backend configuration
+// IMPORTANT: Google Auth MUST use production URL because Google blocks http://192.168.x.x redirect URIs
 const BACKEND_URL = 'https://app.plexseller.com';
 const GOOGLE_WEB_CLIENT_ID = '227685404880-cdk3pq80i0d91si864gaakka214tg34l.apps.googleusercontent.com';
 
