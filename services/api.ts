@@ -730,25 +730,17 @@ class ApiService {
 
       console.log(`🌐 [AUTH-REQ] Response status for ${endpoint}: ${response.status}`);
 
-      // Task 4: Handle 401 errors with token refresh and retry
-      // 403 is FORBIDDEN (user lacks permissions, e.g. not an admin). Do NOT refresh token for 403.
-      if (response.status === 403) {
-        console.log(`❌ [AUTH-REQ] FORBIDDEN (403) for ${endpoint}. User lacks permissions.`);
-        throw new Error('Forbidden');
-      }
-
-      if (response.status === 401) {
-        console.log(`❌ [AUTH-REQ] UNAUTHORIZED (401)`);
-        console.log(`❌ [AUTH-REQ] Endpoint: ${endpoint}`);
-        console.log(`❌ [AUTH-REQ] Retry count: ${retryCount}`);
+      // Task 4: Handle 401 and 403 errors with token refresh and retry
+      if (response.status === 401 || (response.status === 403 && retryCount === 0)) {
+        console.log(`❌ [AUTH-REQ] Status ${response.status} for endpoint: ${endpoint} (retryCount: ${retryCount})`);
 
         // Only retry once to avoid infinite loops
         if (retryCount === 0) {
           const authMethod = await AsyncStorage.getItem('authMethod');
 
-          // Only attempt refresh for device/PIN auth (not Firebase)
+          // Attempt refresh for device/PIN auth
           if (authMethod === 'device' || authMethod === 'pin') {
-            console.log('🔄 [AUTH-REQ] Attempting token refresh after 401 error...');
+            console.log('🔄 [AUTH-REQ] Attempting token refresh after 401/403 error...');
 
             try {
               const refreshResult = await this.validateDeviceAuth();
@@ -764,7 +756,7 @@ class ApiService {
               console.error('❌ [AUTH-REQ] Error during token refresh:', refreshError);
             }
           } else if (authMethod === 'firebase') {
-            console.log('🔄 [AUTH-REQ] Attempting Firebase token refresh after 401 error...');
+            console.log('🔄 [AUTH-REQ] Attempting Firebase token refresh after 401/403 error...');
             try {
               // Firebase restores auth session asynchronously after app restarts.
               // auth.currentUser can be null for a few seconds — we must WAIT for it.
@@ -777,7 +769,7 @@ class ApiService {
                 const backendResponse = await this.exchangeFirebaseToken(newFirebaseToken);
 
                 if (backendResponse.status) {
-                  const tokenToStore = backendResponse.persistentToken || newFirebaseToken;
+                  const tokenToStore = backendResponse.persistentToken || backendResponse.token || newFirebaseToken;
                   console.log('✅ [AUTH-REQ] Token refreshed successfully, saving...');
 
                   await this.storeDeviceTokens({
@@ -804,6 +796,10 @@ class ApiService {
           }
         } else {
           console.log('❌ [AUTH-REQ] Already retried once, not retrying again');
+        }
+
+        if (response.status === 403) {
+          throw new Error('Forbidden');
         }
 
         // If we reach here, refresh failed or not applicable

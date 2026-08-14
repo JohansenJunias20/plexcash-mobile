@@ -7,33 +7,31 @@ import ApiService from '../services/api';
 import Settings from './Settings';
 import SimpleQRScanner from './SimpleQRScanner';
 import QRCodeInput from './QRCodeInput';
+import PINLogin from './PINLogin';
 import GoogleAuthService from '../services/googleAuth';
 import { useDeveloperMode } from '../context/DeveloperModeContext';
-// PIN Login disabled for Google Play Store compliance
-// import PINLogin from './PINLogin';
 
 const LoginScreen = (): JSX.Element => {
   const [isLoading, setIsLoading] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showQRScanner, setShowQRScanner] = useState(false);
   const [showQRInput, setShowQRInput] = useState(false);
-  // PIN Login disabled for Google Play Store compliance
-  // Google Play requires reviewers to access all features without needing credentials from another device/platform
-  // const [showPINLogin, setShowPINLogin] = useState(false);
+  const [showPINLogin, setShowPINLogin] = useState(false);
   const { isDeveloperMode, toggleDeveloperMode } = useDeveloperMode();
 
   const handleQRCodeLogin = () => {
     Alert.alert(
-      'Autentikasi QR Code',
-      'Pilih metode autentikasi QR Code:',
+      'Metode Autentikasi',
+      'Pilih metode login dari aplikasi web:',
       [
-        { text: '📷 Pindai Kamera', onPress: () => setShowQRScanner(true) },
+        { text: '📷 Pindai QR Kamera', onPress: () => setShowQRScanner(true) },
+        { text: '🔢 Login Kode PIN Web', onPress: () => setShowPINLogin(true) },
         { text: '⌨️ Input QR Manual', onPress: () => setShowQRInput(true) },
         { text: 'Batal', style: 'cancel' }
       ]
     );
   };
-  // const handlePINLogin = () => setShowPINLogin(true);
+  const handlePINLogin = () => setShowPINLogin(true);
 
   const handleGoogleLogin = async () => {
     setIsLoading(true);
@@ -106,7 +104,7 @@ const LoginScreen = (): JSX.Element => {
   };
 
   const handleCloseSettings = () => setShowSettings(false);
-  // const handleClosePINLogin = () => setShowPINLogin(false);
+  const handleClosePINLogin = () => setShowPINLogin(false);
 
   if (showQRScanner) {
     return <SimpleQRScanner onScanSuccess={() => setShowQRScanner(false)} onCancel={() => setShowQRScanner(false)} />;
@@ -114,6 +112,10 @@ const LoginScreen = (): JSX.Element => {
 
   if (showQRInput) {
     return <QRCodeInput onScanSuccess={() => setShowQRInput(false)} onCancel={() => setShowQRInput(false)} />;
+  }
+
+  if (showPINLogin) {
+    return <PINLogin onCancel={handleClosePINLogin} />;
   }
 
   if (showSettings) {

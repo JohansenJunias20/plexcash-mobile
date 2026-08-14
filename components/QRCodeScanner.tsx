@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import QRCodeInput from './QRCodeInput';
+import PINLogin from './PINLogin';
 
 const { width, height } = Dimensions.get('window');
 
@@ -19,6 +20,7 @@ const QRCodeScanner = ({ onScanSuccess, onCancel }: Props): JSX.Element => {
   const [scanned, setScanned] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [showManualInput, setShowManualInput] = useState(false);
+  const [showPINLogin, setShowPINLogin] = useState(false);
 
   const backDevice = useCameraDevice('back');
   const frontDevice = useCameraDevice('front');
@@ -79,6 +81,7 @@ const QRCodeScanner = ({ onScanSuccess, onCancel }: Props): JSX.Element => {
       } else {
         Alert.alert('Device Authorization Failed', result.message || 'Invalid QR code or device authorization failed', [
           { text: 'Try Again', onPress: () => { setScanned(false); setIsLoading(false); } },
+          { text: 'Login Kode PIN', onPress: () => setShowPINLogin(true) },
           { text: 'Enter Manually', onPress: () => setShowManualInput(true) },
           { text: 'Cancel', onPress: onCancel }
         ]);
@@ -87,11 +90,16 @@ const QRCodeScanner = ({ onScanSuccess, onCancel }: Props): JSX.Element => {
       console.error('QR Code authentication error:', error);
       Alert.alert('Error', 'Failed to authenticate. Please try again.', [
         { text: 'Try Again', onPress: () => { setScanned(false); setIsLoading(false); } },
+        { text: 'Login Kode PIN', onPress: () => setShowPINLogin(true) },
         { text: 'Enter Manually', onPress: () => setShowManualInput(true) },
         { text: 'Cancel', onPress: onCancel }
       ]);
     }
   };
+
+  if (showPINLogin) {
+    return <PINLogin onCancel={() => setShowPINLogin(false)} />;
+  }
 
   if (showManualInput) {
     return <QRCodeInput onScanSuccess={onScanSuccess} onCancel={() => setShowManualInput(false)} />;
@@ -105,6 +113,9 @@ const QRCodeScanner = ({ onScanSuccess, onCancel }: Props): JSX.Element => {
         <Text style={styles.errorSubText}>Camera permission is needed to scan QR codes. You can also enter the QR code text manually.</Text>
         <TouchableOpacity style={styles.cancelButton} onPress={requestPermission}>
           <Text style={styles.cancelButtonText}>Grant Permission</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.cancelButton, { marginTop: 10, backgroundColor: '#10B981' }]} onPress={() => setShowPINLogin(true)}>
+          <Text style={[styles.cancelButtonText, { color: 'white' }]}>Login Kode PIN Web</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.cancelButton, { marginTop: 10, backgroundColor: '#6366F1' }]} onPress={() => setShowManualInput(true)}>
           <Text style={[styles.cancelButtonText, { color: 'white' }]}>Input QR Code Manual</Text>
@@ -121,8 +132,11 @@ const QRCodeScanner = ({ onScanSuccess, onCancel }: Props): JSX.Element => {
       <View style={styles.container}>
         <Ionicons name="videocam-off-outline" size={64} color="#FFD700" style={{ marginBottom: 16 }} />
         <Text style={styles.errorText}>Kamera Tidak Terdeteksi</Text>
-        <Text style={styles.errorSubText}>Perangkat ini tidak terdeteksi memiliki pemindai kamera standar. Silakan gunakan Input QR Code Manual.</Text>
-        <TouchableOpacity style={[styles.cancelButton, { marginTop: 24, backgroundColor: '#6366F1' }]} onPress={() => setShowManualInput(true)}>
+        <Text style={styles.errorSubText}>Perangkat ini tidak terdeteksi memiliki pemindai kamera standar. Silakan gunakan Kode PIN atau Input Manual.</Text>
+        <TouchableOpacity style={[styles.cancelButton, { marginTop: 24, backgroundColor: '#10B981' }]} onPress={() => setShowPINLogin(true)}>
+          <Text style={[styles.cancelButtonText, { color: 'white' }]}>Login Kode PIN Web</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.cancelButton, { marginTop: 12, backgroundColor: '#6366F1' }]} onPress={() => setShowManualInput(true)}>
           <Text style={[styles.cancelButtonText, { color: 'white' }]}>Input QR Code Manual</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.cancelButton, { marginTop: 12, backgroundColor: 'rgba(255,255,255,0.2)' }]} onPress={onCancel}>
@@ -169,14 +183,17 @@ const QRCodeScanner = ({ onScanSuccess, onCancel }: Props): JSX.Element => {
           <Text style={styles.instructionText}>Position the QR code within the frame to scan</Text>
           <Text style={styles.subInstructionText}>Make sure the QR code is clearly visible and well-lit</Text>
 
-          <View style={{ flexDirection: 'row', gap: 12, marginTop: 10 }}>
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
             {scanned && !isLoading && (
               <TouchableOpacity style={styles.rescanButton} onPress={() => setScanned(false)}>
-                <Text style={styles.rescanButtonText}>Tap to Scan Again</Text>
+                <Text style={styles.rescanButtonText}>Scan Lagi</Text>
               </TouchableOpacity>
             )}
+            <TouchableOpacity style={[styles.rescanButton, { backgroundColor: '#10B981' }]} onPress={() => setShowPINLogin(true)}>
+              <Text style={[styles.rescanButtonText, { color: 'white' }]}>Kode PIN</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={[styles.rescanButton, { backgroundColor: '#6366F1' }]} onPress={() => setShowManualInput(true)}>
-              <Text style={[styles.rescanButtonText, { color: 'white' }]}>Input QR Manual</Text>
+              <Text style={[styles.rescanButtonText, { color: 'white' }]}>Input Manual</Text>
             </TouchableOpacity>
           </View>
         </View>

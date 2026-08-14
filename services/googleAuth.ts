@@ -436,10 +436,11 @@ class GoogleAuthService {
         console.log('⚠️ [GOOGLE-AUTH-FALLBACK] Manually storing tokens as fallback');
 
         try {
-          // Manually store tokens (same as what onAuthStateChanged would do)
+          // Manually store tokens (using backend token if available)
+          const tokenToStore = loginResponse?.persistentToken || loginResponse?.token || idToken;
           await ApiService.storeDeviceTokens({
-            authToken: idToken,
-            token: idToken,
+            authToken: tokenToStore,
+            token: tokenToStore,
             deviceId: deviceId,
             user: { email },
             authMethod: 'firebase'

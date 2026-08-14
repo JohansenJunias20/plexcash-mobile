@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import QRCodeInput from './QRCodeInput';
+import PINLogin from './PINLogin';
 
 interface Props {
   onScanSuccess: (user: any, token: string) => void;
@@ -18,6 +19,7 @@ const SimpleQRScanner = ({ onScanSuccess, onCancel, onSwitchToManual }: Props): 
   const [scanned, setScanned] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [showManualInput, setShowManualInput] = useState(false);
+  const [showPINLogin, setShowPINLogin] = useState(false);
 
   const backDevice = useCameraDevice('back');
   const frontDevice = useCameraDevice('front');
@@ -76,6 +78,7 @@ const SimpleQRScanner = ({ onScanSuccess, onCancel, onSwitchToManual }: Props): 
       } else {
         Alert.alert('Device Authorization Failed', result.message || 'Invalid QR code or device authorization failed', [
           { text: 'Try Again', onPress: () => { setScanned(false); setIsLoading(false); } },
+          { text: 'Login Kode PIN', onPress: () => setShowPINLogin(true) },
           { text: 'Enter Manually', onPress: () => setShowManualInput(true) },
           { text: 'Cancel', onPress: onCancel }
         ]);
@@ -84,11 +87,16 @@ const SimpleQRScanner = ({ onScanSuccess, onCancel, onSwitchToManual }: Props): 
       console.error('QR Code authentication error:', error);
       Alert.alert('Error', 'Failed to authenticate. Please try again.', [
         { text: 'Try Again', onPress: () => { setScanned(false); setIsLoading(false); } },
+        { text: 'Login Kode PIN', onPress: () => setShowPINLogin(true) },
         { text: 'Enter Manually', onPress: () => setShowManualInput(true) },
         { text: 'Cancel', onPress: onCancel }
       ]);
     }
   };
+
+  if (showPINLogin) {
+    return <PINLogin onCancel={() => setShowPINLogin(false)} />;
+  }
 
   if (showManualInput) {
     return <QRCodeInput onScanSuccess={onScanSuccess} onCancel={() => setShowManualInput(false)} />;
@@ -104,8 +112,12 @@ const SimpleQRScanner = ({ onScanSuccess, onCancel, onSwitchToManual }: Props): 
           <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
             <Text style={styles.permissionButtonText}>Grant Permission</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.manualButton} onPress={() => setShowManualInput(true)}>
+          <TouchableOpacity style={[styles.manualButton, { backgroundColor: '#10B981' }]} onPress={() => setShowPINLogin(true)}>
             <Ionicons name="keypad-outline" size={20} color="white" style={{ marginRight: 8 }} />
+            <Text style={styles.manualButtonText}>Login Kode PIN Web</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.manualButton} onPress={() => setShowManualInput(true)}>
+            <Ionicons name="create-outline" size={20} color="white" style={{ marginRight: 8 }} />
             <Text style={styles.manualButtonText}>Input QR Code Manual</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
@@ -123,11 +135,15 @@ const SimpleQRScanner = ({ onScanSuccess, onCancel, onSwitchToManual }: Props): 
           <Ionicons name="videocam-off-outline" size={64} color="white" />
           <Text style={styles.permissionTitle}>Kamera Tidak Terdeteksi</Text>
           <Text style={styles.permissionText}>
-            Perangkat ini tidak mendukung akses pemindai kamera standar. Silakan gunakan opsi Input QR Code Manual.
+            Kamera pemindai tidak tersedia di perangkat ini. Silakan gunakan Login Kode PIN atau Input Manual.
           </Text>
-          <TouchableOpacity style={styles.permissionButton} onPress={() => setShowManualInput(true)}>
+          <TouchableOpacity style={[styles.permissionButton, { backgroundColor: '#10B981' }]} onPress={() => setShowPINLogin(true)}>
+            <Ionicons name="keypad-outline" size={20} color="white" style={{ marginRight: 8 }} />
+            <Text style={styles.permissionButtonText}>Login Kode PIN Web</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.manualButton} onPress={() => setShowManualInput(true)}>
             <Ionicons name="create-outline" size={20} color="white" style={{ marginRight: 8 }} />
-            <Text style={styles.permissionButtonText}>Input QR Code Manual</Text>
+            <Text style={styles.manualButtonText}>Input QR Code Manual</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
             <Text style={styles.cancelButtonText}>Kembali</Text>
@@ -172,10 +188,14 @@ const SimpleQRScanner = ({ onScanSuccess, onCancel, onSwitchToManual }: Props): 
         <View style={styles.footerButtonGroup}>
           <TouchableOpacity style={styles.resetButton} onPress={() => { setScanned(false); setIsLoading(false); }} disabled={isLoading}>
             <Ionicons name="refresh" size={18} color="white" />
-            <Text style={styles.resetButtonText}>Reset Scanner</Text>
+            <Text style={styles.resetButtonText}>Reset</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.manualFooterButton, { backgroundColor: 'rgba(16, 185, 129, 0.3)', borderColor: '#10B981' }]} onPress={() => setShowPINLogin(true)}>
+            <Ionicons name="keypad" size={18} color="#10B981" />
+            <Text style={[styles.manualFooterButtonText, { color: '#10B981' }]}>Kode PIN</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.manualFooterButton} onPress={() => setShowManualInput(true)}>
-            <Ionicons name="keypad-outline" size={18} color="#FFD700" />
+            <Ionicons name="create-outline" size={18} color="#FFD700" />
             <Text style={styles.manualFooterButtonText}>Input Manual</Text>
           </TouchableOpacity>
         </View>

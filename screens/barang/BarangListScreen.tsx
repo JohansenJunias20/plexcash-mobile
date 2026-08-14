@@ -18,7 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, DrawerActions, useFocusEffect } from '@react-navigation/native';
 import { AppStackParamList } from '../../navigation/RootNavigator';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { API_BASE_URL } from '../../services/api';
+import ApiService, { API_BASE_URL } from '../../services/api';
 import { getTokenAuth } from '../../services/token';
 import { useAuth } from '../../context/AuthContext';
 import NewOnlineModal from '../../components/NewOnlineModal';
@@ -97,13 +97,8 @@ export default function BarangListScreen(): JSX.Element {
   // Load sync settings from server
   const loadSyncSettings = async () => {
     try {
-      const token = await getTokenAuth();
-      if (!token) return;
-      const res = await fetch(`${API_BASE_URL}/get/settings`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      if (data.status && Array.isArray(data.data)) {
+      const data = await ApiService.get('/get/settings');
+      if (data && data.status && Array.isArray(data.data)) {
         const settings = data.data;
         const stockSetting = settings.find((s: any) => s.setting === 'sync_stock');
         const priceSetting = settings.find((s: any) => s.setting === 'sync_price');
@@ -141,50 +136,12 @@ export default function BarangListScreen(): JSX.Element {
     qs.set('kategori', filters.kategori || '');
 
     try {
-      console.log('📋 [BARANG] Starting data fetch');
+      console.log('📋 [BARANG] Starting data fetch via ApiService');
       setLoading(true);
-      const token = await getTokenAuth();
-      console.log('📋 [BARANG] Token retrieved for API call:', token ? 'Present' : 'Missing');
+      const endpoint = `/get/masterbarang/search?${qs.toString()}`;
+      const data = await ApiService.get(endpoint);
 
-      // Decode JWT to see what's inside (for debugging)
-      if (token) {
-        try {
-          const parts = token.split('.');
-          if (parts.length === 3) {
-            const payload = JSON.parse(atob(parts[1]));
-            console.log('🔍 [BARANG] JWT payload:', JSON.stringify(payload, null, 2));
-          }
-        } catch (e) {
-          console.warn('⚠️ [BARANG] Could not decode JWT:', e);
-        }
-      }
-
-      if (!token) {
-        console.log('❌ [BARANG] No token found, showing session expired alert');
-        Alert.alert('Session expired', 'Please login');
-        signOut && (await signOut());
-        return;
-      }
-      const url = `${API_BASE_URL}/get/masterbarang/search?${qs.toString()}`;
-      console.log('📋 [BARANG] Fetching from URL:', url);
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      console.log('📋 [BARANG] Response status:', res.status, res.statusText);
-
-      const responseText = await res.text();
-      console.log('📋 [BARANG] Response text (first 200 chars):', responseText.substring(0, 200));
-
-      let data;
-      try {
-        data = JSON.parse(responseText);
-      } catch (parseError) {
-        console.error('❌ [BARANG] JSON parse error. Full response:', responseText);
-        Alert.alert('Error', `Server returned invalid response: ${responseText.substring(0, 100)}`);
-        return;
-      }
-
-      if (data.status) {
+      if (data && typeof data === 'object' && data.status) {
         const newItems: Item[] = data.data.map((it: any) => ({
           id: it.id,
           nama: it.nama,
@@ -205,10 +162,14 @@ export default function BarangListScreen(): JSX.Element {
         setHasMore(newItems.length >= PAGE_SIZE);
         setPage(prev => (reset ? 1 : prev + 1));
       } else {
-        console.warn('Fetch error:', data.reason);
+        const reason = typeof data === 'object' ? data?.reason : String(data);
+        console.warn('Fetch error:', reason);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Fetch items error', e);
+      if (e?.message !== 'Forbidden' && e?.message !== 'Unauthorized') {
+        Alert.alert('Error', 'Gagal mengambil data barang. Silakan periksa koneksi Anda.');
+      }
     } finally {
       setLoading(false);
       if (refreshing) setRefreshing(false);

@@ -6,7 +6,7 @@ import { useNavigation, DrawerActions } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AppStackParamList } from '../../navigation/RootNavigator';
 import { WinFormsClient, ApiResponse } from '../../types/perangkat';
-import { API_BASE_URL } from '../../services/api';
+import ApiService, { API_BASE_URL } from '../../services/api';
 import { getTokenAuth } from '../../services/token';
 import { useAuth } from '../../context/AuthContext';
 import DeviceCard from './components/DeviceCard';
@@ -25,58 +25,26 @@ export default function PerangkatListScreen(): JSX.Element {
 
   const fetchDevices = useCallback(async () => {
     try {
-      console.log('📱 [PERANGKAT] Fetching devices...');
-      const token = await getTokenAuth();
-      
-      if (!token) {
-        console.log('❌ [PERANGKAT] No token found');
-        Alert.alert('Session expired', 'Please login');
-        signOut && (await signOut());
-        return;
-      }
+      console.log('📱 [PERANGKAT] Fetching devices via ApiService...');
+      const data: ApiResponse<WinFormsClient[]> = await ApiService.get('/api/winforms/clients');
 
-      const url = `${API_BASE_URL}/api/winforms/clients`;
-      console.log('📱 [PERANGKAT] Fetching from:', url);
-      
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
-      console.log('📱 [PERANGKAT] Response status:', res.status);
-
-      if (res.status === 403) {
-        Alert.alert('Session expired', 'Please login');
-        signOut && (await signOut());
-        return;
-      }
-
-      const responseText = await res.text();
-      console.log('📱 [PERANGKAT] Response (first 200 chars):', responseText.substring(0, 200));
-
-      let data: ApiResponse<WinFormsClient[]>;
-      try {
-        data = JSON.parse(responseText);
-      } catch (parseError) {
-        console.error('❌ [PERANGKAT] JSON parse error:', parseError);
-        Alert.alert('Error', 'Server returned invalid response');
-        return;
-      }
-
-      if (data.status && data.data) {
+      if (data && typeof data === 'object' && data.status && data.data) {
         console.log('✅ [PERANGKAT] Loaded', data.data.length, 'devices');
         setDevices(data.data);
       } else {
-        console.warn('⚠️ [PERANGKAT] Fetch error:', data.reason);
-        Alert.alert('Error', data.reason || 'Failed to load devices');
+        const reason = typeof data === 'object' ? data?.reason : 'Failed to load devices';
+        console.warn('⚠️ [PERANGKAT] Fetch error:', reason);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('❌ [PERANGKAT] Fetch error:', e);
-      Alert.alert('Error', 'Failed to connect to server');
+      if (e?.message !== 'Forbidden' && e?.message !== 'Unauthorized') {
+        Alert.alert('Error', 'Gagal menghubungkan ke server');
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [signOut]);
+  }, []);
 
   useEffect(() => {
     fetchDevices();

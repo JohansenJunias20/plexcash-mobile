@@ -107,8 +107,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               // Use the long-lived persistent JWT from backend (valid 365 days).
               // This prevents lockout when app is closed and Firebase ID token expires.
               // Falls back to Firebase ID token if backend doesn't return persistentToken (older backend).
-              const tokenToStore = backendResponse.persistentToken || firebaseIdToken;
-              const isPersistent = !!backendResponse.persistentToken;
+              const tokenToStore = backendResponse.persistentToken || backendResponse.token || firebaseIdToken;
+              const isPersistent = !!(backendResponse.persistentToken || backendResponse.token);
               logAuth(`🔐 Storing ${isPersistent ? 'persistent JWT (365d)' : 'Firebase ID token'} in SecureStore and AsyncStorage...`);
               console.log(`🔐 [AUTH] Storing ${isPersistent ? 'persistent JWT' : 'Firebase ID token'} in SecureStore and AsyncStorage...`);
 

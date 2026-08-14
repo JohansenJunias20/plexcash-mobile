@@ -188,6 +188,7 @@ const POSKasirScreen = ({ navigation }: any): JSX.Element => {
   const [selectedProductForVariant, setSelectedProductForVariant] = useState<Product | null>(null);
   const [selectedVariantIndex, setSelectedVariantIndex] = useState<number>(0); // 0 = masterbarang, 1+ = bundling variants
   const [variantQty, setVariantQty] = useState<number>(1);
+  const [posHideVariants, setPosHideVariants] = useState<boolean>(false);
 
   // Store settings
   const [storeSettings, setStoreSettings] = useState({
