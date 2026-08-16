@@ -6,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Switch,
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -20,6 +19,16 @@ const currency = (num: number) => {
   return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(num);
 };
 
+const BULAN_INDONESIA = [
+  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+];
+
+const getMonthLabel = (offsetMonths: number) => {
+  const m = moment().subtract(offsetMonths, 'months');
+  return `${BULAN_INDONESIA[m.month()]} ${m.year()}`;
+};
+
 interface IAccountData {
   keterangan: string;
   kodeBA: string;
@@ -29,19 +38,74 @@ interface IAccountData {
 export default function LabaRugiScreen() {
   const navigation = useNavigation();
   const [fetching, setFetching] = useState(true);
-  const [dateStart, setDateStart] = useState(moment().subtract(1, 'week').toDate());
+  const [dateStart, setDateStart] = useState(moment().subtract(7, 'days').toDate());
   const [dateEnd, setDateEnd] = useState(moment().toDate());
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
-  
+  const [activeShortcut, setActiveShortcut] = useState<string | null>('7d');
+
   const [pendapatan, setPendapatan] = useState<IAccountData[]>([]);
   const [bebanOperasional, setBebanOperasional] = useState<IAccountData[]>([]);
   const [biayaPokok, setBiayaPokok] = useState<IAccountData[]>([]);
   const [biayaPokokFifo, setBiayaPokokFifo] = useState<IAccountData[]>([]);
   const [biayaLainnya, setBiayaLainnya] = useState<IAccountData[]>([]);
-  
-  const [useNew, setUseNew] = useState(true);
+
   const [metode, setMetode] = useState<'average' | 'fifo'>('average');
+
+  const shortcuts = [
+    {
+      id: '7d',
+      label: '7 Hari Terakhir',
+      sublabel: '',
+      getRange: () => ({
+        start: moment().subtract(7, 'days').toDate(),
+        end: moment().toDate(),
+      }),
+    },
+    {
+      id: '30d',
+      label: '30 Hari Terakhir',
+      sublabel: '',
+      getRange: () => ({
+        start: moment().subtract(30, 'days').toDate(),
+        end: moment().toDate(),
+      }),
+    },
+    {
+      id: 'this_month',
+      label: 'Bulan Ini',
+      sublabel: getMonthLabel(0),
+      getRange: () => ({
+        start: moment().startOf('month').toDate(),
+        end: moment().endOf('month').toDate(),
+      }),
+    },
+    {
+      id: 'last_month',
+      label: 'Bulan Lalu',
+      sublabel: getMonthLabel(1),
+      getRange: () => ({
+        start: moment().subtract(1, 'month').startOf('month').toDate(),
+        end: moment().subtract(1, 'month').endOf('month').toDate(),
+      }),
+    },
+    {
+      id: '2_months_ago',
+      label: '2 Bulan Lalu',
+      sublabel: getMonthLabel(2),
+      getRange: () => ({
+        start: moment().subtract(2, 'month').startOf('month').toDate(),
+        end: moment().subtract(2, 'month').endOf('month').toDate(),
+      }),
+    },
+  ];
+
+  const handleSelectShortcut = (shortcut: typeof shortcuts[0]) => {
+    setActiveShortcut(shortcut.id);
+    const { start, end } = shortcut.getRange();
+    setDateStart(start);
+    setDateEnd(end);
+  };
 
   const fetchData = useCallback(async () => {
     setFetching(true);
@@ -55,10 +119,9 @@ export default function LabaRugiScreen() {
       const startStr = moment(dateStart).format("YYYY-MM-DD");
       const endStr = moment(dateEnd).format("YYYY-MM-DD");
       const useFifoParam = metode === "fifo" ? 1 : 0;
-      const useNewParam = useNew ? 1 : 0;
-      
-      const response = await ApiService.get(`/get/laporan/labarugi?use_fifo=${useFifoParam}&start=${startStr}&end=${endStr}&use_new=${useNewParam}`);
-      
+
+      const response = await ApiService.get(`/get/laporan/labarugi?use_fifo=${useFifoParam}&start=${startStr}&end=${endStr}&use_new=1`);
+
       if (response && response.status && response.data) {
         setPendapatan(response.data.pendapatan || []);
         setBebanOperasional(response.data.beban_operasional || []);
@@ -71,7 +134,7 @@ export default function LabaRugiScreen() {
     } finally {
       setFetching(false);
     }
-  }, [dateStart, dateEnd, useNew, metode]);
+  }, [dateStart, dateEnd, metode]);
 
   useEffect(() => {
     fetchData();
@@ -79,12 +142,18 @@ export default function LabaRugiScreen() {
 
   const onStartChange = (event: any, selectedDate?: Date) => {
     setShowStartPicker(Platform.OS === 'ios');
-    if (selectedDate) setDateStart(selectedDate);
+    if (selectedDate) {
+      setDateStart(selectedDate);
+      setActiveShortcut(null);
+    }
   };
 
   const onEndChange = (event: any, selectedDate?: Date) => {
     setShowEndPicker(Platform.OS === 'ios');
-    if (selectedDate) setDateEnd(selectedDate);
+    if (selectedDate) {
+      setDateEnd(selectedDate);
+      setActiveShortcut(null);
+    }
   };
 
   const renderSection = (title: string, data: IAccountData[], total: number) => {
@@ -109,7 +178,7 @@ export default function LabaRugiScreen() {
   const totalBiayaPokok = activeBiayaPokok.reduce((a, b) => a + b.saldo, 0);
   const totalBebanOperasional = bebanOperasional.reduce((a, b) => a + b.saldo, 0);
   const totalBiayaLainnya = biayaLainnya.reduce((a, b) => a + b.saldo, 0);
-  
+
   const labaRugi = totalPendapatan + totalBiayaPokok + totalBebanOperasional + totalBiayaLainnya;
 
   return (
@@ -126,14 +195,45 @@ export default function LabaRugiScreen() {
       <ScrollView style={styles.content}>
         {/* Filters */}
         <View style={styles.filterCard}>
+          {/* Period Shortcuts */}
+          <View style={styles.shortcutWrapper}>
+            <Text style={styles.shortcutTitle}>Periode:</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.shortcutList}
+            >
+              {shortcuts.map((sc) => {
+                const isActive = activeShortcut === sc.id;
+                return (
+                  <TouchableOpacity
+                    key={sc.id}
+                    style={[styles.shortcutChip, isActive && styles.shortcutChipActive]}
+                    onPress={() => handleSelectShortcut(sc)}
+                  >
+                    <Text style={[styles.shortcutText, isActive && styles.shortcutTextActive]}>
+                      {sc.label}
+                    </Text>
+                    {sc.sublabel ? (
+                      <Text style={[styles.shortcutSubtext, isActive && styles.shortcutSubtextActive]}>
+                        {sc.sublabel}
+                      </Text>
+                    ) : null}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+
+          {/* Date Picker Row */}
           <View style={styles.dateRow}>
             <TouchableOpacity onPress={() => setShowStartPicker(true)} style={styles.datePickerBtn}>
               <Ionicons name="calendar-outline" size={18} color="#4b5563" />
               <Text style={styles.dateText}>{moment(dateStart).format('DD MMM YYYY')}</Text>
             </TouchableOpacity>
-            
+
             <Text style={styles.dateDivider}>-</Text>
-            
+
             <TouchableOpacity onPress={() => setShowEndPicker(true)} style={styles.datePickerBtn}>
               <Ionicons name="calendar-outline" size={18} color="#4b5563" />
               <Text style={styles.dateText}>{moment(dateEnd).format('DD MMM YYYY')}</Text>
@@ -148,7 +248,7 @@ export default function LabaRugiScreen() {
               onChange={onStartChange}
             />
           )}
-          
+
           {showEndPicker && (
             <DateTimePicker
               value={dateEnd}
@@ -159,22 +259,17 @@ export default function LabaRugiScreen() {
           )}
 
           <View style={styles.optionsRow}>
-            <View style={styles.switchContainer}>
-              <Text style={styles.optionLabel}>Use New</Text>
-              <Switch value={useNew} onValueChange={setUseNew} />
-            </View>
-
             <View style={styles.radioContainer}>
               <Text style={styles.optionLabel}>Metode:</Text>
               <View style={styles.radioGroup}>
-                <TouchableOpacity 
-                  style={[styles.radioButton, metode === 'average' && styles.radioButtonActive]} 
+                <TouchableOpacity
+                  style={[styles.radioButton, metode === 'average' && styles.radioButtonActive]}
                   onPress={() => setMetode('average')}
                 >
                   <Text style={[styles.radioText, metode === 'average' && styles.radioTextActive]}>Average</Text>
                 </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.radioButton, metode === 'fifo' && styles.radioButtonActive]} 
+                <TouchableOpacity
+                  style={[styles.radioButton, metode === 'fifo' && styles.radioButtonActive]}
                   onPress={() => setMetode('fifo')}
                 >
                   <Text style={[styles.radioText, metode === 'fifo' && styles.radioTextActive]}>FIFO</Text>
@@ -206,7 +301,7 @@ export default function LabaRugiScreen() {
               {renderSection("Biaya Pokok", activeBiayaPokok, totalBiayaPokok)}
               {renderSection("6 Beban Operasional", bebanOperasional, totalBebanOperasional)}
               {renderSection("6 Biaya Lainnya", biayaLainnya, totalBiayaLainnya)}
-              
+
               <View style={[styles.sectionContainer, styles.labaRugiTotalContainer]}>
                 <View style={styles.sectionHeader}>
                   <Text style={styles.labaRugiTotalLabel}>Laba Rugi</Text>
@@ -264,6 +359,53 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
   },
+  shortcutWrapper: {
+    marginBottom: 16,
+  },
+  shortcutTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  shortcutList: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingRight: 8,
+  },
+  shortcutChip: {
+    backgroundColor: '#f3f4f6',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    marginRight: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shortcutChipActive: {
+    backgroundColor: '#ecfdf5',
+    borderColor: '#10b981',
+  },
+  shortcutText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#4b5563',
+  },
+  shortcutTextActive: {
+    color: '#059669',
+    fontWeight: '600',
+  },
+  shortcutSubtext: {
+    fontSize: 10,
+    color: '#9ca3af',
+    marginTop: 2,
+  },
+  shortcutSubtextActive: {
+    color: '#047857',
+    fontWeight: '500',
+  },
   dateRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -293,13 +435,9 @@ const styles = StyleSheet.create({
   },
   optionsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     alignItems: 'center',
     marginBottom: 16,
-  },
-  switchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
   },
   optionLabel: {
     fontSize: 14,
@@ -439,3 +577,4 @@ const styles = StyleSheet.create({
     color: '#dc2626',
   }
 });
+

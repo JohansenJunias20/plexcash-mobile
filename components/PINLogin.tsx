@@ -36,8 +36,8 @@ const PINLogin = ({ onCancel }: Props): JSX.Element => {
       return;
     }
 
-    if (!/^\d{10}$/.test(pinCode.trim())) {
-      Alert.alert('Error', 'PIN code must be exactly 10 digits');
+    if (!/^\d{4,10}$/.test(pinCode.trim())) {
+      Alert.alert('Error', 'PIN code harus terdiri dari 4 sampai 10 angka');
       return;
     }
 
@@ -70,7 +70,7 @@ const PINLogin = ({ onCancel }: Props): JSX.Element => {
           <TouchableOpacity onPress={onCancel} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="#f59e0b" />
           </TouchableOpacity>
-          <Text style={styles.title}>Login with PIN</Text>
+          <Text style={styles.title}>Login dengan Kode PIN</Text>
         </View>
 
         <View style={styles.content}>
@@ -79,7 +79,7 @@ const PINLogin = ({ onCancel }: Props): JSX.Element => {
           </View>
 
           <Text style={styles.instructions}>
-            Enter your email and the 10-digit PIN code generated from the web app
+            Masukkan email Anda dan Kode PIN yang dibuat pada aplikasi web PlexCash
           </Text>
 
           <View style={styles.inputContainer}>
@@ -101,7 +101,7 @@ const PINLogin = ({ onCancel }: Props): JSX.Element => {
             <Ionicons name="lock-closed-outline" size={20} color="#9ca3af" style={styles.inputIcon} />
             <TextInput
               style={styles.input}
-              placeholder="10-Digit PIN Code"
+              placeholder="Kode PIN dari Web App"
               placeholderTextColor="#9ca3af"
               value={pinCode}
               onChangeText={setPinCode}

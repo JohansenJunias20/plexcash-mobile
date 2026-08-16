@@ -63,65 +63,28 @@ const generateNewKode = (parentKode: string, children: BaganAkunItem[]) => {
   return parentKode + (usedDot ? '.' : '') + (maxNum + 1);
 };
 
-export default function BaganAkunListScreen() {
+export default function BaganAkunListScreen(): JSX.Element {
   const navigation = useNavigation<any>();
-  const { signOut } = (require('../../context/AuthContext') as any).useAuth?.() || {};
-
+  const { signOut } = useAuth();
   const [items, setItems] = useState<BaganAkunItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [query, setQuery] = useState('');
-  
-  // States for expanding tree nodes
+  const [filterType, setFilterType] = useState<string>('ALL');
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
 
-  // Action Sheet / Edit state
-  const [showActionSheet, setShowActionSheet] = useState(false);
-  const [selectedItem, setSelectedItem] = useState<BaganAkunItem | null>(null);
-
-  // Form Modal state
-  const [showModal, setShowModal] = useState(false);
-  const [showTemplateModal, setShowTemplateModal] = useState(false);
-  
-  const [formData, setFormData] = useState({
-    kodeInduk: '',
-    kode: '',
-    nama: '',
-    depth: 1,
-    stop: false,
-    lock: null as boolean | null,
-    editMode: false,
-    originalKode: '',
-    originalKodeInduk: '',
-    originalDepth: 0,
-  });
-
-  const [formSaving, setFormSaving] = useState(false);
+  // Modal State for Add/Edit
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<BaganAkunItem | null>(null);
+  const [formData, setFormData] = useState<Partial<BaganAkunItem>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fetchItems = async () => {
     try {
       setLoading(true);
-      const token = await getTokenAuth();
-      if (!token) {
-        Alert.alert('Session expired', 'Please login');
-        signOut && (await signOut());
-        return;
-      }
+      const data = await ApiService.get('/get/baganakun');
 
-      const res = await fetch(`${API_BASE_URL}/get/baganakun`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const responseText = await res.text();
-
-      let data;
-      try {
-        data = JSON.parse(responseText);
-      } catch (e) {
-        Alert.alert('Error', 'Server returned invalid response');
-        return;
-      }
-
-      if (data.status) {
+      if (data && typeof data === 'object' && data.status) {
         const fetchedItems = data.data.map((item: any) => ({
           ...item,
           stop: !!item.stop,
@@ -129,11 +92,14 @@ export default function BaganAkunListScreen() {
         }));
         setItems(fetchedItems);
       } else {
-        Alert.alert('Error', data.reason || 'Failed to fetch items');
+        const reason = typeof data === 'object' ? data?.reason : 'Failed to fetch items';
+        console.warn('[BAGAN-AKUN] Fetch error:', reason);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Fetch items error', e);
-      Alert.alert('Error', 'Network error');
+      if (e?.message !== 'Forbidden' && e?.message !== 'Unauthorized') {
+        Alert.alert('Error', 'Gagal mengambil data bagan akun');
+      }
     } finally {
       setLoading(false);
       if (refreshing) setRefreshing(false);

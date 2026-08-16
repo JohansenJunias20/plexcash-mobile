@@ -193,53 +193,43 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ navigation, s
 
     try {
       setSwitchingDatabase(true);
+      console.log(`[DRAWER] Switching database to: ${newDatabase}`);
       const response = await ApiService.setDatabase(newDatabase);
 
       if (response.status) {
         if (response.token) {
           console.log('[DRAWER] Saving new database session token...');
+          const storedAuthMethod = (await AsyncStorage.getItem('authMethod')) as any || 'firebase';
           await ApiService.storeDeviceTokens({
             authToken: response.token,
             token: response.token,
             deviceId: await ApiService.getOrCreateDeviceId(),
             user: { email: user?.email || '' },
-            authMethod: 'firebase'
+            authMethod: storedAuthMethod
           });
         }
         setCurrentDatabase(newDatabase);
         setShowDatabasePicker(false);
-        Alert.alert(
-          'Database Switched', 
-          `Successfully switched to: ${newDatabase}`,
-          [{
-            text: 'OK',
-            onPress: async () => {
-              try {
-                if (__DEV__ && NativeModules.DevSettings && NativeModules.DevSettings.reload) {
-                  NativeModules.DevSettings.reload();
-                } else {
-                  await Updates.reloadAsync();
-                }
-              } catch (e) {
-                console.error('Failed to reload app:', e);
-              }
-            }
-          }]
-        );
+        setSwitchingDatabase(false);
+
+        // Instant refresh: Navigate to Main home screen with new database context
+        navigation.navigate('MainHome');
       } else {
         setShowDatabasePicker(false);
+        setSwitchingDatabase(false);
         Alert.alert(
-          'Error',
-          response.reason || 'Failed to switch database',
+          'Gagal',
+          response.reason || 'Gagal mengubah database',
           [{ text: 'OK' }]
         );
       }
     } catch (error) {
       console.error('Error switching database:', error);
       setShowDatabasePicker(false);
+      setSwitchingDatabase(false);
       Alert.alert(
         'Error',
-        'An error occurred while switching database',
+        'Terjadi kesalahan saat mengubah database',
         [{ text: 'OK' }]
       );
     } finally {
@@ -310,7 +300,7 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ navigation, s
           {checkAccess(a?.transaksi?.pembelian?.retur) && <DrawerItem label="Retur" icon="return-down-back" onPress={() => navigation.navigate('PembelianRetur')} active={currentRoute === 'PembelianRetur'} nested />}
           {checkAccess(a?.transaksi?.pembelian?.dp_beli) && <DrawerItem label="DP Beli" icon="card" onPress={() => navigation.navigate('PembelianDPBeli')} active={currentRoute === 'PembelianDPBeli'} nested />}
           {checkAccess(a?.transaksi?.pembelian?.preorder) && <DrawerItem label="Pre Order" icon="calendar" onPress={() => navigation.navigate('PreOrder')} active={currentRoute === 'PreOrder'} nested />}
-          {checkAccess(a?.transaksi?.pembelian?.hutang) && <DrawerItem label="Hutang" icon="wallet" onPress={() => Alert.alert('Segera Hadir', 'Fitur Hutang Pembelian sedang dalam pengembangan.')} active={false} nested badge="Soon" />}
+          {checkAccess(a?.transaksi?.pembelian?.hutang) && <DrawerItem label="Hutang" icon="wallet" onPress={() => navigation.navigate('PembelianHutang')} active={currentRoute === 'PembelianHutang'} nested />}
         </CollapsibleSection>
       )}
 

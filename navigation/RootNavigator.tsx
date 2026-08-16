@@ -27,6 +27,8 @@ import BundlingEditScreen from '../screens/bundling/BundlingEditScreen';
 import StokOpnameScreen from '../screens/stokopname/StokOpnameScreen';
 import Settingscreen from '../screens/Settingscreen';
 import PembelianRincianScreen from '../screens/transaksi/pembelian/PembelianRincianScreen';
+import PembelianHutangScreen from '../screens/transaksi/pembelian/PembelianHutangScreen';
+import PembelianPelunasanScreen from '../screens/transaksi/pembelian/PembelianPelunasanScreen';
 import PerangkatListScreen from '../screens/perangkat/PerangkatListScreen';
 import PerangkatConfigScreen from '../screens/perangkat/PerangkatConfigScreen';
 import KesehatanTokoScreen from '../screens/ecommerce/KesehatanTokoScreen';
@@ -80,6 +82,8 @@ export type AppStackParamList = {
   StokOpname: undefined;
   Settingscreen: undefined;
   PembelianRincian: { id: number };
+  PembelianHutang: { detailId?: number } | undefined;
+  PembelianPelunasan: { id?: string; ids?: string; id_pembelian?: number; id_supplier?: number } | undefined;
   PerangkatList: undefined;
   PerangkatConfig: { client_id: string; desktop_name: string };
   DiskonScreen: undefined;
@@ -176,6 +180,8 @@ export default function RootNavigator() {
       <AppStack.Screen name="StokOpname" component={StokOpnameScreen} options={{ headerShown: false }} />
       <AppStack.Screen name="Settingscreen" component={Settingscreen} options={{ headerShown: false }} />
       <AppStack.Screen name="PembelianRincian" component={PembelianRincianScreen} options={{ title: 'Rincian Pembelian' }} />
+      <AppStack.Screen name="PembelianHutang" component={PembelianHutangScreen} options={{ headerShown: false }} />
+      <AppStack.Screen name="PembelianPelunasan" component={PembelianPelunasanScreen} options={{ headerShown: false }} />
       <AppStack.Screen name="PerangkatList" component={PerangkatListScreen} options={{ headerShown: false }} />
       <AppStack.Screen name="PerangkatConfig" component={PerangkatConfigScreen} options={{ headerShown: false }} />
       <AppStack.Screen name="KesehatanToko" component={KesehatanTokoScreen} options={{ title: 'Kesehatan Toko' }} />

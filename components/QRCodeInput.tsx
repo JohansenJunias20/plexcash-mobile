@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, ScrollView } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import { useAuth } from '../context/AuthContext';
 
 interface Props {
@@ -15,28 +16,37 @@ const QRCodeInput = ({ onScanSuccess, onCancel }: Props): JSX.Element => {
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async () => {
-    if (!qrData.trim()) { Alert.alert('Error', 'Please enter QR code data'); return; }
+    const cleanData = qrData.trim();
+    if (!cleanData) { Alert.alert('Error', 'Silakan masukkan teks data QR Code'); return; }
     setIsLoading(true);
     try {
-      const result = await authorizeDeviceWithQRCode(qrData.trim());
+      const result = await authorizeDeviceWithQRCode(cleanData);
       if (result.success) {
-        Alert.alert('Device Authorized Successfully!', result.message || 'Your device has been permanently authorized. You will stay logged in until you manually sign out.', [
+        Alert.alert('Perangkat Berhasil Diotorisasi!', result.message || 'Perangkat Anda telah diotorisasi secara permanen.', [
           { text: 'OK', onPress: () => onScanSuccess({}, '') }
         ]);
       } else {
-        Alert.alert('Device Authorization Failed', result.message || 'Invalid QR code or device authorization failed', [{ text: 'OK' }]);
+        Alert.alert('Otorisasi Perangkat Gagal', result.message || 'Teks QR Code tidak valid atau otorisasi gagal', [{ text: 'OK' }]);
       }
     } catch (error) {
       console.error('QR Code authentication error:', error);
-      Alert.alert('Error', 'Failed to authenticate. Please try again.', [{ text: 'OK' }]);
+      Alert.alert('Error', 'Gagal melakukan autentikasi. Silakan coba lagi.', [{ text: 'OK' }]);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleTestData = () => {
-    const testData = `plexcash-auth:test-session-${Date.now()}:${Date.now()}:test@plexseller.com`;
-    setQrData(testData);
+  const handlePasteClipboard = async () => {
+    try {
+      const text = await Clipboard.getStringAsync();
+      if (text) {
+        setQrData(text.trim());
+      } else {
+        Alert.alert('Clipboard Kosong', 'Tidak ada teks yang disalin pada clipboard.');
+      }
+    } catch (e) {
+      console.warn('Failed to read clipboard:', e);
+    }
   };
 
   return (
@@ -46,38 +56,39 @@ const QRCodeInput = ({ onScanSuccess, onCancel }: Props): JSX.Element => {
           <TouchableOpacity style={styles.backButton} onPress={onCancel}>
             <Ionicons name="arrow-back" size={24} color="white" />
           </TouchableOpacity>
-          <Text style={styles.headerText}>Enter QR Code</Text>
+          <Text style={styles.headerText}>Input QR Code Manual</Text>
           <View style={styles.placeholder} />
         </View>
 
         <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
           <View style={styles.formContainer}>
-            <Text style={styles.title}>Manual QR Code Entry</Text>
-            <Text style={styles.subtitle}>Enter the QR code data from the web application</Text>
+            <Text style={styles.title}>Input QR Code Manual</Text>
+            <Text style={styles.subtitle}>Masukkan atau salin data QR Code dari aplikasi web PlexCash</Text>
 
             <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>QR Code Data:</Text>
+              <View style={styles.labelRow}>
+                <Text style={styles.inputLabel}>Data QR Code:</Text>
+                <TouchableOpacity style={styles.pasteButton} onPress={handlePasteClipboard}>
+                  <Ionicons name="clipboard-outline" size={16} color="#FFD700" />
+                  <Text style={styles.pasteButtonText}>Paste</Text>
+                </TouchableOpacity>
+              </View>
               <TextInput style={styles.textInput} value={qrData} onChangeText={setQrData} placeholder="plexcash-auth:session:timestamp:email" placeholderTextColor="#9CA3AF" multiline numberOfLines={4} textAlignVertical="top" />
             </View>
 
             <View style={styles.buttonContainer}>
               <TouchableOpacity style={[styles.button, styles.submitButton]} onPress={handleSubmit} disabled={isLoading || !qrData.trim()}>
-                {isLoading ? (<ActivityIndicator color="white" />) : (<><Ionicons name="log-in" size={20} color="white" /><Text style={styles.buttonText}>Authenticate</Text></>)}
-              </TouchableOpacity>
-
-              <TouchableOpacity style={[styles.button, styles.testButton]} onPress={handleTestData} disabled={isLoading}>
-                <Ionicons name="flask" size={20} color="white" />
-                <Text style={styles.buttonText}>Insert Test Data</Text>
+                {isLoading ? (<ActivityIndicator color="white" />) : (<><Ionicons name="log-in" size={20} color="white" /><Text style={styles.buttonText}>Autentikasi</Text></>)}
               </TouchableOpacity>
             </View>
 
             <View style={styles.infoContainer}>
-              <Text style={styles.infoTitle}>How to use:</Text>
-              <Text style={styles.infoText}>1. Open PlexCash web application{`\n`}2. Generate QR code for mobile login{`\n`}3. Copy the QR code data{`\n`}4. Paste it in the text field above{`\n`}5. Tap "Authenticate" to login</Text>
+              <Text style={styles.infoTitle}>Cara penggunaan di Huawei Tab:</Text>
+              <Text style={styles.infoText}>1. Buka aplikasi web PlexCash di browser{`\n`}2. Klik "Generate QR Code for Mobile Login"{`\n`}3. Salin/copy teks QR code yang tertera{`\n`}4. Tekan tombol "Paste" di atas{`\n`}5. Tekan "Autentikasi" untuk login</Text>
             </View>
 
             <View style={styles.formatContainer}>
-              <Text style={styles.formatTitle}>Expected Format:</Text>
+              <Text style={styles.formatTitle}>Format yang diharapkan:</Text>
               <Text style={styles.formatText}>plexcash-auth:[session]:[timestamp]:[email]</Text>
             </View>
           </View>
@@ -97,22 +108,25 @@ const styles = StyleSheet.create({
   scrollContainer: { flex: 1 },
   formContainer: { padding: 20 },
   title: { color: 'white', fontSize: 24, fontWeight: 'bold', textAlign: 'center', marginBottom: 8 },
-  subtitle: { color: 'rgba(255,255,255,0.8)', fontSize: 16, textAlign: 'center', marginBottom: 30 },
+  subtitle: { color: 'rgba(255,255,255,0.8)', fontSize: 15, textAlign: 'center', marginBottom: 25, lineHeight: 22 },
   inputContainer: { marginBottom: 20 },
-  inputLabel: { color: 'white', fontSize: 16, fontWeight: '600', marginBottom: 8 },
-  textInput: { backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: 12, padding: 15, fontSize: 14, color: '#1F2937', minHeight: 100, fontFamily: 'monospace' },
-  buttonContainer: { gap: 12, marginBottom: 30 } as any,
+  labelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  inputLabel: { color: 'white', fontSize: 16, fontWeight: '600' },
+  pasteButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.2)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 15, gap: 4 },
+  pasteButtonText: { color: '#FFD700', fontSize: 13, fontWeight: '600' },
+  textInput: { backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 12, padding: 15, fontSize: 14, color: '#1F2937', minHeight: 100, fontFamily: 'monospace' },
+  buttonContainer: { gap: 12, marginBottom: 25 } as any,
   button: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 15, borderRadius: 12, gap: 8 },
   submitButton: { backgroundColor: '#10B981' },
-  testButton: { backgroundColor: '#6366F1' },
   buttonText: { color: 'white', fontSize: 16, fontWeight: '600' },
   infoContainer: { backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 12, padding: 15, marginBottom: 20 },
   infoTitle: { color: 'white', fontSize: 16, fontWeight: 'bold', marginBottom: 8 },
-  infoText: { color: 'rgba(255,255,255,0.8)', fontSize: 14, lineHeight: 20 },
+  infoText: { color: 'rgba(255,255,255,0.9)', fontSize: 14, lineHeight: 22 },
   formatContainer: { backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 12, padding: 15 },
   formatTitle: { color: 'white', fontSize: 14, fontWeight: 'bold', marginBottom: 5 },
   formatText: { color: 'rgba(255,255,255,0.7)', fontSize: 12, fontFamily: 'monospace' },
 });
 
 export default QRCodeInput;
+
 
