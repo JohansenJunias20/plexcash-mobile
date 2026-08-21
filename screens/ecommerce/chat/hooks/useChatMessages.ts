@@ -58,67 +58,49 @@ export const useChatMessages = (
         // Transform API data to expected format
         // DO NOT group by message_id - each message should be displayed separately
         const transformedMessages: any[] = messagesArray.map((item: any) => {
-          // If msg already exists and is valid, use it
+          let msgObj: any = {};
           if (item.msg && typeof item.msg === 'object') {
-            return item;
+            msgObj = { ...item.msg };
           }
 
-          // SPECIAL CASE: Lazada/Tiktok product messages come as single message with type="product"
-          // and already have product_image, product_price, product_url fields
-          if (item.type === 'product') {
-            const msg: any = {
-              type: 'product',
-              text: item.content || '',
-              product_image: item.product_image || '',
-              product_price: item.product_price || '',
-              product_url: item.product_url || '',
-              product_id: item.product_id || '',
-            };
+          const rawContent = item.content || item.msg_shopee || item.msg_text || (typeof item.msg === 'string' ? item.msg : '');
+          const isSticker = !!(item.sticker_url || item.message_type === 'sticker' || msgObj.sticker_url || msgObj.type === 'sticker');
 
-            console.log('🛍️ [useChatMessages] Lazada/Tiktok product message:', {
-              message_id: item.message_id || item.id,
-              product_name: msg.text,
-              product_image: msg.product_image,
-              product_price: msg.product_price,
-              has_image: !!msg.product_image,
-            });
+          const msgType = msgObj.type || (item.type === 'chat' ? 'text' : isSticker ? 'sticker' : item.type || 'text');
+          const text = msgObj.text || msgObj.content || rawContent || '';
 
-            return {
-              ...item,
-              msg,
-            };
-          }
-
-          // Transform flat structure to nested structure
-          // Detect sticker: backend sends sticker as type="image" but with sticker_url field or message_type="sticker"
-          const isSticker = (item as any).sticker_url || (item as any).message_type === 'sticker';
-
-          const msg: any = {
-            type: item.type === 'chat' ? 'text' : isSticker ? 'sticker' : item.type,
-            text: item.content || item.msg || item.msg_shopee || '',
+          const normalizedMsg: any = {
+            ...msgObj,
+            type: msgType,
+            text,
           };
 
-          // Add type-specific fields
-          if (isSticker) {
-            // Sticker: use sticker_url or content
-            msg.sticker_url = item.content || (item as any).sticker_url || (item as any).image_url;
-            msg.text = ''; // Stickers don't have text
-          } else if (item.type === 'image') {
-            // Regular image
-            msg.image = item.content || (item as any).image || (item as any).image_url;
-          } else if (item.type === 'sticker') {
-            // Fallback for old sticker format (should not happen with current backend)
-            msg.sticker_url = item.content || (item as any).sticker_url || (item as any).image_url;
-            msg.text = ''; // Stickers don't have text
-          } else if (item.type === 'order') {
-            msg.order_id = (item as any).order_id;
-          } else if (item.type === 'refund') {
-            msg.refund_id = (item as any).refund_id;
+          if (isSticker || msgType === 'sticker') {
+            normalizedMsg.sticker_url = msgObj.sticker_url || msgObj.url || msgObj.image || msgObj.image_url || item.sticker_url || item.image_url || item.content || '';
+          }
+
+          if (msgType === 'image') {
+            normalizedMsg.image = msgObj.image || msgObj.image_url || msgObj.url || item.image || item.image_url || item.content || '';
+          }
+
+          if (msgType === 'product') {
+            normalizedMsg.product_id = msgObj.product_id || item.product_id || '';
+            normalizedMsg.product_image = msgObj.product_image || msgObj.image || msgObj.image_url || item.product_image || item.image_url || '';
+            normalizedMsg.product_price = msgObj.product_price || msgObj.price || item.product_price || '';
+            normalizedMsg.product_url = msgObj.product_url || msgObj.url || item.product_url || '';
+          }
+
+          if (msgType === 'order') {
+            normalizedMsg.order_id = msgObj.order_id || msgObj.order_sn || msgObj.ordersn || msgObj.id || item.order_id || item.order_sn || item.ordersn || item.id || '';
+          }
+
+          if (msgType === 'refund') {
+            normalizedMsg.refund_id = msgObj.refund_id || item.refund_id || '';
           }
 
           return {
             ...item,
-            msg,
+            msg: normalizedMsg,
           };
         });
 

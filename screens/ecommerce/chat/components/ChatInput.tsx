@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IChatInputProps } from '../types/chat.types';
 
 /**
@@ -25,6 +26,8 @@ const ChatInput: React.FC<IChatInputProps> = ({
   disabled = false,
   placeholder = 'Type a message...',
 }) => {
+  const insets = useSafeAreaInsets();
+  const bottomInset = Math.max(insets.bottom, 0);
   const [text, setText] = useState<string>('');
   const [sending, setSending] = useState<boolean>(false);
   const [uploadProgress, setUploadProgress] = useState<{
@@ -198,7 +201,7 @@ const ChatInput: React.FC<IChatInputProps> = ({
       )}
 
       {/* Input Container */}
-      <View style={styles.container}>
+      <View style={[styles.container, { paddingBottom: 12 + bottomInset }]}>
         {/* Order List button */}
         {onToggleOrderList && (
           <TouchableOpacity

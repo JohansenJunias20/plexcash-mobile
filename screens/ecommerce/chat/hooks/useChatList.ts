@@ -133,8 +133,12 @@ export const useChatList = (): IUseChatListReturn => {
 
     // Filter by selected shop ID
     if (filters.selectedShopId && filters.selectedShopId !== 'ALL') {
+      const targetShopId = Number(filters.selectedShopId);
       filtered = filtered.filter(
-        (chat) => Number(chat.id_ecommerce) === Number(filters.selectedShopId)
+        (chat) =>
+          Number(chat.id_ecommerce) === targetShopId ||
+          Number((chat as any).shop_id) === targetShopId ||
+          Number((chat as any).id_shop) === targetShopId
       );
     }
 
