@@ -128,7 +128,13 @@ export default function EcommerceChatScreen() {
       {shops.length > 0 && (
         <View style={styles.filterRow}>
           <Text style={styles.filterLabel}>Toko:</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterButtons}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            nestedScrollEnabled={true}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.filterScrollContent}
+          >
             <TouchableOpacity
               style={[
                 styles.filterButton,
@@ -153,7 +159,7 @@ export default function EcommerceChatScreen() {
                   styles.filterButton,
                   selectedShopId === shop.id && styles.filterButtonActive,
                 ]}
-                onPress={() => setSelectedShopId(shop.id)}
+                onPress={() => setSelectedShopId((prev) => (prev === shop.id ? 'ALL' : shop.id))}
               >
                 <Text
                   style={[
@@ -181,7 +187,7 @@ export default function EcommerceChatScreen() {
                   styles.filterButton,
                   platformFilter === platform && styles.filterButtonActive,
                 ]}
-                onPress={() => setPlatformFilter(platform)}
+                onPress={() => setPlatformFilter((prev) => (prev === platform ? 'ALL' : platform))}
               >
                 <Text
                   style={[
@@ -208,7 +214,7 @@ export default function EcommerceChatScreen() {
                 styles.filterButton,
                 readStatusFilter === status && styles.filterButtonActive,
               ]}
-              onPress={() => setReadStatusFilter(status)}
+              onPress={() => setReadStatusFilter((prev) => (prev === status ? 'ALL' : status))}
             >
               <Text
                 style={[
@@ -225,32 +231,6 @@ export default function EcommerceChatScreen() {
     </View>
   );
 
-  // Render header (without search bar to prevent keyboard issues)
-  const renderHeader = () => (
-    <View>
-      {/* Filters */}
-      {renderFilterButtons()}
-
-      {/* WebSocket status */}
-      <View style={styles.statusBar}>
-        <View style={styles.statusIndicator}>
-          <View
-            style={[
-              styles.statusDot,
-              { backgroundColor: connected ? '#10B981' : '#EF4444' },
-            ]}
-          />
-          <Text style={styles.statusText}>
-            {connected ? 'Connected' : 'Disconnected'}
-          </Text>
-        </View>
-        <Text style={styles.chatCount}>
-          {chats.length} {chats.length === 1 ? 'chat' : 'chats'}
-        </Text>
-      </View>
-    </View>
-  );
-
   // Render empty state
   const renderEmpty = () => {
     if (loading) return null;
@@ -260,7 +240,7 @@ export default function EcommerceChatScreen() {
         <Ionicons name="chatbubbles-outline" size={64} color="#D1D5DB" />
         <Text style={styles.emptyTitle}>No chats found</Text>
         <Text style={styles.emptySubtitle}>
-          {searchQuery || platformFilter !== 'ALL' || readStatusFilter !== 'ALL'
+          {searchQuery || platformFilter !== 'ALL' || readStatusFilter !== 'ALL' || selectedShopId !== 'ALL'
             ? 'Try adjusting your filters'
             : 'Your customer chats will appear here'}
         </Text>
@@ -296,7 +276,7 @@ export default function EcommerceChatScreen() {
         <View style={styles.headerRight} />
       </View>
 
-      {/* Search bar - Outside FlatList to prevent keyboard issues */}
+      {/* Search bar */}
       <View style={styles.searchContainer}>
         <Ionicons name="search" size={20} color="#9CA3AF" style={styles.searchIcon} />
         <TextInput
@@ -313,33 +293,54 @@ export default function EcommerceChatScreen() {
         )}
       </View>
 
-      {/* Loading overlay */}
-      {loading && !refreshing && (
-        <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#f59e0b" />
-          <Text style={styles.loadingText}>Loading chats...</Text>
-        </View>
-      )}
+      {/* Filters (Rendered fixed outside FlatList to prevent unmounting scroll views) */}
+      {renderFilterButtons()}
 
-      {/* Chat list */}
-      <FlatList
-        data={chats}
-        keyExtractor={(item) => item.msg_id}
-        renderItem={({ item }) => (
-          <ChatListItem chat={item} onPress={handleChatPress} />
-        )}
-        ListHeaderComponent={renderHeader}
-        ListEmptyComponent={renderEmpty}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={refresh}
-            colors={['#f59e0b']}
-            tintColor="#f59e0b"
+      {/* WebSocket status */}
+      <View style={styles.statusBar}>
+        <View style={styles.statusIndicator}>
+          <View
+            style={[
+              styles.statusDot,
+              { backgroundColor: connected ? '#10B981' : '#EF4444' },
+            ]}
           />
-        }
-        contentContainerStyle={chats.length === 0 ? styles.emptyList : undefined}
-      />
+          <Text style={styles.statusText}>
+            {connected ? 'Connected' : 'Disconnected'}
+          </Text>
+        </View>
+        <Text style={styles.chatCount}>
+          {chats.length} {chats.length === 1 ? 'chat' : 'chats'}
+        </Text>
+      </View>
+
+      {/* Chat list container with overlay loading */}
+      <View style={{ flex: 1 }}>
+        {loading && !refreshing && (
+          <View style={styles.loadingOverlay}>
+            <ActivityIndicator size="large" color="#f59e0b" />
+            <Text style={styles.loadingText}>Loading chats...</Text>
+          </View>
+        )}
+
+        <FlatList
+          data={chats}
+          keyExtractor={(item) => item.msg_id}
+          renderItem={({ item }) => (
+            <ChatListItem chat={item} onPress={handleChatPress} />
+          )}
+          ListEmptyComponent={renderEmpty}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={refresh}
+              colors={['#f59e0b']}
+              tintColor="#f59e0b"
+            />
+          }
+          contentContainerStyle={chats.length === 0 ? styles.emptyList : undefined}
+        />
+      </View>
     </SafeAreaView>
   );
 }
@@ -418,6 +419,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
+  },
+  filterScrollContent: {
+    flexDirection: 'row',
+    gap: 6,
+    paddingRight: 12,
   },
   filterButton: {
     paddingHorizontal: 12,

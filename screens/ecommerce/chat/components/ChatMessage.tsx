@@ -15,21 +15,37 @@ const ChatMessage: React.FC<IChatMessageProps> = ({ message, isCurrentUser }) =>
   const [imagePreviewVisible, setImagePreviewVisible] = useState(false);
   const [previewImageUrl, setPreviewImageUrl] = useState<string>('');
 
-  // Helper to parse order link from text like "/ecommerce/pesanan/10/26072199C34PMM" or "/ecommerce/pesanan/10/260712"
+  // Helper to parse order link from text like "/ecommerce/pesanan/10/26072199C34PMM" or "No. Pesanan: 26072199C34PMM"
   const parseOrderLink = (text?: string) => {
     if (!text || typeof text !== 'string') return null;
-    const regex = /(?:\/ecommerce)?\/pesanan\/(\d+)\/([A-Za-z0-9_-]+)/i;
-    const match = text.match(regex);
-    if (match) {
-      const idEcommerce = parseInt(match[1], 10);
-      const orderSn = match[2];
-      const remainingText = text.replace(match[0], '').trim();
+
+    // Pattern 1: /ecommerce/pesanan/{idEcommerce}/{orderSn} or /pesanan/{idEcommerce}/{orderSn}
+    const linkRegex = /(?:\/ecommerce)?\/pesanan\/(\d+)\/([A-Za-z0-9_-]+)/i;
+    const linkMatch = text.match(linkRegex);
+    if (linkMatch) {
+      const idEcommerce = parseInt(linkMatch[1], 10);
+      const orderSn = linkMatch[2];
+      const remainingText = text.replace(linkMatch[0], '').trim();
       return {
         idEcommerce,
         orderSn,
         remainingText,
       };
     }
+
+    // Pattern 2: "No. Pesanan: 26072199C34PMM" or "Order SN: 26072199C34PMM"
+    const snRegex = /(?:No\.\s*Pesanan|Order\s*(?:SN|ID)|Nomor\s*Pesanan)[:\s]+([A-Za-z0-9_-]{10,})/i;
+    const snMatch = text.match(snRegex);
+    if (snMatch) {
+      const orderSn = snMatch[1];
+      const remainingText = text.replace(snMatch[0], '').trim();
+      return {
+        idEcommerce: 0,
+        orderSn,
+        remainingText,
+      };
+    }
+
     return null;
   };
 
@@ -87,7 +103,8 @@ const ChatMessage: React.FC<IChatMessageProps> = ({ message, isCurrentUser }) =>
 
   // Format timestamp
   const formatTime = (timestamp: number): string => {
-    const date = new Date(timestamp * 1000);
+    if (!timestamp) return '';
+    const date = new Date(timestamp > 1e11 ? timestamp : timestamp * 1000);
     return date.toLocaleTimeString('id-ID', {
       hour: '2-digit',
       minute: '2-digit',
@@ -118,15 +135,15 @@ const ChatMessage: React.FC<IChatMessageProps> = ({ message, isCurrentUser }) =>
       rawText = message.msg.text || message.msg.content || (message.msg as any).msg || '';
     }
     if (!rawText) {
-      rawText = (message as any).content || (message as any).text || (message as any).msg || '';
+      rawText = (message as any).content || (message as any).text || (message as any).msg || (message as any).msg_shopee || '';
     }
 
-    // 1. ALWAYS check if text contains an order link (/ecommerce/pesanan/12/...)
+    // 1. ALWAYS check if text contains an order link or order SN pattern
     const orderLinkInfo = parseOrderLink(rawText);
     if (orderLinkInfo) {
       return renderOrderCard(
         orderLinkInfo.orderSn,
-        orderLinkInfo.idEcommerce,
+        orderLinkInfo.idEcommerce || (message as any).id_ecommerce || 0,
         orderLinkInfo.remainingText
       );
     }
@@ -142,95 +159,129 @@ const ChatMessage: React.FC<IChatMessageProps> = ({ message, isCurrentUser }) =>
       }
       return (
         <View style={styles.unsupportedContainer}>
-          <Ionicons name="alert-circle-outline" size={16} color="#9CA3AF" />
-          <Text style={styles.unsupportedText}>Invalid message format</Text>
+          <Ionicons name="chatbubble-ellipses-outline" size={16} color="#9CA3AF" />
+          <Text style={styles.unsupportedText}>Pesan E-Commerce</Text>
         </View>
       );
     }
 
     const msgObj = typeof message.msg === 'object' ? message.msg : { type: 'text', text: rawText };
-    const msgType = msgObj.type || 'text';
+    const msgType = msgObj.type || (message as any).type || 'text';
 
     switch (msgType) {
       case 'text':
       case 'chat':
         return (
           <Text style={[styles.messageText, isSeller && styles.messageTextSeller]}>
-            {rawText}
+            {rawText || 'Pesan'}
           </Text>
         );
 
-      case 'image':
-        return (
-          <View>
-            {msgObj.image && (
+      case 'image': {
+        const imageUrl = msgObj.image || msgObj.image_url || msgObj.url || (message as any).image_url || (message as any).content;
+        if (imageUrl && typeof imageUrl === 'string' && imageUrl.startsWith('http')) {
+          return (
+            <View>
               <TouchableOpacity
-                onPress={() => handleShowImagePreview(msgObj.image!)}
+                onPress={() => handleShowImagePreview(imageUrl)}
                 activeOpacity={0.9}
               >
                 <Image
-                  source={{ uri: msgObj.image }}
+                  source={{ uri: imageUrl }}
                   style={styles.messageImage}
                   resizeMode="cover"
                 />
               </TouchableOpacity>
-            )}
+              {rawText && rawText !== imageUrl ? (
+                <Text style={[styles.messageText, isSeller && styles.messageTextSeller, { marginTop: 6 }]}>
+                  {rawText}
+                </Text>
+              ) : null}
+            </View>
+          );
+        }
+        return (
+          <View style={styles.unsupportedContainer}>
+            <Ionicons name="image-outline" size={16} color="#9CA3AF" />
+            <Text style={styles.unsupportedText}>{rawText || 'Gambar'}</Text>
           </View>
         );
+      }
 
-      case 'sticker':
-        return (
-          <View>
-            {msgObj.sticker_url && (
+      case 'sticker': {
+        const stickerUrl = msgObj.sticker_url || msgObj.url || msgObj.image || msgObj.image_url || (message as any).sticker_url;
+        if (stickerUrl && typeof stickerUrl === 'string' && stickerUrl.startsWith('http')) {
+          return (
+            <View>
               <Image
-                source={{ uri: msgObj.sticker_url }}
+                source={{ uri: stickerUrl }}
                 style={styles.stickerImage}
                 resizeMode="contain"
               />
-            )}
-          </View>
-        );
-
-      case 'product':
+            </View>
+          );
+        }
         return (
-          <View style={styles.productCard}>
-            {msgObj.product_image && (
-              <TouchableOpacity
-                onPress={() => handleShowImagePreview(msgObj.product_image!)}
-                activeOpacity={0.9}
-              >
-                <View style={styles.productImageContainer}>
-                  <Image
-                    source={{ uri: msgObj.product_image }}
-                    style={styles.productImage}
-                    resizeMode="cover"
-                  />
-                </View>
-              </TouchableOpacity>
-            )}
-            {rawText ? (
-              <Text style={styles.productName} numberOfLines={2}>
-                {rawText}
-              </Text>
-            ) : null}
-            {msgObj.product_price ? (
-              <Text style={styles.productPrice}>
-                {msgObj.product_price}
-              </Text>
-            ) : null}
+          <View style={styles.unsupportedContainer}>
+            <Ionicons name="happy-outline" size={16} color="#9CA3AF" />
+            <Text style={styles.unsupportedText}>Stiker</Text>
           </View>
         );
+      }
+
+      case 'product': {
+        const productImage = msgObj.product_image || msgObj.image || msgObj.image_url || (message as any).product_image;
+        const productPrice = msgObj.product_price || msgObj.price || (message as any).product_price;
+
+        if (productImage || rawText || productPrice) {
+          return (
+            <View style={styles.productCard}>
+              {productImage ? (
+                <TouchableOpacity
+                  onPress={() => handleShowImagePreview(productImage)}
+                  activeOpacity={0.9}
+                >
+                  <View style={styles.productImageContainer}>
+                    <Image
+                      source={{ uri: productImage }}
+                      style={styles.productImage}
+                      resizeMode="cover"
+                    />
+                  </View>
+                </TouchableOpacity>
+              ) : null}
+              {rawText ? (
+                <Text style={styles.productName} numberOfLines={2}>
+                  {rawText}
+                </Text>
+              ) : null}
+              {productPrice ? (
+                <Text style={styles.productPrice}>
+                  {productPrice}
+                </Text>
+              ) : null}
+            </View>
+          );
+        }
+        return (
+          <View style={styles.unsupportedContainer}>
+            <Ionicons name="bag-outline" size={16} color="#9CA3AF" />
+            <Text style={styles.unsupportedText}>Produk E-Commerce</Text>
+          </View>
+        );
+      }
 
       case 'order': {
-        const orderSn = msgObj.order_id || rawText;
+        const orderSn = msgObj.order_id || msgObj.order_sn || msgObj.ordersn || (message as any).order_id || (message as any).order_sn || rawText;
+        const idEcommerce = msgObj.id_ecommerce || (message as any).id_ecommerce || 0;
         if (orderSn) {
-          return renderOrderCard(orderSn, 0);
+          return renderOrderCard(orderSn, idEcommerce, rawText && rawText !== orderSn ? rawText : undefined);
         }
         return (
           <View>
             <View style={styles.orderContainer}>
               <Ionicons name="receipt-outline" size={20} color="#3B82F6" />
-              <Text style={styles.orderText}>Order</Text>
+              <Text style={styles.orderText}>Pesanan</Text>
             </View>
             {rawText ? (
               <Text style={[styles.messageText, isSeller && styles.messageTextSeller]}>
@@ -245,14 +296,14 @@ const ChatMessage: React.FC<IChatMessageProps> = ({ message, isCurrentUser }) =>
         return (
           <View style={styles.unsupportedContainer}>
             <Ionicons name="alert-circle-outline" size={16} color="#9CA3AF" />
-            <Text style={styles.unsupportedText}>Unsupported message type</Text>
+            <Text style={styles.unsupportedText}>Format pesan tidak didukung</Text>
           </View>
         );
 
       default:
         return (
           <Text style={[styles.messageText, isSeller && styles.messageTextSeller]}>
-            {rawText || 'No content'}
+            {rawText || 'Pesan E-Commerce'}
           </Text>
         );
     }

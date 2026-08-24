@@ -17,6 +17,7 @@ import * as Updates from 'expo-updates';
 import { useAuth } from '../context/AuthContext';
 import { useAccess } from '../context/AccessContext';
 import ApiService from '../services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 
 interface DrawerItemProps {
@@ -212,8 +213,24 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ navigation, s
         setShowDatabasePicker(false);
         setSwitchingDatabase(false);
 
-        // Instant refresh: Navigate to Main home screen with new database context
-        navigation.navigate('MainHome');
+        Alert.alert(
+          'Database Switched',
+          `Successfully switched to database: ${newDatabase}`,
+          [{
+            text: 'OK',
+            onPress: async () => {
+              try {
+                if (__DEV__ && NativeModules.DevSettings && NativeModules.DevSettings.reload) {
+                  NativeModules.DevSettings.reload();
+                } else {
+                  await Updates.reloadAsync();
+                }
+              } catch (e) {
+                console.error('Failed to reload app:', e);
+              }
+            }
+          }]
+        );
       } else {
         setShowDatabasePicker(false);
         setSwitchingDatabase(false);
