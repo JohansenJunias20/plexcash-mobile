@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { IChatListItemProps } from '../types/chat.types';
+import { IChatListItemProps, isChatReplied } from '../types/chat.types';
 
 /**
  * ChatListItem Component
@@ -68,8 +68,20 @@ const ChatListItem: React.FC<IChatListItemProps> = ({ chat, onPress, isSelected 
 
   // Render message preview with icon for non-text messages
   const renderMessagePreview = () => {
-    const messageText = chat.chat?.trim() || '';
-    const messageType = chat.last_message_type?.toLowerCase();
+    let messageText = '';
+    if (typeof chat.chat === 'string') {
+      messageText = chat.chat.trim();
+    } else if (chat.chat && typeof chat.chat === 'object') {
+      const chatObj: any = chat.chat;
+      messageText = (typeof chatObj.text === 'string' ? chatObj.text.trim() : '') ||
+        (typeof chatObj.content === 'string' ? chatObj.content.trim() : '') ||
+        (typeof chatObj.msg === 'string' ? chatObj.msg.trim() : '');
+    }
+
+    const messageType = (
+      chat.last_message_type ||
+      (chat.chat && typeof chat.chat === 'object' ? (chat.chat as any).type : '')
+    )?.toLowerCase();
 
     // If we have explicit message type from server (future-proof)
     if (messageType) {
@@ -129,6 +141,8 @@ const ChatListItem: React.FC<IChatListItemProps> = ({ chat, onPress, isSelected 
     );
   };
 
+  const replied = isChatReplied(chat);
+
   return (
     <TouchableOpacity
       style={[styles.container, isSelected && styles.containerSelected]}
@@ -170,11 +184,11 @@ const ChatListItem: React.FC<IChatListItemProps> = ({ chat, onPress, isSelected 
           <Text style={styles.time}>{formatTime(chat.timestamp)}</Text>
         </View>
 
-        {/* Bottom row: Last message and Platform badge */}
+        {/* Bottom row: Last message */}
         <View style={styles.bottomRow}>{renderMessagePreview()}</View>
 
-        {/* Platform badge */}
-        <View style={styles.platformBadgeContainer}>
+        {/* Footer Badges: Platform/Shop badge & Reply status badge */}
+        <View style={styles.footerBadgesContainer}>
           <View
             style={[
               styles.platformBadge,
@@ -186,8 +200,35 @@ const ChatListItem: React.FC<IChatListItemProps> = ({ chat, onPress, isSelected 
               size={12}
               color={getPlatformColor()}
             />
-            <Text style={[styles.platformText, { color: getPlatformColor() }]}>
+            <Text
+              style={[styles.platformText, { color: getPlatformColor() }]}
+              numberOfLines={1}
+            >
               {chat.shop_name || chat.toko_name || chat.name_ecommerce || chat.name || chat.platform}
+            </Text>
+          </View>
+
+          {/* Reply Status Badge */}
+          <View
+            style={[
+              styles.replyBadge,
+              replied ? styles.replyBadgeReplied : styles.replyBadgeUnreplied,
+            ]}
+          >
+            <View
+              style={[
+                styles.replyDot,
+                replied ? styles.replyDotReplied : styles.replyDotUnreplied,
+              ]}
+            />
+            <Text
+              style={[
+                styles.replyText,
+                replied ? styles.replyTextReplied : styles.replyTextUnreplied,
+              ]}
+              numberOfLines={1}
+            >
+              {replied ? 'Sudah Dibalas' : 'Belum Dibalas'}
             </Text>
           </View>
         </View>
@@ -286,20 +327,62 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
-  platformBadgeContainer: {
+  footerBadgesContainer: {
     flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
   },
   platformBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingVertical: 2.5,
     borderRadius: 12,
     gap: 4,
+    maxWidth: '55%',
   },
   platformText: {
     fontSize: 11,
     fontWeight: '600',
+  },
+  replyBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 4,
+  },
+  replyBadgeReplied: {
+    backgroundColor: '#f0fdf4',
+    borderColor: '#bbf7d0',
+  },
+  replyBadgeUnreplied: {
+    backgroundColor: '#fff7ed',
+    borderColor: '#ffedd5',
+  },
+  replyDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  replyDotReplied: {
+    backgroundColor: '#22c55e',
+  },
+  replyDotUnreplied: {
+    backgroundColor: '#ea580c',
+  },
+  replyText: {
+    fontSize: 10.5,
+    fontWeight: '600',
+  },
+  replyTextReplied: {
+    color: '#15803d',
+  },
+  replyTextUnreplied: {
+    color: '#c2410c',
   },
 });
 

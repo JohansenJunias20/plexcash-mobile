@@ -125,6 +125,22 @@ const ChatMessage: React.FC<IChatMessageProps> = ({ message, isCurrentUser }) =>
     setPreviewImageUrl('');
   };
 
+  // Helper to extract primitive string from any value (string, object, etc.)
+  const extractText = (val: any): string => {
+    if (!val) return '';
+    if (typeof val === 'string') return val;
+    if (typeof val === 'number') return String(val);
+    if (typeof val === 'object') {
+      if (typeof val.text === 'string') return val.text;
+      if (typeof val.content === 'string') return val.content;
+      if (typeof val.message === 'string') return val.message;
+      if (typeof val.msg === 'string') return val.msg;
+      if (val.text && typeof val.text === 'object') return extractText(val.text);
+      if (val.content && typeof val.content === 'object') return extractText(val.content);
+    }
+    return '';
+  };
+
   // Render message content based on type
   const renderMessageContent = () => {
     // Extract any text content from message object or string
@@ -132,10 +148,10 @@ const ChatMessage: React.FC<IChatMessageProps> = ({ message, isCurrentUser }) =>
     if (typeof message.msg === 'string') {
       rawText = message.msg;
     } else if (message.msg && typeof message.msg === 'object') {
-      rawText = message.msg.text || message.msg.content || (message.msg as any).msg || '';
+      rawText = extractText(message.msg.text) || extractText(message.msg.content) || extractText((message.msg as any).msg);
     }
     if (!rawText) {
-      rawText = (message as any).content || (message as any).text || (message as any).msg || (message as any).msg_shopee || '';
+      rawText = extractText((message as any).content) || extractText((message as any).text) || extractText((message as any).msg) || extractText((message as any).msg_shopee);
     }
 
     // 1. ALWAYS check if text contains an order link or order SN pattern
@@ -178,8 +194,13 @@ const ChatMessage: React.FC<IChatMessageProps> = ({ message, isCurrentUser }) =>
         );
 
       case 'image': {
-        const imageUrl = msgObj.image || msgObj.image_url || msgObj.url || (message as any).image_url || (message as any).content;
-        if (imageUrl && typeof imageUrl === 'string' && imageUrl.startsWith('http')) {
+        const imageUrl = (typeof msgObj.image === 'string' ? msgObj.image : '') ||
+          (typeof msgObj.image_url === 'string' ? msgObj.image_url : '') ||
+          (typeof msgObj.url === 'string' ? msgObj.url : '') ||
+          (typeof (message as any).image_url === 'string' ? (message as any).image_url : '') ||
+          (typeof (message as any).content === 'string' ? (message as any).content : '');
+
+        if (imageUrl && imageUrl.startsWith('http')) {
           return (
             <View>
               <TouchableOpacity
@@ -209,8 +230,13 @@ const ChatMessage: React.FC<IChatMessageProps> = ({ message, isCurrentUser }) =>
       }
 
       case 'sticker': {
-        const stickerUrl = msgObj.sticker_url || msgObj.url || msgObj.image || msgObj.image_url || (message as any).sticker_url;
-        if (stickerUrl && typeof stickerUrl === 'string' && stickerUrl.startsWith('http')) {
+        const stickerUrl = (typeof msgObj.sticker_url === 'string' ? msgObj.sticker_url : '') ||
+          (typeof msgObj.url === 'string' ? msgObj.url : '') ||
+          (typeof msgObj.image === 'string' ? msgObj.image : '') ||
+          (typeof msgObj.image_url === 'string' ? msgObj.image_url : '') ||
+          (typeof (message as any).sticker_url === 'string' ? (message as any).sticker_url : '');
+
+        if (stickerUrl && stickerUrl.startsWith('http')) {
           return (
             <View>
               <Image
@@ -230,8 +256,13 @@ const ChatMessage: React.FC<IChatMessageProps> = ({ message, isCurrentUser }) =>
       }
 
       case 'product': {
-        const productImage = msgObj.product_image || msgObj.image || msgObj.image_url || (message as any).product_image;
-        const productPrice = msgObj.product_price || msgObj.price || (message as any).product_price;
+        const productImage = (typeof msgObj.product_image === 'string' ? msgObj.product_image : '') ||
+          (typeof msgObj.image === 'string' ? msgObj.image : '') ||
+          (typeof msgObj.image_url === 'string' ? msgObj.image_url : '') ||
+          (typeof (message as any).product_image === 'string' ? (message as any).product_image : '');
+        const productPrice = typeof msgObj.product_price === 'string' ? msgObj.product_price :
+          (typeof msgObj.price === 'string' ? msgObj.price :
+          (typeof (message as any).product_price === 'string' ? (message as any).product_price : ''));
 
         if (productImage || rawText || productPrice) {
           return (
@@ -272,7 +303,12 @@ const ChatMessage: React.FC<IChatMessageProps> = ({ message, isCurrentUser }) =>
       }
 
       case 'order': {
-        const orderSn = msgObj.order_id || msgObj.order_sn || msgObj.ordersn || (message as any).order_id || (message as any).order_sn || rawText;
+        const orderSn = (typeof msgObj.order_id === 'string' ? msgObj.order_id : '') ||
+          (typeof msgObj.order_sn === 'string' ? msgObj.order_sn : '') ||
+          (typeof msgObj.ordersn === 'string' ? msgObj.ordersn : '') ||
+          (typeof (message as any).order_id === 'string' ? (message as any).order_id : '') ||
+          (typeof (message as any).order_sn === 'string' ? (message as any).order_sn : '') ||
+          rawText;
         const idEcommerce = msgObj.id_ecommerce || (message as any).id_ecommerce || 0;
         if (orderSn) {
           return renderOrderCard(orderSn, idEcommerce, rawText && rawText !== orderSn ? rawText : undefined);
@@ -311,10 +347,11 @@ const ChatMessage: React.FC<IChatMessageProps> = ({ message, isCurrentUser }) =>
 
   // System messages (centered)
   if (isSystem) {
+    const systemText = extractText(message.msg?.text) || extractText(message.msg) || 'Pesan Sistem';
     return (
       <View style={styles.systemContainer}>
         <View style={styles.systemBubble}>
-          <Text style={styles.systemText}>{message.msg.text}</Text>
+          <Text style={styles.systemText}>{systemText}</Text>
         </View>
       </View>
     );
@@ -374,27 +411,27 @@ const ChatMessage: React.FC<IChatMessageProps> = ({ message, isCurrentUser }) =>
             </TouchableOpacity>
 
             {/* Preview Image */}
-            {previewImageUrl && (
+            {previewImageUrl ? (
               <Image
                 source={{ uri: previewImageUrl }}
                 style={styles.previewImage}
                 resizeMode="contain"
               />
-            )}
+            ) : null}
 
             {/* Product Info (only show for product messages) */}
-            {message.msg.type === 'product' && (
+            {message.msg?.type === 'product' && (
               <View style={styles.previewInfo}>
-                {message.msg.text && (
+                {extractText(message.msg.text) ? (
                   <Text style={styles.previewProductName} numberOfLines={2}>
-                    {message.msg.text}
+                    {extractText(message.msg.text)}
                   </Text>
-                )}
-                {message.msg.product_price && (
+                ) : null}
+                {typeof message.msg.product_price === 'string' && message.msg.product_price ? (
                   <Text style={styles.previewProductPrice}>
                     {message.msg.product_price}
                   </Text>
-                )}
+                ) : null}
               </View>
             )}
           </View>

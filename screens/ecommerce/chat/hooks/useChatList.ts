@@ -8,6 +8,8 @@ import {
   IUseChatListReturn,
   PlatformFilter,
   ReadStatusFilter,
+  ReplyStatusFilter,
+  isChatReplied,
 } from '../types/chat.types';
 
 /**
@@ -23,6 +25,7 @@ export const useChatList = (): IUseChatListReturn => {
   const [filters, setFilters] = useState<IChatFilters>({
     platform: 'ALL',
     readStatus: 'ALL',
+    replyStatus: 'ALL',
     searchQuery: '',
     selectedShopId: 'ALL',
   });
@@ -65,17 +68,51 @@ export const useChatList = (): IUseChatListReturn => {
       }
 
       if (data.status && data.data) {
-        // Enrich chats with shop_name (nama toko)
-        const enrichedChats = data.data.map((chat) => ({
-          ...chat,
-          shop_name:
-            chat.shop_name ||
-            chat.toko_name ||
-            chat.name_ecommerce ||
-            chat.name ||
-            shopsMap[chat.id_ecommerce] ||
-            chat.platform,
-        }));
+        // Helper to extract primitive text from chat string/object
+        const extractChatString = (val: any): string => {
+          if (!val) return '';
+          if (typeof val === 'string') return val;
+          if (typeof val === 'number') return String(val);
+          if (typeof val === 'object') {
+            if (typeof val.text === 'string') return val.text;
+            if (typeof val.content === 'string') return val.content;
+            if (typeof val.message === 'string') return val.message;
+            if (typeof val.msg === 'string') return val.msg;
+            if (val.text && typeof val.text === 'object') return extractChatString(val.text);
+            if (val.content && typeof val.content === 'object') return extractChatString(val.content);
+          }
+          return '';
+        };
+
+        // Enrich chats with shop_name (nama toko) & safe string chat text
+        const enrichedChats = data.data.map((chat: any) => {
+          let chatText = extractChatString(chat.chat);
+          if (!chatText && chat.msg) {
+            chatText = extractChatString(chat.msg);
+          }
+
+          let lastMessageType = chat.last_message_type;
+          if (!lastMessageType) {
+            if (chat.chat && typeof chat.chat === 'object' && chat.chat.type) {
+              lastMessageType = chat.chat.type;
+            } else if (chat.msg && typeof chat.msg === 'object' && chat.msg.type) {
+              lastMessageType = chat.msg.type;
+            }
+          }
+
+          return {
+            ...chat,
+            chat: chatText,
+            last_message_type: lastMessageType || chat.last_message_type,
+            shop_name:
+              chat.shop_name ||
+              chat.toko_name ||
+              chat.name_ecommerce ||
+              chat.name ||
+              shopsMap[chat.id_ecommerce] ||
+              chat.platform,
+          };
+        });
 
         // Sort by timestamp (newest first)
         const sortedChats = enrichedChats.sort((a, b) => b.timestamp - a.timestamp);
@@ -116,16 +153,23 @@ export const useChatList = (): IUseChatListReturn => {
       filtered = filtered.filter((chat) => !chat.isRead);
     }
 
+    // Filter by reply status
+    if (filters.replyStatus === 'UNREPLIED') {
+      filtered = filtered.filter((chat) => !isChatReplied(chat));
+    } else if (filters.replyStatus === 'REPLIED') {
+      filtered = filtered.filter((chat) => isChatReplied(chat));
+    }
+
     // Filter by search query
     if (filters.searchQuery.trim()) {
       const query = filters.searchQuery.toLowerCase();
       filtered = filtered.filter((chat) => {
         // Safely check buyer name
-        const buyerName = chat.buyer?.name?.toLowerCase() || '';
+        const buyerName = (typeof chat.buyer?.name === 'string' ? chat.buyer.name : '').toLowerCase();
         // Safely check chat message
-        const chatMessage = chat.chat?.toLowerCase() || '';
+        const chatMessage = (typeof chat.chat === 'string' ? chat.chat : '').toLowerCase();
         // Safely check shop name
-        const shopName = chat.shop_name?.toLowerCase() || '';
+        const shopName = (typeof chat.shop_name === 'string' ? chat.shop_name : '').toLowerCase();
 
         return buyerName.includes(query) || chatMessage.includes(query) || shopName.includes(query);
       });
@@ -146,6 +190,7 @@ export const useChatList = (): IUseChatListReturn => {
     console.log('🔍 [useChatList] Filters applied:', {
       platform: filters.platform,
       readStatus: filters.readStatus,
+      replyStatus: filters.replyStatus,
       searchQuery: filters.searchQuery,
       selectedShopId: filters.selectedShopId,
       originalCount: chats.length,
@@ -182,10 +227,11 @@ export const useChatList = (): IUseChatListReturn => {
   useEffect(() => {
     applyFilters();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chats, filters.platform, filters.readStatus, filters.searchQuery, filters.selectedShopId]);
+  }, [chats, filters.platform, filters.readStatus, filters.replyStatus, filters.searchQuery, filters.selectedShopId]);
 
   return {
     chats: filteredChats,
+    rawChats: chats,
     loading,
     error,
     refreshing,

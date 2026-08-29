@@ -54,6 +54,7 @@ export type AppStackParamList = {
     id_ecommerce: number;
     scan_timestamp?: string | null;
     print_timestamp?: string;
+    print?: boolean;
     scanned?: boolean;
     packed?: boolean;
     pack_timestamp?: string | null;

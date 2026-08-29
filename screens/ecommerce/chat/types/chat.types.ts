@@ -23,6 +23,8 @@ export interface IChatList {
   isRead: boolean;
   platform: string; // "SHOPEE" | "LAZADA" | "TOKOPEDIA" | "TIKTOK"
   last_message_type?: string; // Optional: "text" | "image" | "product" | etc. (for future server support)
+  last_message_from_seller?: boolean; // true jika pesan terakhir dari seller, false jika dari buyer
+  last_sender?: 'seller' | 'buyer';   // 'seller' | 'buyer'
   shop_name?: string;
   toko_name?: string;
   name_ecommerce?: string;
@@ -102,12 +104,78 @@ export interface IWebSocketReplyEvent {
 
 export type PlatformFilter = "ALL" | "SHOPEE" | "LAZADA" | "TOKOPEDIA" | "TIKTOK";
 export type ReadStatusFilter = "ALL" | "READ" | "UNREAD";
+export type ReplyStatusFilter = "ALL" | "UNREPLIED" | "REPLIED";
 
 export interface IChatFilters {
   platform: PlatformFilter;
   readStatus: ReadStatusFilter;
+  replyStatus: ReplyStatusFilter;
   searchQuery: string;
   selectedShopId?: number | 'ALL';
+}
+
+// ============================================
+// HELPER FUNCTIONS
+// ============================================
+
+/**
+ * Helper function to determine whether a conversation is replied by seller or not
+ */
+export function isChatReplied(chat: IChatList, cachedMessages?: any[]): boolean {
+  if (!chat) return false;
+  // 1. Jika pesan detail untuk chat ini ada di cache/state lokal:
+  if (cachedMessages && cachedMessages.length > 0) {
+    const lastMsg = cachedMessages[cachedMessages.length - 1];
+    // Periksa apakah pesan terakhir dikirim oleh seller (fromMe / from === 'seller')
+    return Boolean(lastMsg?.fromMe || lastMsg?.from === 'seller');
+  }
+  // 2. Gunakan properti dari backend API:
+  if (typeof chat.last_message_from_seller === 'boolean') {
+    return chat.last_message_from_seller;
+  }
+  if (chat.last_sender === 'seller') return true;
+  if (chat.last_sender === 'buyer') return false;
+  // 3. Fallback: jika ada pesan belum dibaca (unread > 0), berarti buyer mengirim pesan -> belum dibalas
+  if (chat.unread_count && chat.unread_count > 0) {
+    return false;
+  }
+  return chat.isRead !== false;
+}
+
+// ============================================
+// CHAT TEMPLATE & GROUP TYPES
+// ============================================
+
+export interface IChatTemplate {
+  id: number | string;
+  group_id?: number | string | null;
+  group_name?: string | null;
+  title: string;
+  shortcut?: string;
+  content: string;
+  sort_order?: number;
+}
+
+export interface IChatTemplateGroup {
+  id: number | string;
+  name: string;
+  sort_order?: number;
+  templates: IChatTemplate[];
+}
+
+export interface IGetChatTemplatesResponse {
+  status?: boolean;
+  success?: boolean;
+  groups?: IChatTemplateGroup[];
+  templates?: IChatTemplate[];
+  ungrouped?: IChatTemplate[];
+  data?: {
+    groups?: IChatTemplateGroup[];
+    templates?: IChatTemplate[];
+    ungrouped?: IChatTemplate[];
+  } | IChatTemplate[];
+  reason?: string;
+  message?: string;
 }
 
 // ============================================
@@ -131,6 +199,10 @@ export interface IChatInputProps {
   onSendMultipleImages?: (imageUris: string[]) => void; // Optional: for multiple image selection
   onToggleOrderList?: () => void; // Optional: toggle order list panel
   onToggleProductList?: () => void; // Optional: toggle product list panel
+  onToggleTemplateList?: () => void; // Optional: toggle template list panel
+  templates?: IChatTemplate[]; // Optional: list of templates for inline shortcut expansion
+  insertedText?: string | null; // Optional: text passed to insert/replace into input
+  onClearInsertedText?: () => void;
   disabled?: boolean;
   placeholder?: string;
 }
@@ -142,12 +214,24 @@ export interface IChatHeaderProps {
   onBack: () => void;
 }
 
+export interface IChatTemplatePanelProps {
+  visible: boolean;
+  groups: IChatTemplateGroup[];
+  templates: IChatTemplate[];
+  ungrouped: IChatTemplate[];
+  loading: boolean;
+  onClose: () => void;
+  onSelectTemplate: (template: IChatTemplate, autoSend?: boolean) => void;
+  onRefresh?: () => void;
+}
+
 // ============================================
 // HOOK RETURN TYPES
 // ============================================
 
 export interface IUseChatListReturn {
   chats: IChatList[];
+  rawChats: IChatList[];
   loading: boolean;
   error: string | null;
   refreshing: boolean;
@@ -164,6 +248,15 @@ export interface IUseChatMessagesReturn {
   sendMessage: (text: string) => Promise<void>;
   sendImage: (imageUri: string) => Promise<void>;
   sendProduct: (productId: string) => Promise<void>;
+  refresh: () => Promise<void>;
+}
+
+export interface IUseChatTemplatesReturn {
+  groups: IChatTemplateGroup[];
+  templates: IChatTemplate[];
+  ungrouped: IChatTemplate[];
+  loading: boolean;
+  error: string | null;
   refresh: () => Promise<void>;
 }
 
