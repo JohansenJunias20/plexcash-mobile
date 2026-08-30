@@ -64,9 +64,17 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data.status && data.data) {
         const chat = data.data.find(c => c.msg_id === event.msg_id);
         if (chat) {
+          let chatDesc = 'Ada pesan masuk.';
+          if (typeof chat.chat === 'string' && chat.chat.trim()) {
+            chatDesc = chat.chat;
+          } else if (chat.chat && typeof chat.chat === 'object') {
+            const chatObj: any = chat.chat;
+            chatDesc = chatObj.text || chatObj.content || chatObj.msg || 'Ada pesan masuk.';
+          }
+
           showMessage({
             message: `Pesan Baru dari ${chat.buyer?.name || 'Pembeli'}`,
-            description: chat.chat || 'Ada pesan masuk.',
+            description: chatDesc,
             type: "info",
             icon: "info",
             duration: 5000,

@@ -55,6 +55,33 @@ export const useChatMessages = (
         // Handle case where data.data might not be an array
         const messagesArray = Array.isArray(data.data) ? data.data : [];
 
+        const extractTextContent = (val: any): string => {
+          if (!val) return '';
+          if (typeof val === 'string') return val;
+          if (typeof val === 'number') return String(val);
+          if (typeof val === 'object') {
+            if (typeof val.text === 'string') return val.text;
+            if (typeof val.content === 'string') return val.content;
+            if (typeof val.message === 'string') return val.message;
+            if (typeof val.msg === 'string') return val.msg;
+            if (val.text && typeof val.text === 'object') return extractTextContent(val.text);
+            if (val.content && typeof val.content === 'object') return extractTextContent(val.content);
+          }
+          return '';
+        };
+
+        const extractUrlString = (val: any): string => {
+          if (!val) return '';
+          if (typeof val === 'string') return val;
+          if (typeof val === 'object') {
+            if (typeof val.url === 'string') return val.url;
+            if (typeof val.image === 'string') return val.image;
+            if (typeof val.image_url === 'string') return val.image_url;
+            if (typeof val.thumbnail === 'string') return val.thumbnail;
+          }
+          return '';
+        };
+
         // Transform API data to expected format
         // DO NOT group by message_id - each message should be displayed separately
         const transformedMessages: any[] = messagesArray.map((item: any) => {
@@ -67,7 +94,7 @@ export const useChatMessages = (
           const isSticker = !!(item.sticker_url || item.message_type === 'sticker' || msgObj.sticker_url || msgObj.type === 'sticker');
 
           const msgType = msgObj.type || (item.type === 'chat' ? 'text' : isSticker ? 'sticker' : item.type || 'text');
-          const text = msgObj.text || msgObj.content || rawContent || '';
+          const text = extractTextContent(msgObj.text) || extractTextContent(msgObj.content) || extractTextContent(rawContent) || '';
 
           const normalizedMsg: any = {
             ...msgObj,
@@ -76,26 +103,26 @@ export const useChatMessages = (
           };
 
           if (isSticker || msgType === 'sticker') {
-            normalizedMsg.sticker_url = msgObj.sticker_url || msgObj.url || msgObj.image || msgObj.image_url || item.sticker_url || item.image_url || item.content || '';
+            normalizedMsg.sticker_url = extractUrlString(msgObj.sticker_url) || extractUrlString(msgObj.url) || extractUrlString(msgObj.image) || extractUrlString(msgObj.image_url) || extractUrlString(item.sticker_url) || extractUrlString(item.image_url) || extractUrlString(item.content) || '';
           }
 
           if (msgType === 'image') {
-            normalizedMsg.image = msgObj.image || msgObj.image_url || msgObj.url || item.image || item.image_url || item.content || '';
+            normalizedMsg.image = extractUrlString(msgObj.image) || extractUrlString(msgObj.image_url) || extractUrlString(msgObj.url) || extractUrlString(item.image) || extractUrlString(item.image_url) || extractUrlString(item.content) || '';
           }
 
           if (msgType === 'product') {
-            normalizedMsg.product_id = msgObj.product_id || item.product_id || '';
-            normalizedMsg.product_image = msgObj.product_image || msgObj.image || msgObj.image_url || item.product_image || item.image_url || '';
-            normalizedMsg.product_price = msgObj.product_price || msgObj.price || item.product_price || '';
-            normalizedMsg.product_url = msgObj.product_url || msgObj.url || item.product_url || '';
+            normalizedMsg.product_id = typeof msgObj.product_id === 'string' ? msgObj.product_id : (typeof item.product_id === 'string' ? item.product_id : String(msgObj.product_id || item.product_id || ''));
+            normalizedMsg.product_image = extractUrlString(msgObj.product_image) || extractUrlString(msgObj.image) || extractUrlString(msgObj.image_url) || extractUrlString(item.product_image) || extractUrlString(item.image_url) || '';
+            normalizedMsg.product_price = typeof msgObj.product_price === 'string' ? msgObj.product_price : (typeof msgObj.price === 'string' ? msgObj.price : String(msgObj.product_price || msgObj.price || ''));
+            normalizedMsg.product_url = extractUrlString(msgObj.product_url) || extractUrlString(msgObj.url) || extractUrlString(item.product_url) || '';
           }
 
           if (msgType === 'order') {
-            normalizedMsg.order_id = msgObj.order_id || msgObj.order_sn || msgObj.ordersn || msgObj.id || item.order_id || item.order_sn || item.ordersn || item.id || '';
+            normalizedMsg.order_id = String(msgObj.order_id || msgObj.order_sn || msgObj.ordersn || msgObj.id || item.order_id || item.order_sn || item.ordersn || item.id || '');
           }
 
           if (msgType === 'refund') {
-            normalizedMsg.refund_id = msgObj.refund_id || item.refund_id || '';
+            normalizedMsg.refund_id = String(msgObj.refund_id || item.refund_id || '');
           }
 
           return {

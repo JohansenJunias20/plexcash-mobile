@@ -13,6 +13,7 @@ import ApiService from '../../services/api';
 import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import moment from 'moment';
 import { useChatMessages } from './chat/hooks/useChatMessages';
+import { useChatTemplates } from './chat/hooks/useChatTemplates';
 import { useWebSocket } from './chat/hooks/useWebSocket';
 import { useGlobalChat } from '../../context/ChatContext';
 import ChatHeader from './chat/components/ChatHeader';
@@ -21,13 +22,16 @@ import ChatInput from './chat/components/ChatInput';
 import OrderListPanel from './chat/components/OrderListPanel';
 import OrderDetailSheet from './chat/components/OrderDetailSheet';
 import ProductListPanel from './chat/components/ProductListPanel';
+import ChatTemplatePanel from './chat/components/ChatTemplatePanel';
 import {
   IChatBuyer,
+  IChatTemplate,
   IWebSocketChatEvent,
   IWebSocketReplyEvent,
 } from './chat/types/chat.types';
 import { fetchOrders, IOrder } from '../../services/ecommerce/orderService';
 import { fetchProducts, IProduct } from '../../services/ecommerce/productService';
+import { expandShortcuts } from '../../services/ecommerce/chatTemplateService';
 import {
   loadingTimeEstimator,
   LoadingEstimate,
@@ -69,6 +73,18 @@ export default function EcommerceChatDetailScreen() {
   // Use custom hooks - pass buyer.id for Shopee send message
   const { messages, loading, error, sendMessage, sendImage, sendProduct, refresh } =
     useChatMessages(msgId, idEcommerce, buyer?.id);
+
+  // Template list state & hook
+  const {
+    groups: templateGroups,
+    templates: chatTemplates,
+    ungrouped: ungroupedTemplates,
+    loading: loadingTemplates,
+    refresh: refreshTemplates,
+  } = useChatTemplates();
+
+  const [showTemplatePanel, setShowTemplatePanel] = useState(false);
+  const [insertedText, setInsertedText] = useState<string | null>(null);
 
   // Track if this is initial load to prevent auto-scroll loop
   const isInitialLoadRef = useRef(true);
@@ -172,7 +188,8 @@ export default function EcommerceChatDetailScreen() {
 
   // Handle send text
   const handleSendText = async (text: string) => {
-    await sendMessage(text);
+    const finalContent = expandShortcuts(text, chatTemplates);
+    await sendMessage(finalContent);
     // Auto-scroll to bottom after sending
     setTimeout(() => {
       flatListRef.current?.scrollToEnd({ animated: true });
@@ -191,6 +208,8 @@ export default function EcommerceChatDetailScreen() {
   // Handle toggle order list
   const handleToggleOrderList = async () => {
     if (!showOrderList) {
+      setShowProductList(false);
+      setShowTemplatePanel(false);
       // Show panel first, then fetch orders
       setShowOrderList(true);
       // Fetch orders (loading indicator will be visible)
@@ -198,6 +217,27 @@ export default function EcommerceChatDetailScreen() {
     } else {
       // Close panel
       setShowOrderList(false);
+    }
+  };
+
+  // Handle toggle template list
+  const handleToggleTemplateList = () => {
+    if (!showTemplatePanel) {
+      setShowOrderList(false);
+      setShowProductList(false);
+      setShowTemplatePanel(true);
+    } else {
+      setShowTemplatePanel(false);
+    }
+  };
+
+  // Handle select template
+  const handleSelectTemplate = async (template: IChatTemplate, autoSend?: boolean) => {
+    setShowTemplatePanel(false);
+    if (autoSend) {
+      await handleSendText(template.content);
+    } else {
+      setInsertedText(template.content);
     }
   };
 
@@ -529,6 +569,8 @@ export default function EcommerceChatDetailScreen() {
     console.log('📦 [ChatDetail] Toggle product list, current state:', showProductList);
 
     if (!showProductList) {
+      setShowOrderList(false);
+      setShowTemplatePanel(false);
       // Show panel first, then fetch
       setShowProductList(true);
       handleFetchProducts();
@@ -635,12 +677,28 @@ export default function EcommerceChatDetailScreen() {
           onCancelLoading={handleCancelProductLoading}
         />
 
+        {/* Chat Template Panel */}
+        <ChatTemplatePanel
+          visible={showTemplatePanel}
+          groups={templateGroups}
+          templates={chatTemplates}
+          ungrouped={ungroupedTemplates}
+          loading={loadingTemplates}
+          onClose={() => setShowTemplatePanel(false)}
+          onSelectTemplate={handleSelectTemplate}
+          onRefresh={refreshTemplates}
+        />
+
         {/* Input */}
         <ChatInput
           onSendText={handleSendText}
           onSendImage={handleSendImage}
           onToggleOrderList={handleToggleOrderList}
           onToggleProductList={handleToggleProductList}
+          onToggleTemplateList={handleToggleTemplateList}
+          templates={chatTemplates}
+          insertedText={insertedText}
+          onClearInsertedText={() => setInsertedText(null)}
           disabled={loading}
         />
       </View>

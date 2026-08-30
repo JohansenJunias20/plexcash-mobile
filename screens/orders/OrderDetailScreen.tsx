@@ -44,6 +44,13 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
   const [imagesLoaded, setImagesLoaded] = useState(false);
   const [lightboxVisible, setLightboxVisible] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [processingCancel, setProcessingCancel] = useState(false);
+
+  const isCancelled = useMemo(() => {
+    if (!detail?.status) return false;
+    const s = detail.status.toUpperCase();
+    return s.includes('BATAL') || s.includes('CANCEL') || s === 'IN_CANCEL';
+  }, [detail?.status]);
 
   const lightboxImages = useMemo(() => {
     return (detail?.items || []).filter(it => !!it.image_url).map(it => it.image_url as string);
@@ -224,6 +231,86 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
       const res = await ApiService.authenticatedRequest('/ecommerce/pesanan', { method: 'POST', body: JSON.stringify(body) });
       if (res?.status) Alert.alert('Success', 'Sales created.'); else Alert.alert('Failed', res?.reason || 'Failed to create sales');
     } catch (e: any) { console.error('createSales', e); Alert.alert('Error', e?.message || 'Failed'); }
+  };
+
+  const handleTerimaPembatalan = () => {
+    if (!canCreate || !detail) {
+      Alert.alert('Permission', 'You do not have permission');
+      return;
+    }
+    Alert.alert(
+      'Konfirmasi Terima Pembatalan',
+      `Apakah Anda yakin ingin menerima pembatalan untuk pesanan #${detail.id}?`,
+      [
+        { text: 'Batal', style: 'cancel' },
+        {
+          text: 'Ya, Terima',
+          style: 'destructive',
+          onPress: executeTerimaPembatalan,
+        },
+      ]
+    );
+  };
+
+  const executeTerimaPembatalan = async () => {
+    if (!canCreate || !detail) return;
+    try {
+      setProcessingCancel(true);
+      const payload = [{
+        platform: detail.platform,
+        id: detail.id,
+        barang: (detail.items || []).map(it => ({
+          price: it.price || 0,
+          name: it.name,
+          sku: it.sku,
+          qty: it.qty,
+          id_online: it.id_online,
+          id_parent: it.id_parent,
+        })),
+        id_ecommerce: detail.id_ecommerce,
+        date: typeof detail.date === 'string' ? detail.date : new Date().toISOString(),
+        invoice: detail.invoice,
+        from_import: false,
+        booking_sn: detail.booking_sn,
+        orderType: detail.orderType,
+        isBookingOrder: !!detail.booking_sn,
+        update_stok: true,
+      }];
+
+      const res = await ApiService.authenticatedRequest('/ecommerce/pembatalan', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+
+      if (res?.status) {
+        Alert.alert('Sukses', 'Pembatalan pesanan berhasil diterima.', [
+          {
+            text: 'OK',
+            onPress: () => {
+              fetchOrderDetail(true);
+            },
+          },
+        ]);
+      } else {
+        const err = res?.reason || res?.message || res?.error || res?.data;
+        let errorMessage = 'Gagal memproses pembatalan pesanan.';
+        if (typeof err === 'string') {
+          if (err.includes('<html') || err.includes('<!DOCTYPE')) {
+            errorMessage = 'Terjadi kesalahan 500 Internal Server Error di backend.';
+          } else {
+            errorMessage = err;
+          }
+        } else if (err) {
+          errorMessage = JSON.stringify(err);
+        }
+        Alert.alert('Gagal', errorMessage);
+      }
+    } catch (e: any) {
+      console.error('executeTerimaPembatalan error', e);
+      Alert.alert('Error', e?.message || 'Terjadi kesalahan saat memproses pembatalan');
+    } finally {
+      setProcessingCancel(false);
+    }
   };
 
   const printLabel = async () => {
@@ -609,23 +696,46 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
           <Text style={styles.backButtonText}>Scan Lagi</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.actionButton, styles.primaryButton, !canCreate && styles.buttonDisabled]}
-          disabled={!canCreate}
-          onPress={createSales}
-        >
-          <Ionicons name="cart" size={18} color="#fff" />
-          <Text style={styles.primaryButtonText}>Buat Sales</Text>
-        </TouchableOpacity>
+        {isCancelled ? (
+          <TouchableOpacity
+            style={[
+              styles.actionButton,
+              styles.cancelOrderButton,
+              (!canCreate || processingCancel) && styles.buttonDisabled,
+            ]}
+            disabled={!canCreate || processingCancel}
+            onPress={handleTerimaPembatalan}
+          >
+            {processingCancel ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <>
+                <Ionicons name="close-circle-outline" size={18} color="#fff" />
+                <Text style={styles.cancelOrderButtonText}>Terima Pembatalan</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        ) : (
+          <>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.primaryButton, !canCreate && styles.buttonDisabled]}
+              disabled={!canCreate}
+              onPress={createSales}
+            >
+              <Ionicons name="cart" size={18} color="#fff" />
+              <Text style={styles.primaryButtonText}>Buat Sales</Text>
+            </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.actionButton, styles.secondaryButton, !canCreate && styles.buttonDisabled]}
-          disabled={!canCreate}
-          onPress={printLabel}
-        >
-          <Ionicons name="print" size={18} color="#111827" />
-          <Text style={styles.secondaryButtonText}>Print</Text>
-        </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.secondaryButton, !canCreate && styles.buttonDisabled]}
+              disabled={!canCreate}
+              onPress={printLabel}
+            >
+              <Ionicons name="print" size={18} color="#111827" />
+              <Text style={styles.secondaryButtonText}>Print</Text>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
 
       {/* Lightbox Modal */}
@@ -1145,6 +1255,20 @@ const styles = StyleSheet.create({
   backButtonText: {
     color: '#92400E',
     fontSize: 13,
+    fontWeight: '700',
+  },
+  cancelOrderButton: {
+    flex: 2,
+    backgroundColor: '#DC2626',
+    shadowColor: '#DC2626',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  cancelOrderButtonText: {
+    color: '#fff',
+    fontSize: 15,
     fontWeight: '700',
   },
 });

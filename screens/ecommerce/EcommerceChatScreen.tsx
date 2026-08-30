@@ -22,6 +22,8 @@ import {
   IChatList,
   PlatformFilter,
   ReadStatusFilter,
+  ReplyStatusFilter,
+  isChatReplied,
   IWebSocketChatEvent,
   IWebSocketReplyEvent,
 } from './chat/types/chat.types';
@@ -32,11 +34,12 @@ export default function EcommerceChatScreen() {
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState<string>('');
   const [platformFilter, setPlatformFilter] = useState<PlatformFilter>('ALL');
   const [readStatusFilter, setReadStatusFilter] = useState<ReadStatusFilter>('ALL');
+  const [replyStatusFilter, setReplyStatusFilter] = useState<ReplyStatusFilter>('ALL');
   const [selectedShopId, setSelectedShopId] = useState<number | 'ALL'>('ALL');
   const [shops, setShops] = useState<{ id: number; name: string }[]>([]);
 
   // Use custom hooks
-  const { chats, loading, error, refreshing, filters, setFilters, refresh } = useChatList();
+  const { chats, rawChats, loading, error, refreshing, filters, setFilters, refresh } = useChatList();
 
   // Fetch shops list for Toko filter
   useEffect(() => {
@@ -98,16 +101,18 @@ export default function EcommerceChatScreen() {
     console.log('🎯 [EcommerceChatScreen] Updating filters:', {
       platform: platformFilter,
       readStatus: readStatusFilter,
+      replyStatus: replyStatusFilter,
       searchQuery: debouncedSearchQuery,
       selectedShopId: selectedShopId,
     });
     setFilters({
       platform: platformFilter,
       readStatus: readStatusFilter,
+      replyStatus: replyStatusFilter,
       searchQuery: debouncedSearchQuery,
       selectedShopId: selectedShopId,
     });
-  }, [debouncedSearchQuery, platformFilter, readStatusFilter, selectedShopId, setFilters]);
+  }, [debouncedSearchQuery, platformFilter, readStatusFilter, replyStatusFilter, selectedShopId, setFilters]);
 
   // Handle chat item press
   const handleChatPress = (chat: IChatList) => {
@@ -262,6 +267,24 @@ export default function EcommerceChatScreen() {
     );
   }
 
+  // Calculate counts for Reply Status Tabs
+  const baseChatsForCounts = (rawChats || []).filter((chat) => {
+    if (platformFilter !== 'ALL' && chat.platform?.toUpperCase() !== platformFilter) return false;
+    if (selectedShopId !== 'ALL') {
+      const targetShopId = Number(selectedShopId);
+      const matchShop =
+        Number(chat.id_ecommerce) === targetShopId ||
+        Number((chat as any).shop_id) === targetShopId ||
+        Number((chat as any).id_shop) === targetShopId;
+      if (!matchShop) return false;
+    }
+    return true;
+  });
+
+  const totalAll = baseChatsForCounts.length;
+  const totalUnreplied = baseChatsForCounts.filter((c) => !isChatReplied(c)).length;
+  const totalReplied = baseChatsForCounts.filter((c) => isChatReplied(c)).length;
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Header with Hamburger Menu */}
@@ -291,6 +314,123 @@ export default function EcommerceChatScreen() {
             <Ionicons name="close-circle" size={20} color="#9CA3AF" />
           </TouchableOpacity>
         )}
+      </View>
+
+      {/* Reply Status Tabs (Segmented Control: Semua / Belum Dibalas / Sudah Dibalas) */}
+      <View style={styles.replyTabsContainer}>
+        {/* Tab Semua */}
+        <TouchableOpacity
+          style={[
+            styles.replyTab,
+            replyStatusFilter === 'ALL' && styles.replyTabAllActive,
+          ]}
+          onPress={() => setReplyStatusFilter('ALL')}
+          activeOpacity={0.7}
+        >
+          <Text
+            style={[
+              styles.replyTabText,
+              replyStatusFilter === 'ALL' && styles.replyTabTextActive,
+            ]}
+          >
+            Semua
+          </Text>
+          <View
+            style={[
+              styles.replyTabBadge,
+              replyStatusFilter === 'ALL'
+                ? styles.replyTabBadgeAllActive
+                : styles.replyTabBadgeAllInactive,
+            ]}
+          >
+            <Text
+              style={[
+                styles.replyTabBadgeText,
+                replyStatusFilter === 'ALL'
+                  ? styles.replyTabBadgeTextAllActive
+                  : styles.replyTabBadgeTextAllInactive,
+              ]}
+            >
+              {totalAll}
+            </Text>
+          </View>
+        </TouchableOpacity>
+
+        {/* Tab Belum Dibalas */}
+        <TouchableOpacity
+          style={[
+            styles.replyTab,
+            replyStatusFilter === 'UNREPLIED' && styles.replyTabUnrepliedActive,
+          ]}
+          onPress={() => setReplyStatusFilter('UNREPLIED')}
+          activeOpacity={0.7}
+        >
+          <Text
+            style={[
+              styles.replyTabText,
+              replyStatusFilter === 'UNREPLIED' && styles.replyTabTextActive,
+            ]}
+          >
+            Belum Dibalas
+          </Text>
+          <View
+            style={[
+              styles.replyTabBadge,
+              replyStatusFilter === 'UNREPLIED'
+                ? styles.replyTabBadgeUnrepliedActive
+                : styles.replyTabBadgeUnrepliedInactive,
+            ]}
+          >
+            <Text
+              style={[
+                styles.replyTabBadgeText,
+                replyStatusFilter === 'UNREPLIED'
+                  ? styles.replyTabBadgeTextUnrepliedActive
+                  : styles.replyTabBadgeTextUnrepliedInactive,
+              ]}
+            >
+              {totalUnreplied}
+            </Text>
+          </View>
+        </TouchableOpacity>
+
+        {/* Tab Sudah Dibalas */}
+        <TouchableOpacity
+          style={[
+            styles.replyTab,
+            replyStatusFilter === 'REPLIED' && styles.replyTabRepliedActive,
+          ]}
+          onPress={() => setReplyStatusFilter('REPLIED')}
+          activeOpacity={0.7}
+        >
+          <Text
+            style={[
+              styles.replyTabText,
+              replyStatusFilter === 'REPLIED' && styles.replyTabTextActive,
+            ]}
+          >
+            Sudah Dibalas
+          </Text>
+          <View
+            style={[
+              styles.replyTabBadge,
+              replyStatusFilter === 'REPLIED'
+                ? styles.replyTabBadgeRepliedActive
+                : styles.replyTabBadgeRepliedInactive,
+            ]}
+          >
+            <Text
+              style={[
+                styles.replyTabBadgeText,
+                replyStatusFilter === 'REPLIED'
+                  ? styles.replyTabBadgeTextRepliedActive
+                  : styles.replyTabBadgeTextRepliedInactive,
+              ]}
+            >
+              {totalReplied}
+            </Text>
+          </View>
+        </TouchableOpacity>
       </View>
 
       {/* Filters (Rendered fixed outside FlatList to prevent unmounting scroll views) */}
@@ -526,6 +666,91 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 15,
     fontWeight: '600',
+  },
+  replyTabsContainer: {
+    flexDirection: 'row',
+    backgroundColor: 'white',
+    paddingHorizontal: 12,
+    paddingTop: 2,
+    paddingBottom: 8,
+    gap: 8,
+  },
+  replyTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    borderRadius: 10,
+    backgroundColor: '#F3F4F6',
+    gap: 5,
+  },
+  replyTabAllActive: {
+    backgroundColor: '#2563eb', // Primary Blue
+  },
+  replyTabUnrepliedActive: {
+    backgroundColor: '#ea580c', // Dark Orange
+  },
+  replyTabRepliedActive: {
+    backgroundColor: '#16a34a', // Green
+  },
+  replyTabText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#4B5563',
+  },
+  replyTabTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  replyTabBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 10,
+    minWidth: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  replyTabBadgeAllInactive: {
+    backgroundColor: '#E5E7EB',
+  },
+  replyTabBadgeAllActive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+  },
+  replyTabBadgeUnrepliedInactive: {
+    backgroundColor: '#fed7aa', // Light Orange badge
+  },
+  replyTabBadgeUnrepliedActive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+  },
+  replyTabBadgeRepliedInactive: {
+    backgroundColor: '#bbf7d0', // Light Green badge
+  },
+  replyTabBadgeRepliedActive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+  },
+  replyTabBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  replyTabBadgeTextAllInactive: {
+    color: '#374151',
+  },
+  replyTabBadgeTextAllActive: {
+    color: '#FFFFFF',
+  },
+  replyTabBadgeTextUnrepliedInactive: {
+    color: '#9a3412', // Dark Orange text
+  },
+  replyTabBadgeTextUnrepliedActive: {
+    color: '#FFFFFF',
+  },
+  replyTabBadgeTextRepliedInactive: {
+    color: '#166534', // Dark Green text
+  },
+  replyTabBadgeTextRepliedActive: {
+    color: '#FFFFFF',
   },
 });
 

@@ -432,6 +432,9 @@ export default function OrdersListScreen() {
 
   const onOpenActions = (item: OrderCard) => {
     const canCreate = !!access?.actions?.create;
+    const itemStatus = (item.status || '').toUpperCase();
+    const isCancelled = itemStatus.includes('BATAL') || itemStatus.includes('CANCEL') || itemStatus === 'IN_CANCEL';
+
     const buttons: any[] = [
       { text: 'View Details', onPress: () => navigation.navigate('OrderDetail', {
         id: item.id,
@@ -440,8 +443,13 @@ export default function OrdersListScreen() {
         print_timestamp: item.print_timestamp,
         scanned: item.scanned,
       }) },
-      { text: 'Create Sales', onPress: () => createSales(item), style: canCreate ? 'default' : 'cancel' },
-      { text: 'Print Label', onPress: () => printLabel(item), style: canCreate ? 'default' : 'cancel' },
+      ...(isCancelled
+        ? [{ text: 'Terima Pembatalan', onPress: () => terimaPembatalan(item), style: canCreate ? 'destructive' as const : 'cancel' as const }]
+        : [
+            { text: 'Create Sales', onPress: () => createSales(item), style: canCreate ? 'default' as const : 'cancel' as const },
+            { text: 'Print Label', onPress: () => printLabel(item), style: canCreate ? 'default' as const : 'cancel' as const },
+          ]
+      ),
       { text: 'Cancel', style: 'cancel' as const },
     ];
     if (!canCreate) {
@@ -449,6 +457,47 @@ export default function OrdersListScreen() {
       return;
     }
     Alert.alert('Actions', `Order ${item.id}`, buttons);
+  };
+
+  const terimaPembatalan = async (item: OrderCard) => {
+    if (!access?.actions?.create) { Alert.alert('Permission', 'You do not have permission'); return; }
+    try {
+      const detail = await ApiService.authenticatedRequest(`/get/ecommerce/order?id=${item.id}&id_ecommerce=${item.id_ecommerce}`);
+      if (!detail?.status) throw new Error(detail?.reason || 'Failed to load order');
+      const d = detail.data;
+      const barang = (d.items || []).map((it: any) => ({
+        price: it.price_after_discount ?? it.price ?? 0,
+        name: it.name,
+        sku: it.sku,
+        qty: it.qty,
+        id_online: it.id_online,
+        id_parent: it.id_parent,
+      }));
+      const body = [{
+        platform: d.from,
+        id: d.id,
+        barang,
+        id_ecommerce: d.id_ecommerce || item.id_ecommerce,
+        date: typeof d.date === 'string' ? d.date : new Date().toISOString(),
+        invoice: d.invoice,
+        from_import: false,
+        booking_sn: d.booking_sn,
+        orderType: d.orderType,
+        isBookingOrder: !!d.booking_sn,
+        update_stok: true,
+      }];
+      const res = await ApiService.authenticatedRequest('/ecommerce/pembatalan', { method: 'POST', body: JSON.stringify(body) });
+      if (res?.status) {
+        Alert.alert('Sukses', 'Pembatalan pesanan berhasil diterima.');
+        fetchOrders();
+      } else {
+        const reason = res?.reason || res?.message || 'Gagal memproses pembatalan';
+        Alert.alert('Gagal', reason);
+      }
+    } catch (e: any) {
+      console.error('terimaPembatalan error', e);
+      Alert.alert('Error', e?.message || 'Gagal memproses pembatalan');
+    }
   };
 
   const createSales = async (item: OrderCard) => {
