@@ -84,6 +84,8 @@ import ProsesOtomatisScreen from '../screens/ecommerce/ProsesOtomatisScreen';
 import ProsesOtomatisConfigScreen from '../screens/ecommerce/ProsesOtomatisConfigScreen';
 import PackScreen from '../screens/ecommerce/Pack/PackScreen';
 import KesehatanTokoScreen from '../screens/ecommerce/KesehatanTokoScreen';
+import FlashSaleScreen from '../screens/ecommerce/FlashSale/FlashSaleScreen';
+import CreateFlashSaleScreen from '../screens/ecommerce/FlashSale/CreateFlashSaleScreen';
 
 // LAPORAN Section
 import NeracaScreen from '../screens/laporan/NeracaScreen';
@@ -107,6 +109,7 @@ const PesananV2Stack = createNativeStackNavigator();
 const EcommerceChatStack = createNativeStackNavigator();
 const NaikkanProdukStack = createNativeStackNavigator();
 const ProsesOtomatisStack = createNativeStackNavigator();
+const FlashSaleStack = createNativeStackNavigator();
 const PerangkatStack = createNativeStackNavigator();
 const PembelianStack = createNativeStackNavigator();
 const PenjualanStack = createNativeStackNavigator();
@@ -271,6 +274,17 @@ const ProsesOtomatisStackScreen = () => (
   </ProsesOtomatisStack.Navigator>
 );
 
+const FlashSaleStackScreen = () => (
+  <FlashSaleStack.Navigator
+    screenOptions={{
+      headerShown: false,
+    }}
+  >
+    <FlashSaleStack.Screen name="FlashSaleMain" component={FlashSaleScreen} />
+    <FlashSaleStack.Screen name="CreateFlashSale" component={CreateFlashSaleScreen} />
+  </FlashSaleStack.Navigator>
+);
+
 const PerangkatStackScreen = () => (
   <PerangkatStack.Navigator
     screenOptions={{
@@ -380,6 +394,7 @@ const DrawerNavigatorContent = () => {
 
       {/* ECOMMERCE Section - Using Stack Navigators */}
       <Drawer.Screen name="DiskonScreen" component={DiskonScreen} />
+      <Drawer.Screen name="FlashSale" component={FlashSaleStackScreen} />
       <Drawer.Screen name="Pesanan" component={OrdersStackScreen} />
       <Drawer.Screen name="PesananV2" component={PesananV2StackScreen} />
       <Drawer.Screen name="EcommerceChat" component={EcommerceChatStackScreen} />

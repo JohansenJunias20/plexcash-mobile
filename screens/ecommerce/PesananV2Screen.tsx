@@ -9,6 +9,7 @@ import moment from 'moment';
 import PesananV2FilterModal from '../../components/PesananV2FilterModal';
 import PesananV2OrderCard from '../../components/PesananV2OrderCard';
 import ProgressModal from '../../components/ProgressModal';
+import UnpaidTemplateModal from '../../components/ecommerce/UnpaidTemplateModal';
 
 type Nav = NativeStackNavigationProp<any>;
 
@@ -77,6 +78,8 @@ export default function PesananV2Screen() {
 
   // Modals
   const [filterOpen, setFilterOpen] = useState(false);
+  const [templateModalVisible, setTemplateModalVisible] = useState(false);
+  const [remindedOrderIds, setRemindedOrderIds] = useState<Set<string>>(new Set());
   
   // Progress/Sync State
   const [isSyncing, setIsSyncing] = useState(false);
@@ -785,6 +788,15 @@ export default function PesananV2Screen() {
             {isSyncing && (
               <ActivityIndicator size="small" color="#D97706" style={{ marginRight: 8 }} />
             )}
+            {currentTab === 'BELUM DIBAYAR' && (
+              <TouchableOpacity
+                onPress={() => setTemplateModalVisible(true)}
+                style={styles.iconButton}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="settings-outline" size={22} color="#D97706" />
+              </TouchableOpacity>
+            )}
             <TouchableOpacity onPress={onRefresh} style={styles.iconButton}>
                 <Ionicons name="refresh" size={22} color="#4B5563" />
             </TouchableOpacity>
@@ -879,6 +891,12 @@ export default function PesananV2Screen() {
                       order={item}
                       isSelected={selectedOrders.has(item.id_online)}
                       onToggleSelect={() => toggleSelection(item.id_online)}
+                      isUnpaidTab={currentTab === 'BELUM DIBAYAR'}
+                      isReminded={remindedOrderIds.has(item.id_online || item.order_sn || item.booking_sn)}
+                      onOpenTemplateSetting={() => setTemplateModalVisible(true)}
+                      onReminderSuccess={(sn) => {
+                        setRemindedOrderIds((prev) => new Set(prev).add(sn));
+                      }}
                       onPress={() => {
                            navigation.navigate('OrderDetail', {
                               // For kilat orders: pass booking_sn so detail screen can use it
@@ -941,6 +959,12 @@ export default function PesananV2Screen() {
           progress={buatProgress.total > 0 ? (buatProgress.processed / buatProgress.total) : 0}
           processed={buatProgress.processed}
           total={buatProgress.total}
+      />
+
+      {/* Unpaid Payment Reminder Template Settings Modal */}
+      <UnpaidTemplateModal
+        visible={templateModalVisible}
+        onClose={() => setTemplateModalVisible(false)}
       />
     </SafeAreaView>
   );

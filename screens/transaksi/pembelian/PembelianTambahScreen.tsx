@@ -76,6 +76,7 @@ export default function PembelianTambahScreen() {
   const [bayar, setBayar] = useState('');
   const [biayaTambahan, setBiayaTambahan] = useState('');
   const [selectedWarehouse, setSelectedWarehouse] = useState('');
+  const [persentaseBiayaTambahan, setPersentaseBiayaTambahan] = useState(0);
 
   // PPN state
   const [isPkpActive, setIsPkpActive] = useState(false);
@@ -236,20 +237,26 @@ export default function PembelianTambahScreen() {
   };
 
   const handleBarangSelect = (items: BarangItem[]) => {
-    const newItems: ItemDetail[] = items.map(item => ({
-      id: item.id,
-      nama: item.nama,
-      merk: item.merk || '',
-      kategori: item.kategori || '',
-      satuan: item.satuan || '',
-      qty: '0',
-      hargabeli: '',
-      dpp: '',
-      pricelist: item.hpp?.toString() || '0',
-      qty_print: '0',
-    }));
+    const newItems: ItemDetail[] = items.map(item => {
+      const initialPrice = (item.hpp || 0).toString();
+      return {
+        id: item.id,
+        nama: item.nama,
+        merk: item.merk || '',
+        kategori: item.kategori || '',
+        satuan: item.satuan || '',
+        qty: '1',
+        hargabeli: initialPrice,
+        dpp: initialPrice,
+        pricelist: initialPrice,
+        qty_print: '1',
+      };
+    });
 
-    setItemDetails([...itemDetails, ...newItems]);
+    const combined = [...itemDetails, ...newItems];
+    const res = recalculateItemsWithBiaya(combined, biayaTambahan, isPkpActive, ppnRate, ppnMode);
+    setItemDetails(res.items);
+    setPersentaseBiayaTambahan(res.persentase);
   };
 
   const handleTambahBarangDone = (data: NewBarangData) => {
@@ -259,14 +266,17 @@ export default function PembelianTambahScreen() {
       merk: data.merk,
       kategori: data.kategori,
       satuan: data.satuan,
-      qty: '0',
-      hargabeli: '',
-      dpp: '',
+      qty: '1',
+      hargabeli: '0',
+      dpp: '0',
       pricelist: '0',
-      qty_print: '0',
+      qty_print: '1',
     };
 
-    setItemDetails([...itemDetails, newItem]);
+    const combined = [...itemDetails, newItem];
+    const res = recalculateItemsWithBiaya(combined, biayaTambahan, isPkpActive, ppnRate, ppnMode);
+    setItemDetails(res.items);
+    setPersentaseBiayaTambahan(res.persentase);
   };
 
   // Pre-order handling functions
@@ -351,8 +361,8 @@ export default function PembelianTambahScreen() {
             qty: item.qty.toString(),
             hargabeli: item.harga.toString(),
             dpp: item.harga.toString(),
-            pricelist: '',
-            qty_print: '0',
+            pricelist: item.harga.toString(),
+            qty_print: item.qty.toString(),
           });
         }
       });
@@ -360,7 +370,9 @@ export default function PembelianTambahScreen() {
 
     // Convert map to array
     const mergedItems = Array.from(itemMap.values());
-    setItemDetails(mergedItems);
+    const res = recalculateItemsWithBiaya(mergedItems, biayaTambahan, isPkpActive, ppnRate, ppnMode);
+    setItemDetails(res.items);
+    setPersentaseBiayaTambahan(res.persentase);
 
     // Set selected pre-orders
     setSelectedPreOrders(preOrders);
@@ -449,35 +461,100 @@ export default function PembelianTambahScreen() {
     }
   };
 
-  const updateItemDetail = (index: number, field: keyof ItemDetail, value: string) => {
-    const updated = [...itemDetails];
-    updated[index] = { ...updated[index], [field]: value };
+  const recalculateItemsWithBiaya = (
+    items: ItemDetail[],
+    biayaStr: string,
+    pkpActive: boolean,
+    ppn: number,
+    mode: 'include' | 'exclude'
+  ): { items: ItemDetail[]; persentase: number } => {
+    const biayaNum = parseFloat(biayaStr || '0');
+    const validBiaya = isNaN(biayaNum) || biayaNum < 0 ? 0 : biayaNum;
 
-    // Auto-calculate prices based on PPN mode
-    if (field === 'hargabeli' || field === 'dpp') {
-      if (isPkpActive) {
-        if (ppnMode === 'include' && field === 'hargabeli') {
-          // Calculate DPP from include price
-          const includePrice = parseFloat(value || '0');
-          const dpp = includePrice / (1 + ppnRate / 100);
-          updated[index].dpp = dpp.toFixed(2);
-        } else if (ppnMode === 'exclude' && field === 'dpp') {
-          // Calculate include price from DPP
-          const excludePrice = parseFloat(value || '0');
-          const includePrice = excludePrice * (1 + ppnRate / 100);
-          updated[index].hargabeli = includePrice.toFixed(2);
-        }
-      } else {
-        // No PPN, both prices are the same
-        if (field === 'hargabeli') {
-          updated[index].dpp = value;
-        } else {
-          updated[index].hargabeli = value;
-        }
-      }
+    // Total base value = sum(qty * pricelist)
+    const totalBaseValue = items.reduce((sum, item) => {
+      const qty = parseInt(item.qty || '0') || 0;
+      const pl = parseFloat(item.pricelist || item.hargabeli || item.dpp || '0') || 0;
+      return sum + (qty * pl);
+    }, 0);
+
+    let persentase = totalBaseValue > 0 ? validBiaya / totalBaseValue : 0;
+    if (!isFinite(persentase) || isNaN(persentase)) {
+      persentase = 0;
     }
 
-    setItemDetails(updated);
+    const updated = items.map(item => {
+      const pl = parseFloat(item.pricelist || item.hargabeli || item.dpp || '0') || 0;
+      if (pkpActive) {
+        if (persentase === 0) {
+          const dpp = pl;
+          const incl = Number((dpp * (1 + ppn / 100)).toFixed(2));
+          return {
+            ...item,
+            pricelist: pl.toString(),
+            dpp: dpp.toString(),
+            hargabeli: incl.toString(),
+          };
+        } else {
+          const dppWithBiaya = Number((pl * (1 + persentase)).toFixed(2));
+          const inclWithBiaya = Number((dppWithBiaya * (1 + ppn / 100)).toFixed(2));
+          return {
+            ...item,
+            pricelist: pl.toString(),
+            dpp: dppWithBiaya.toString(),
+            hargabeli: inclWithBiaya.toString(),
+          };
+        }
+      } else {
+        if (persentase === 0) {
+          return {
+            ...item,
+            pricelist: pl.toString(),
+            hargabeli: pl.toString(),
+            dpp: pl.toString(),
+          };
+        } else {
+          const finalHb = Number((pl * (1 + persentase)).toFixed(2));
+          return {
+            ...item,
+            pricelist: pl.toString(),
+            hargabeli: finalHb.toString(),
+            dpp: finalHb.toString(),
+          };
+        }
+      }
+    });
+
+    return { items: updated, persentase };
+  };
+
+  const handleBiayaTambahanChange = (val: string) => {
+    if (val === '' || val === '+' || (!isNaN(parseFloat(val)) && parseFloat(val) >= 0)) {
+      setBiayaTambahan(val);
+      const res = recalculateItemsWithBiaya(itemDetails, val, isPkpActive, ppnRate, ppnMode);
+      setItemDetails(res.items);
+      setPersentaseBiayaTambahan(res.persentase);
+    }
+  };
+
+  const updateItemDetail = (index: number, field: keyof ItemDetail, value: string) => {
+    const updated = [...itemDetails];
+    if (field === 'qty') {
+      updated[index] = { ...updated[index], qty: value };
+    } else if (field === 'pricelist' || field === 'hargabeli' || field === 'dpp') {
+      updated[index] = {
+        ...updated[index],
+        pricelist: value,
+        hargabeli: value,
+        dpp: value,
+      };
+    } else {
+      updated[index] = { ...updated[index], [field]: value };
+    }
+
+    const res = recalculateItemsWithBiaya(updated, biayaTambahan, isPkpActive, ppnRate, ppnMode);
+    setItemDetails(res.items);
+    setPersentaseBiayaTambahan(res.persentase);
   };
 
   const deleteItem = (index: number) => {
@@ -491,7 +568,9 @@ export default function PembelianTambahScreen() {
           style: 'destructive',
           onPress: () => {
             const updated = itemDetails.filter((_, i) => i !== index);
-            setItemDetails(updated);
+            const res = recalculateItemsWithBiaya(updated, biayaTambahan, isPkpActive, ppnRate, ppnMode);
+            setItemDetails(res.items);
+            setPersentaseBiayaTambahan(res.persentase);
           },
         },
       ]
@@ -500,39 +579,40 @@ export default function PembelianTambahScreen() {
 
   const calculateBaseTotal = (): number => {
     return itemDetails.reduce((total, item) => {
-      const qty = parseInt(item.qty || '0');
-      const dpp = parseFloat(item.dpp || '0');
-      return total + (dpp * qty);
+      const qty = parseInt(item.qty || '0') || 0;
+      const pl = parseFloat(item.pricelist || item.dpp || item.hargabeli || '0') || 0;
+      return total + (pl * qty);
     }, 0);
   };
 
   const calculatePpnAmount = (): number => {
     if (!isPkpActive) return 0;
-    const baseTotal = calculateBaseTotal();
-    return baseTotal * (ppnRate / 100);
+    const baseTotalDpp = itemDetails.reduce((total, item) => {
+      const qty = parseInt(item.qty || '0') || 0;
+      const dpp = parseFloat(item.dpp || '0') || 0;
+      return total + (dpp * qty);
+    }, 0);
+    return baseTotalDpp * (ppnRate / 100);
   };
 
   const calculateTotal = (): number => {
-    const itemsTotal = itemDetails.reduce((total, item) => {
-      const qty = parseInt(item.qty || '0');
+    return itemDetails.reduce((total, item) => {
+      const qty = parseInt(item.qty || '0') || 0;
       let includePrice: number;
 
       if (!isPkpActive) {
-        includePrice = parseFloat(item.hargabeli || item.dpp || '0');
+        includePrice = parseFloat(item.hargabeli || item.dpp || '0') || 0;
       } else {
         if (ppnMode === 'include') {
-          includePrice = parseFloat(item.hargabeli || '0');
+          includePrice = parseFloat(item.hargabeli || '0') || 0;
         } else {
-          const excludePrice = parseFloat(item.dpp || '0');
+          const excludePrice = parseFloat(item.dpp || '0') || 0;
           includePrice = excludePrice * (1 + ppnRate / 100);
         }
       }
 
       return total + (includePrice * qty);
     }, 0);
-
-    const biaya = parseFloat(biayaTambahan || '0');
-    return itemsTotal + biaya;
   };
 
   const handleSave = async () => {
@@ -589,13 +669,19 @@ export default function PembelianTambahScreen() {
       const total = calculateTotal();
       const sisa = total - bayarAmount;
 
-      const detailpembelian = itemDetails.map(item => ({
-        id_barang: item.id,
-        qty: parseInt(item.qty),
-        hargabeli: parseFloat(item.hargabeli || item.dpp || '0'),
-        dpp: parseFloat(item.dpp || '0'),
-        qty_print: parseInt(item.qty_print || '0'),
-      }));
+      const detailpembelian = itemDetails.map(item => {
+        const finalPrice = parseFloat(item.hargabeli || item.dpp || '0');
+        const dppVal = isPkpActive ? parseFloat(item.dpp || '0') : finalPrice;
+        return {
+          id_barang: item.id,
+          qty: parseInt(item.qty || '0'),
+          harga_beli: finalPrice,
+          dpp: dppVal,
+          kodeBA: '51.1',
+          price_list: item.pricelist ? parseFloat(item.pricelist) : finalPrice,
+          qty_print: parseInt(item.qty_print || '0'),
+        };
+      });
 
       const payload = {
         data: {
@@ -613,12 +699,12 @@ export default function PembelianTambahScreen() {
             ppn: ppnRate,
             biaya_tambahan: parseFloat(biayaTambahan || '0'),
             total,
-            warehouse_id: selectedWarehouse || null,
+            warehouse_id: selectedWarehouse ? Number(selectedWarehouse) : null,
           },
           detailpembelian,
+          // Include pre-order IDs for conversion
+          preOrderIds: selectedPreOrders.map(po => po.id).filter(id => id !== undefined)
         },
-        // Include pre-order IDs for conversion
-        preOrderIds: selectedPreOrders.map(po => po.id).filter(id => id !== undefined)
       };
 
       const res = await fetch(`${API_BASE_URL}/pembelian`, {
@@ -875,7 +961,16 @@ export default function PembelianTambahScreen() {
 
           {/* Bayar */}
           <View style={styles.formGroup}>
-            <Text style={styles.label}>Bayar (Kontan)</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <Text style={styles.label}>Bayar (Kontan)</Text>
+              <TouchableOpacity
+                onPress={() => setBayar(grandTotal.toString())}
+                style={{ backgroundColor: '#e0f2fe', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 }}
+                disabled={saving}
+              >
+                <Text style={{ fontSize: 12, color: '#0284c7', fontWeight: '700' }}>= Bayar Lunas</Text>
+              </TouchableOpacity>
+            </View>
             <TextInput
               style={styles.input}
               value={bayar}
@@ -911,18 +1006,22 @@ export default function PembelianTambahScreen() {
               </TouchableOpacity>
             </View>
           )}
-
           {/* Biaya Tambahan */}
           <View style={styles.formGroup}>
             <Text style={styles.label}>Biaya Tambahan</Text>
             <TextInput
               style={styles.input}
               value={biayaTambahan}
-              onChangeText={setBiayaTambahan}
+              onChangeText={handleBiayaTambahanChange}
               placeholder="0"
               keyboardType="numeric"
               editable={!saving}
             />
+            {parseFloat(biayaTambahan || '0') > 0 && (
+              <Text style={{ fontSize: 13, color: '#d97706', fontWeight: 'bold', marginTop: 4 }}>
+                +{(persentaseBiayaTambahan * 100).toFixed(2)}% dibebankan ke harga beli
+              </Text>
+            )}
           </View>
         </View>
 
@@ -1025,35 +1124,28 @@ export default function PembelianTambahScreen() {
               <View style={styles.table}>
                 {/* Table Header */}
                 <View style={styles.tableHeader}>
-                  <Text style={[styles.tableHeaderCell, { width: 60 }]}>ID</Text>
-                  <Text style={[styles.tableHeaderCell, { width: 150 }]}>Nama Barang</Text>
-                  <Text style={[styles.tableHeaderCell, { width: 80 }]}>Qty</Text>
-                  <Text style={[styles.tableHeaderCell, { width: 120 }]}>
-                    {isPkpActive
-                      ? ppnMode === 'exclude'
-                        ? 'Harga (Exc PPN)'
-                        : 'Harga (Inc PPN)'
-                      : 'Harga Beli'}
+                  <Text style={[styles.tableHeaderCell, { width: 45 }]}>ID</Text>
+                  <Text style={[styles.tableHeaderCell, { width: 140 }]}>Nama Barang</Text>
+                  <Text style={[styles.tableHeaderCell, { width: 55 }]}>Qty</Text>
+                  <Text style={[styles.tableHeaderCell, { width: 105 }]}>
+                    {isPkpActive ? (ppnMode === 'exclude' ? 'Harga Exc PPN' : 'Harga Inc PPN') : 'Harga Beli'}
                   </Text>
-                  <Text style={[styles.tableHeaderCell, { width: 120 }]}>Sub Total</Text>
-                  <Text style={[styles.tableHeaderCell, { width: 80 }]}>Qty Print</Text>
-                  <Text style={[styles.tableHeaderCell, { width: 60 }]}>Aksi</Text>
+                  <Text style={[styles.tableHeaderCell, { width: 105 }]}>Harga (+Biaya)</Text>
+                  <Text style={[styles.tableHeaderCell, { width: 110 }]}>Sub Total</Text>
+                  <Text style={[styles.tableHeaderCell, { width: 60 }]}>Qty Print</Text>
+                  <Text style={[styles.tableHeaderCell, { width: 45 }]}>Aksi</Text>
                 </View>
 
                 {/* Table Rows */}
                 {itemDetails.map((item, index) => {
-                  const qty = parseInt(item.qty || '0');
-                  const price = isPkpActive
-                    ? ppnMode === 'exclude'
-                      ? parseFloat(item.dpp || '0')
-                      : parseFloat(item.hargabeli || '0')
-                    : parseFloat(item.hargabeli || item.dpp || '0');
-                  const subtotal = qty * price;
+                  const qty = parseInt(item.qty || '0') || 0;
+                  const finalPrice = parseFloat(item.hargabeli || item.dpp || '0') || 0;
+                  const subtotal = qty * finalPrice;
 
                   return (
                     <View key={index} style={styles.tableRow}>
-                      <Text style={[styles.tableCell, { width: 60 }]}>{item.id}</Text>
-                      <View style={[styles.tableCell, { width: 150 }]}>
+                      <Text style={[styles.tableCell, { width: 45 }]}>{item.id}</Text>
+                      <View style={[styles.tableCell, { width: 140 }]}>
                         <Text style={styles.itemName} numberOfLines={2}>
                           {item.nama}
                         </Text>
@@ -1061,7 +1153,7 @@ export default function PembelianTambahScreen() {
                           <Text style={styles.itemMeta}>{item.merk}</Text>
                         )}
                       </View>
-                      <View style={[styles.tableCell, { width: 80 }]}>
+                      <View style={[styles.tableCell, { width: 55 }]}>
                         <TextInput
                           style={styles.tableCellInput}
                           value={item.qty}
@@ -1070,35 +1162,23 @@ export default function PembelianTambahScreen() {
                           editable={!saving}
                         />
                       </View>
-                      <View style={[styles.tableCell, { width: 120 }]}>
+                      <View style={[styles.tableCell, { width: 105 }]}>
                         <TextInput
                           style={styles.tableCellInput}
-                          value={
-                            isPkpActive
-                              ? ppnMode === 'exclude'
-                                ? item.dpp
-                                : item.hargabeli
-                              : item.hargabeli || item.dpp
-                          }
-                          onChangeText={(val) =>
-                            updateItemDetail(
-                              index,
-                              isPkpActive
-                                ? ppnMode === 'exclude'
-                                  ? 'dpp'
-                                  : 'hargabeli'
-                                : 'hargabeli',
-                              val
-                            )
-                          }
+                          value={item.pricelist}
+                          onChangeText={(val) => updateItemDetail(index, 'pricelist', val)}
                           keyboardType="numeric"
                           editable={!saving}
+                          placeholder="0"
                         />
                       </View>
-                      <Text style={[styles.tableCell, { width: 120 }]}>
+                      <Text style={[styles.tableCell, { width: 105, fontWeight: 'bold', color: '#059669' }]}>
+                        {finalPrice.toLocaleString('id-ID')}
+                      </Text>
+                      <Text style={[styles.tableCell, { width: 110, fontWeight: '600' }]}>
                         {subtotal.toLocaleString('id-ID')}
                       </Text>
-                      <View style={[styles.tableCell, { width: 80 }]}>
+                      <View style={[styles.tableCell, { width: 60 }]}>
                         <TextInput
                           style={styles.tableCellInput}
                           value={item.qty_print}
@@ -1107,7 +1187,7 @@ export default function PembelianTambahScreen() {
                           editable={!saving}
                         />
                       </View>
-                      <View style={[styles.tableCell, { width: 60 }]}>
+                      <View style={[styles.tableCell, { width: 45 }]}>
                         <TouchableOpacity
                           onPress={() => deleteItem(index)}
                           disabled={saving}
@@ -1124,25 +1204,63 @@ export default function PembelianTambahScreen() {
         </View>
 
         {/* Summary Section */}
-        {isPkpActive && itemDetails.length > 0 && (
+        {itemDetails.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Rincian PPN</Text>
+            <Text style={styles.sectionTitle}>Ringkasan Pembelian</Text>
+            
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Subtotal (Exclude PPN)</Text>
+              <Text style={styles.summaryLabel}>Total Nilai Barang (Dasar):</Text>
               <Text style={styles.summaryValue}>
                 Rp {baseTotal.toLocaleString('id-ID')}
               </Text>
             </View>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>PPN ({ppnRate}%)</Text>
-              <Text style={styles.summaryValue}>
-                Rp {ppnAmount.toLocaleString('id-ID')}
+
+            {parseFloat(biayaTambahan || '0') > 0 && (
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>
+                  Biaya Tambahan (+{(persentaseBiayaTambahan * 100).toFixed(2)}%):
+                </Text>
+                <Text style={[styles.summaryValue, { color: '#d97706', fontWeight: 'bold' }]}>
+                  + Rp {parseFloat(biayaTambahan).toLocaleString('id-ID')}
+                </Text>
+              </View>
+            )}
+
+            {isPkpActive && (
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>PPN ({ppnRate}%):</Text>
+                <Text style={styles.summaryValue}>
+                  + Rp {ppnAmount.toLocaleString('id-ID')}
+                </Text>
+              </View>
+            )}
+
+            <View style={[styles.summaryRow, styles.summaryRowTotal]}>
+              <Text style={styles.summaryLabelTotal}>Total Pembelian:</Text>
+              <Text style={[styles.summaryValueTotal, { color: '#059669', fontSize: 18 }]}>
+                Rp {grandTotal.toLocaleString('id-ID')}
               </Text>
             </View>
-            <View style={[styles.summaryRow, styles.summaryRowTotal]}>
-              <Text style={styles.summaryLabelTotal}>Total (Include PPN)</Text>
-              <Text style={styles.summaryValueTotal}>
-                Rp {grandTotal.toLocaleString('id-ID')}
+
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Bayar (Kontan):</Text>
+              <Text style={styles.summaryValue}>
+                Rp {(parseFloat(bayar || '0')).toLocaleString('id-ID')}
+              </Text>
+            </View>
+
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Sisa Hutang:</Text>
+              <Text
+                style={[
+                  styles.summaryValue,
+                  {
+                    fontWeight: 'bold',
+                    color: grandTotal - parseFloat(bayar || '0') > 0 ? '#ef4444' : '#10b981',
+                  },
+                ]}
+              >
+                Rp {(grandTotal - parseFloat(bayar || '0')).toLocaleString('id-ID')}
               </Text>
             </View>
           </View>

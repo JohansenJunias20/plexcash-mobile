@@ -5,6 +5,8 @@ import moment from 'moment';
 import { useAccess } from '../context/AccessContext';
 import { API_BASE_URL } from '../services/api';
 import { getTokenAuth } from '../services/token';
+import { showMessage } from 'react-native-flash-message';
+import { sendPaymentReminder } from '../services/ecommerce/paymentReminderService';
 
 const C = {
   primary: '#D97706',
@@ -39,13 +41,32 @@ interface Props {
   isSelected: boolean;
   onToggleSelect: () => void;
   onPress: () => void;
+  isUnpaidTab?: boolean;
+  isReminded?: boolean;
+  onOpenTemplateSetting?: () => void;
+  onReminderSuccess?: (orderSn: string) => void;
 }
 
-export default function PesananV2OrderCard({ order, isSelected, onToggleSelect, onPress }: Props) {
+export default function PesananV2OrderCard({
+  order,
+  isSelected,
+  onToggleSelect,
+  onPress,
+  isUnpaidTab = false,
+  isReminded = false,
+  onOpenTemplateSetting,
+  onReminderSuccess,
+}: Props) {
   const { access } = useAccess();
   const [showHpp, setShowHpp] = useState(false);
   const [resolvedItems, setResolvedItems] = useState<any[]>(order.items || []);
   const [loadingHpp, setLoadingHpp] = useState(false);
+  const [reminderLoading, setReminderLoading] = useState(false);
+  const [localReminded, setLocalReminded] = useState(isReminded);
+
+  useEffect(() => {
+    setLocalReminded(isReminded);
+  }, [isReminded]);
 
   useEffect(() => {
     setResolvedItems(order.items || []);
@@ -181,6 +202,70 @@ export default function PesananV2OrderCard({ order, isSelected, onToggleSelect, 
   const profitText = isProfit ? `+ Rp ${selisih.toLocaleString('id-ID')}` : `- Rp ${Math.abs(selisih).toLocaleString('id-ID')}`;
   const marginText = isProfit ? `(+ ${parseFloat(marginPct.toFixed(1))}%)` : `(${parseFloat(marginPct.toFixed(1))}%)`;
 
+  const isUnpaid = isUnpaidTab || (order.status || '').toUpperCase() === 'BELUM DIBAYAR';
+
+  const handleSendReminder = async () => {
+    if (isReminded || localReminded || reminderLoading) return;
+
+    const platform = (order.platform || '').toUpperCase();
+    if (platform === 'TIKTOK') {
+      showMessage({
+        message: 'Platform Belum Mendukung',
+        description: 'Platform TikTok belum menyediakan API Seller Chat untuk mengirim pesan langsung ke pembeli.',
+        type: 'warning',
+      });
+      return;
+    }
+
+    const orderSn = order.id_online || order.order_sn || order.booking_sn || '';
+    if (!orderSn) {
+      showMessage({
+        message: 'Nomor Pesanan Tidak Valid',
+        description: 'Nomor pesanan tidak ditemukan untuk pesanan ini.',
+        type: 'danger',
+      });
+      return;
+    }
+
+    setReminderLoading(true);
+    try {
+      const res = await sendPaymentReminder({
+        order_id: order.id ?? order.order_id ?? 0,
+        order_sn: orderSn,
+        buyer_id: order.buyer_id ?? '',
+        buyer_username: order.buyer_username || '',
+        id_ecommerce: Number(order.ecommerce_id || order.id_ecommerce || 0),
+        shop_id: String(order.shop_id || order.id_toko || ''),
+        platform: platform,
+        custom_message: '',
+      });
+
+      if (res.status || res.success) {
+        setLocalReminded(true);
+        onReminderSuccess?.(orderSn);
+        showMessage({
+          message: 'Pengingat Terkirim',
+          description: res.message || 'Pesan pengingat pembayaran berhasil dikirim ke pembeli!',
+          type: 'success',
+        });
+      } else {
+        showMessage({
+          message: 'Gagal Mengirim Pengingat',
+          description: res.reason || 'Terjadi kesalahan saat mengirim pengingat pembayaran',
+          type: 'danger',
+        });
+      }
+    } catch (error: any) {
+      showMessage({
+        message: 'Error',
+        description: error?.message || 'Gagal mengirim pengingat pembayaran',
+        type: 'danger',
+      });
+    } finally {
+      setReminderLoading(false);
+    }
+  };
+
   return (
     <View style={[styles.card, isSelected && styles.cardSelected]}>
       {/* Header */}
@@ -297,6 +382,47 @@ export default function PesananV2OrderCard({ order, isSelected, onToggleSelect, 
         </View>
       </TouchableOpacity>
 
+      {/* Payment Reminder Action Bar */}
+      {isUnpaid && (
+        <View style={styles.reminderBar}>
+          <TouchableOpacity
+            style={[
+              styles.reminderButton,
+              (isReminded || localReminded) && styles.reminderButtonSuccess,
+              (reminderLoading || isReminded || localReminded) && styles.reminderButtonDisabled,
+            ]}
+            onPress={handleSendReminder}
+            disabled={reminderLoading || isReminded || localReminded}
+            activeOpacity={0.8}
+          >
+            {reminderLoading ? (
+              <ActivityIndicator size="small" color="#FFF" style={styles.reminderIcon} />
+            ) : (isReminded || localReminded) ? (
+              <Ionicons name="checkmark-circle" size={16} color="#FFF" style={styles.reminderIcon} />
+            ) : (
+              <Ionicons name="notifications" size={16} color="#FFF" style={styles.reminderIcon} />
+            )}
+            <Text style={styles.reminderButtonText}>
+              {reminderLoading
+                ? 'Mengirim...'
+                : (isReminded || localReminded)
+                ? 'Pengingat Terkirim'
+                : 'Ingatkan Pembayaran'}
+            </Text>
+          </TouchableOpacity>
+
+          {onOpenTemplateSetting && (
+            <TouchableOpacity
+              style={styles.settingTemplateButton}
+              onPress={onOpenTemplateSetting}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="settings-outline" size={18} color="#D97706" />
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+
       {/* HPP Modal */}
       <Modal visible={showHpp} transparent={true} animationType="fade" onRequestClose={() => setShowHpp(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowHpp(false)}>
@@ -400,4 +526,54 @@ const styles = StyleSheet.create({
   bsFooterLabel: { fontSize: 14, fontWeight: '600', color: '#4B5563' },
   bsFooterValue: { fontSize: 14, fontWeight: '700', color: '#111827' },
   warningText: { fontSize: 12, color: '#D97706', fontStyle: 'italic', marginTop: 4, textAlign: 'center' },
+  reminderBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#FFFBEB',
+    borderTopWidth: 1,
+    borderTopColor: '#FDE68A',
+    gap: 8,
+  },
+  reminderButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F59E0B',
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    shadowColor: '#F59E0B',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  reminderButtonSuccess: {
+    backgroundColor: '#10B981',
+    shadowColor: '#10B981',
+  },
+  reminderButtonDisabled: {
+    opacity: 0.9,
+  },
+  reminderIcon: {
+    marginRight: 6,
+  },
+  reminderButtonText: {
+    color: '#FFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  settingTemplateButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 8,
+    backgroundColor: '#FFF',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

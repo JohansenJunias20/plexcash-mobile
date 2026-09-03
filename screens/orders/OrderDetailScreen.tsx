@@ -46,10 +46,16 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [processingCancel, setProcessingCancel] = useState(false);
 
-  const isCancelled = useMemo(() => {
+  const isCancellationPending = useMemo(() => {
     if (!detail?.status) return false;
     const s = detail.status.toUpperCase();
-    return s.includes('BATAL') || s.includes('CANCEL') || s === 'IN_CANCEL';
+    return s === 'PEMBATALAN' || s === 'IN_CANCEL' || s.includes('PEMBATALAN') || s.includes('IN_CANCEL');
+  }, [detail?.status]);
+
+  const isAlreadyCancelled = useMemo(() => {
+    if (!detail?.status) return false;
+    const s = detail.status.toUpperCase();
+    return s === 'DIBATALKAN' || s === 'CANCELLED' || s === 'CANCELED' || s === 'BATAL';
   }, [detail?.status]);
 
   const lightboxImages = useMemo(() => {
@@ -259,14 +265,6 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
       const payload = [{
         platform: detail.platform,
         id: detail.id,
-        barang: (detail.items || []).map(it => ({
-          price: it.price || 0,
-          name: it.name,
-          sku: it.sku,
-          qty: it.qty,
-          id_online: it.id_online,
-          id_parent: it.id_parent,
-        })),
         id_ecommerce: detail.id_ecommerce,
         date: typeof detail.date === 'string' ? detail.date : new Date().toISOString(),
         invoice: detail.invoice,
@@ -274,16 +272,55 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
         booking_sn: detail.booking_sn,
         orderType: detail.orderType,
         isBookingOrder: !!detail.booking_sn,
-        update_stok: true,
       }];
 
-      const res = await ApiService.authenticatedRequest('/ecommerce/pembatalan', {
+      const res = await ApiService.authenticatedRequest('/ecommerce/pembatalan/accept', {
         method: 'POST',
         body: JSON.stringify(payload),
       });
 
       if (res?.status) {
-        Alert.alert('Sukses', 'Pembatalan pesanan berhasil diterima.', [
+        const list = Array.isArray(res.data) ? res.data : (res.data ? [res.data] : []);
+        const itemResult = list[0];
+
+        if (itemResult?.status === 'rejected') {
+          const rawReason = itemResult.reason;
+          const errorMsg = typeof rawReason === 'string'
+            ? rawReason
+            : (rawReason?.message || JSON.stringify(rawReason || 'Permintaan ditolak oleh marketplace'));
+          Alert.alert('Gagal Terima Pembatalan', errorMsg);
+          return;
+        }
+
+        // Also attempt local sales retur creation if order was previously converted to sales
+        try {
+          const returPayload = [{
+            platform: detail.platform,
+            id: detail.id,
+            barang: (detail.items || []).map(it => ({
+              price: it.price || 0,
+              name: it.name,
+              sku: it.sku,
+              qty: it.qty,
+              id_online: it.id_online,
+              id_parent: it.id_parent,
+            })),
+            id_ecommerce: detail.id_ecommerce,
+            date: typeof detail.date === 'string' ? detail.date : new Date().toISOString(),
+            invoice: detail.invoice,
+            from_import: false,
+            booking_sn: detail.booking_sn,
+            orderType: detail.orderType,
+            isBookingOrder: !!detail.booking_sn,
+            update_stok: true,
+          }];
+          await ApiService.authenticatedRequest('/ecommerce/pembatalan', {
+            method: 'POST',
+            body: JSON.stringify(returPayload),
+          }).catch(() => null);
+        } catch {}
+
+        Alert.alert('Sukses', 'Pembatalan pesanan berhasil diterima di marketplace.', [
           {
             text: 'OK',
             onPress: () => {
@@ -291,9 +328,10 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
             },
           },
         ]);
+        setDetail(prev => prev ? { ...prev, status: 'DIBATALKAN' } : null);
       } else {
         const err = res?.reason || res?.message || res?.error || res?.data;
-        let errorMessage = 'Gagal memproses pembatalan pesanan.';
+        let errorMessage = 'Gagal memproses pembatalan ke marketplace.';
         if (typeof err === 'string') {
           if (err.includes('<html') || err.includes('<!DOCTYPE')) {
             errorMessage = 'Terjadi kesalahan 500 Internal Server Error di backend.';
@@ -696,7 +734,7 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
           <Text style={styles.backButtonText}>Scan Lagi</Text>
         </TouchableOpacity>
 
-        {isCancelled ? (
+        {isCancellationPending ? (
           <TouchableOpacity
             style={[
               styles.actionButton,
@@ -715,6 +753,11 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
               </>
             )}
           </TouchableOpacity>
+        ) : isAlreadyCancelled ? (
+          <View style={[styles.actionButton, styles.cancelledDisabledButton]}>
+            <Ionicons name="ban" size={18} color="#6B7280" />
+            <Text style={styles.cancelledDisabledButtonText}>Pesanan Dibatalkan</Text>
+          </View>
         ) : (
           <>
             <TouchableOpacity
@@ -1270,5 +1313,16 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 15,
     fontWeight: '700',
+  },
+  cancelledDisabledButton: {
+    flex: 2,
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  cancelledDisabledButtonText: {
+    color: '#6B7280',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

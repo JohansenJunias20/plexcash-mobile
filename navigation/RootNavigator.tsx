@@ -32,6 +32,8 @@ import PembelianPelunasanScreen from '../screens/transaksi/pembelian/PembelianPe
 import PerangkatListScreen from '../screens/perangkat/PerangkatListScreen';
 import PerangkatConfigScreen from '../screens/perangkat/PerangkatConfigScreen';
 import KesehatanTokoScreen from '../screens/ecommerce/KesehatanTokoScreen';
+import FlashSaleScreen from '../screens/ecommerce/FlashSale/FlashSaleScreen';
+import CreateFlashSaleScreen from '../screens/ecommerce/FlashSale/CreateFlashSaleScreen';
 import { View, ActivityIndicator } from 'react-native';
 import { logNavigation, logStateChange } from '../utils/logger';
 
@@ -89,6 +91,8 @@ export type AppStackParamList = {
   PerangkatConfig: { client_id: string; desktop_name: string };
   DiskonScreen: undefined;
   KesehatanToko: undefined;
+  FlashSale: { shopId?: number } | undefined;
+  CreateFlashSale: { id_ecommerce: number; shop_name?: string };
 };
 
 const AuthStack = createNativeStackNavigator();
@@ -186,6 +190,8 @@ export default function RootNavigator() {
       <AppStack.Screen name="PerangkatList" component={PerangkatListScreen} options={{ headerShown: false }} />
       <AppStack.Screen name="PerangkatConfig" component={PerangkatConfigScreen} options={{ headerShown: false }} />
       <AppStack.Screen name="KesehatanToko" component={KesehatanTokoScreen} options={{ title: 'Kesehatan Toko' }} />
+      <AppStack.Screen name="FlashSale" component={FlashSaleScreen} options={{ headerShown: false }} />
+      <AppStack.Screen name="CreateFlashSale" component={CreateFlashSaleScreen} options={{ headerShown: false }} />
     </AppStack.Navigator>
   );
 }
