@@ -911,6 +911,15 @@ export default function PesananV2Screen() {
                               packed: item.packed,
                               pack_timestamp: item.pack_timestamp,
                               booking_sn: item.isBookingOrder ? item.booking_sn : undefined,
+                              buyer_username: item.buyer_username,
+                              buyer_id: item.buyer_id,
+                              platform: item.platform,
+                              ecommerce_name: item.ecommerce_name,
+                              shop_id: item.shop_id || item.id_toko,
+                              order_status: item.status,
+                              has_penjualan: item.has_penjualan,
+                              has_retur: item.has_retur || item.retur,
+                              source: 'pesanan_v2',
                               // Pass cached kilat data so detail screen shows items & shipping without extra API call
                               kilat_order_data: item.isBookingOrder ? {
                                 buyer_username: item.buyer_username,

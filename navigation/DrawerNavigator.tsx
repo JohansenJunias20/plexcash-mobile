@@ -193,6 +193,7 @@ const OrdersStackScreen = () => (
     <OrdersStack.Screen name="OrdersListMain" component={OrdersListScreen} />
     <OrdersStack.Screen name="OrderDetail" component={OrderDetailScreen} />
     <OrdersStack.Screen name="LabelPreview" component={LabelPreviewScreen} />
+    <OrdersStack.Screen name="EcommerceChatDetail" component={EcommerceChatDetailScreen} />
   </OrdersStack.Navigator>
 );
 
@@ -205,6 +206,7 @@ const PesananV2StackScreen = () => (
     <PesananV2Stack.Screen name="PesananV2Main" component={PesananV2Screen} />
     <PesananV2Stack.Screen name="OrderDetail" component={OrderDetailScreen} />
     <PesananV2Stack.Screen name="LabelPreview" component={LabelPreviewScreen} />
+    <PesananV2Stack.Screen name="EcommerceChatDetail" component={EcommerceChatDetailScreen} />
   </PesananV2Stack.Navigator>
 );
 

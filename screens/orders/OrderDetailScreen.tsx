@@ -7,6 +7,7 @@ import ApiService from '../../services/api';
 import type { AppStackParamList } from '../../navigation/RootNavigator';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { sendPaymentReminder } from '../../services/ecommerce/paymentReminderService';
 
 const SHOW_IMAGES_KEY = '@order_detail_show_images';
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -30,12 +31,38 @@ export type OrderDetail = {
   scan_timestamp?: string | null;
   packed?: boolean;
   pack_timestamp?: string | null;
+  buyer_username?: string;
+  buyer_id?: string | number;
+  shop_id?: string;
+  has_penjualan?: boolean;
+  has_retur?: boolean;
 };
 
 type Props = NativeStackScreenProps<AppStackParamList, 'OrderDetail'>;
 
 export default function OrderDetailScreen({ route, navigation }: Props) {
-  const { id, id_ecommerce, scan_timestamp, print_timestamp, print, scanned, booking_sn, kilat_order_data, packed, pack_timestamp } = route.params;
+  const {
+    id,
+    id_ecommerce,
+    scan_timestamp,
+    print_timestamp,
+    print,
+    scanned,
+    booking_sn,
+    kilat_order_data,
+    packed,
+    pack_timestamp,
+    buyer_username,
+    buyer_id,
+    platform,
+    ecommerce_name,
+    shop_id,
+    order_status,
+    has_penjualan,
+    has_retur,
+    source,
+  } = route.params;
+
   const [detail, setDetail] = useState<OrderDetail | null>(null);
   const [access, setAccess] = useState<{ actions?: { create?: boolean } } | undefined>();
   const [loading, setLoading] = useState(true);
@@ -45,24 +72,48 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
   const [lightboxVisible, setLightboxVisible] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [processingCancel, setProcessingCancel] = useState(false);
+  const [chatLoading, setChatLoading] = useState(false);
+  const [reminderLoading, setReminderLoading] = useState(false);
+
+  const orderStatusUpper = useMemo(() => (detail?.status || '').toUpperCase(), [detail?.status]);
 
   const isCancellationPending = useMemo(() => {
-    if (!detail?.status) return false;
-    const s = detail.status.toUpperCase();
-    return s === 'PEMBATALAN' || s === 'IN_CANCEL' || s.includes('PEMBATALAN') || s.includes('IN_CANCEL');
-  }, [detail?.status]);
+    return (
+      orderStatusUpper === 'PEMBATALAN' ||
+      orderStatusUpper === 'IN_CANCEL' ||
+      orderStatusUpper.includes('PEMBATALAN') ||
+      orderStatusUpper.includes('IN_CANCEL')
+    );
+  }, [orderStatusUpper]);
 
   const isAlreadyCancelled = useMemo(() => {
-    if (!detail?.status) return false;
-    const s = detail.status.toUpperCase();
-    return s === 'DIBATALKAN' || s === 'CANCELLED' || s === 'CANCELED' || s === 'BATAL';
-  }, [detail?.status]);
+    return (
+      orderStatusUpper === 'DIBATALKAN' ||
+      orderStatusUpper === 'CANCELLED' ||
+      orderStatusUpper === 'CANCELED' ||
+      orderStatusUpper === 'BATAL'
+    );
+  }, [orderStatusUpper]);
+
+  const isUnpaid = useMemo(() => {
+    return orderStatusUpper === 'BELUM DIBAYAR' || orderStatusUpper === 'UNPAID';
+  }, [orderStatusUpper]);
+
+  const isReturn = useMemo(() => {
+    return (
+      orderStatusUpper === 'PENGEMBALIAN' ||
+      orderStatusUpper === 'RETUR' ||
+      orderStatusUpper === 'DIRETUR' ||
+      orderStatusUpper === 'TELAH DIRETUR'
+    );
+  }, [orderStatusUpper]);
 
   const lightboxImages = useMemo(() => {
     return (detail?.items || []).filter(it => !!it.image_url).map(it => it.image_url as string);
   }, [detail]);
 
   useEffect(() => {
+    const isFromPesananV2 = source === 'pesanan_v2';
     navigation.setOptions({
       title: `Order ${id}`,
       headerLeft: () => (
@@ -71,11 +122,13 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
           style={{ flexDirection: 'row', alignItems: 'center', paddingLeft: 4, gap: 4 }}
         >
           <Ionicons name="arrow-back" size={22} color="#f59e0b" />
-          <Text style={{ color: '#f59e0b', fontSize: 15, fontWeight: '600' }}>Scan</Text>
+          <Text style={{ color: '#f59e0b', fontSize: 15, fontWeight: '600' }}>
+            {isFromPesananV2 ? 'Pesanan' : 'Scan'}
+          </Text>
         </TouchableOpacity>
       ),
     });
-  }, [navigation, id]);
+  }, [navigation, id, source]);
 
   useEffect(() => { (async () => { try { const res = await ApiService.authenticatedRequest('/access'); if (res?.status) setAccess(res.access); } catch {} })(); }, []);
 
@@ -127,14 +180,20 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
         const finalPacked = d.packed !== undefined ? (d.packed === true || d.packed === 1 || d.packed === '1' || String(d.packed).toLowerCase() === 'true') : (packed !== undefined ? packed : false);
         const finalPackTimestamp = d.pack_timestamp !== undefined ? d.pack_timestamp : (pack_timestamp !== undefined ? pack_timestamp : null);
 
+        const resolvedBuyer = d.buyer_username || d.buyer_name || d.buyer?.username || d.buyer?.name || d.recipient_name || d.customer_name || d.recipient_address?.name || buyer_username || '';
+        const resolvedBuyerId = d.buyer_id || d.buyer?.id || d.buyer_user_id || d.buyer_open_id || buyer_id || '';
+        const resolvedShopId = d.shop_id || d.id_toko || shop_id || '';
+        const resolvedHasPenjualan = d.has_penjualan !== undefined ? (!!d.has_penjualan && d.has_penjualan !== '0' && d.has_penjualan !== 0) : has_penjualan;
+        const resolvedHasRetur = d.has_retur !== undefined ? (!!d.has_retur && d.has_retur !== '0' && d.has_retur !== 0) : has_retur;
+
         setDetail({
-          id: d.id,
+          id: d.id || id,
           id_ecommerce: d.id_ecommerce || id_ecommerce,
-          platform: d.from,
-          ecommerce_name: d.ecommerce_name,
+          platform: d.from || d.platform || platform || 'SHOPEE',
+          ecommerce_name: d.ecommerce_name || ecommerce_name,
           date: d.date,
           invoice: d.invoice,
-          status: d.status,
+          status: d.status || order_status,
           total_price: d.total_price,
           ekspedisi: d.ekspedisi,
           items: (d.items || []).map((it: any) => ({
@@ -154,6 +213,11 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
           scan_timestamp: finalScanTimestamp,
           packed: finalPacked,
           pack_timestamp: finalPackTimestamp,
+          buyer_username: resolvedBuyer,
+          buyer_id: resolvedBuyerId,
+          shop_id: resolvedShopId,
+          has_penjualan: resolvedHasPenjualan,
+          has_retur: resolvedHasRetur,
         });
       } else if (booking_sn) {
         // Kilat order: the marketplace API might not support lookup by booking_sn.
@@ -162,11 +226,11 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
         setDetail({
           id: id || booking_sn,
           id_ecommerce,
-          platform: kd?.platform || 'SHOPEE',
-          ecommerce_name: kd?.ecommerce_name,
+          platform: kd?.platform || platform || 'SHOPEE',
+          ecommerce_name: kd?.ecommerce_name || ecommerce_name,
           date: kd?.tanggal_order,
           invoice: undefined,
-          status: kd?.status || 'PENGIRIMAN KILAT',
+          status: kd?.status || order_status || 'PENGIRIMAN KILAT',
           total_price: kd?.total_harga,
           ekspedisi: kd?.nama_kurir,
           items: (kd?.items || []).map((it: any) => ({
@@ -186,6 +250,11 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
           scan_timestamp: scan_timestamp || null,
           packed: packed || false,
           pack_timestamp: pack_timestamp || null,
+          buyer_username: kd?.buyer_username || buyer_username || '',
+          buyer_id: buyer_id || '',
+          shop_id: shop_id || '',
+          has_penjualan: has_penjualan,
+          has_retur: has_retur,
         });
       }
     } catch (e) {
@@ -414,6 +483,169 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
     } catch (e: any) { console.error('printLabel', e); Alert.alert('Error', e?.message || 'Failed'); }
   };
 
+  const handleChatBuyer = async () => {
+    if (!detail) return;
+
+    const currentPlatform = detail.platform || route.params?.platform || 'SHOPEE';
+    const buyerName = (detail.buyer_username || route.params?.buyer_username || '').trim();
+    const buyerId = String(detail.buyer_id || route.params?.buyer_id || '').trim();
+
+    setChatLoading(true);
+    let matchedChat: any = null;
+
+    try {
+      // Coba cari percakapan yang sudah ada di /get/ecommerce/chats
+      const chatsRes = await ApiService.authenticatedRequest('/get/ecommerce/chats', {
+        method: 'GET',
+      });
+
+      if (chatsRes?.status && Array.isArray(chatsRes.data)) {
+        const chatList = chatsRes.data;
+        const buyerNameLower = buyerName.toLowerCase();
+        const buyerIdLower = buyerId.toLowerCase();
+
+        matchedChat = chatList.find((c: any) => {
+          const matchEcommerce =
+            !detail.id_ecommerce || Number(c.id_ecommerce) === Number(detail.id_ecommerce);
+          const matchPlatform = !c.platform || c.platform.toUpperCase() === currentPlatform.toUpperCase();
+
+          if (!matchEcommerce && !matchPlatform) return false;
+
+          const cBuyerName = String(c.buyer?.name || c.buyer?.username || c.name || '').toLowerCase().trim();
+          const cBuyerId = String(c.buyer?.id || c.buyer_id || '').toLowerCase().trim();
+
+          if (buyerIdLower && cBuyerId && cBuyerId === buyerIdLower) {
+            return true;
+          }
+
+          if (buyerNameLower && cBuyerName) {
+            if (
+              cBuyerName === buyerNameLower ||
+              cBuyerName.includes(buyerNameLower) ||
+              buyerNameLower.includes(cBuyerName)
+            ) {
+              return true;
+            }
+          }
+
+          return false;
+        });
+      }
+    } catch (e) {
+      console.warn('[OrderDetail] Error fetching chats for buyer match:', e);
+    } finally {
+      setChatLoading(false);
+    }
+
+    // Langsung redirect ke room chat pembeli tanpa alert/modal!
+    const targetBuyer = {
+      name: matchedChat?.buyer?.name || buyerName || 'Pembeli',
+      id: String(matchedChat?.buyer?.id || buyerId || ''),
+      thumbnail_url: matchedChat?.buyer?.thumbnail_url || '',
+    };
+
+    (navigation as any).navigate('EcommerceChatDetail', {
+      msgId: matchedChat?.msg_id || String(buyerId || detail.id || detail.booking_sn || ''),
+      idEcommerce: Number(matchedChat?.id_ecommerce || detail.id_ecommerce || route.params?.id_ecommerce || 0),
+      buyer: targetBuyer,
+      platform: matchedChat?.platform || currentPlatform,
+      shopName: matchedChat?.shop_name || matchedChat?.toko_name || detail.ecommerce_name || route.params?.ecommerce_name,
+    });
+  };
+
+  const handleSendReminder = async () => {
+    if (!detail || reminderLoading) return;
+    const platform = (detail.platform || '').toUpperCase();
+    if (platform === 'TIKTOK') {
+      Alert.alert(
+        'Platform Belum Mendukung',
+        'Platform TikTok belum menyediakan API Seller Chat untuk mengirim pesan langsung ke pembeli.'
+      );
+      return;
+    }
+
+    const orderSn = detail.id || detail.booking_sn || '';
+    setReminderLoading(true);
+    try {
+      const res = await sendPaymentReminder({
+        order_id: detail.id,
+        order_sn: orderSn,
+        buyer_id: detail.buyer_id || '',
+        buyer_username: detail.buyer_username || '',
+        id_ecommerce: Number(detail.id_ecommerce || 0),
+        shop_id: String(detail.shop_id || ''),
+        platform: platform,
+        custom_message: '',
+      });
+
+      if (res.status || res.success) {
+        Alert.alert('Sukses', res.message || 'Pesan pengingat pembayaran berhasil dikirim ke pembeli!');
+      } else {
+        Alert.alert('Gagal', res.reason || 'Gagal mengirim pengingat pembayaran.');
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Terjadi kesalahan saat mengirim pengingat.');
+    } finally {
+      setReminderLoading(false);
+    }
+  };
+
+  const handleCreateRetur = async () => {
+    if (!canCreate || !detail) { Alert.alert('Permission', 'Anda tidak memiliki akses.'); return; }
+    Alert.alert(
+      'Konfirmasi Buat Retur',
+      `Buat retur untuk pesanan #${detail.id}?`,
+      [
+        { text: 'Batal', style: 'cancel' },
+        {
+          text: 'Ya, Buat Retur',
+          onPress: executeCreateRetur,
+        },
+      ]
+    );
+  };
+
+  const executeCreateRetur = async () => {
+    if (!canCreate || !detail) return;
+    try {
+      const payload = [{
+        platform: detail.platform,
+        id: detail.id,
+        barang: (detail.items || []).map(it => ({
+          price: it.price || 0,
+          name: it.name,
+          sku: it.sku,
+          qty: it.qty,
+          id_online: it.id_online,
+          id_parent: it.id_parent,
+        })),
+        id_ecommerce: detail.id_ecommerce,
+        date: typeof detail.date === 'string' ? detail.date : new Date().toISOString(),
+        invoice: detail.invoice,
+        from_import: false,
+        booking_sn: detail.booking_sn,
+        orderType: detail.orderType,
+        isBookingOrder: !!detail.booking_sn,
+        update_stok: true,
+      }];
+
+      const res = await ApiService.authenticatedRequest('/ecommerce/pembatalan', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+
+      if (res?.status) {
+        Alert.alert('Sukses', 'Retur pesanan berhasil dibuat.');
+        setDetail(prev => prev ? { ...prev, has_retur: true } : null);
+      } else {
+        const err = res?.reason || res?.message || 'Gagal membuat retur';
+        Alert.alert('Gagal', typeof err === 'string' ? err : JSON.stringify(err));
+      }
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || 'Gagal membuat retur');
+    }
+  };
+
   const getStatusColor = (status?: string) => {
     const s = (status || '').toLowerCase();
     if (s.includes('baru') || s.includes('new')) return { bg: '#DBEAFE', text: '#1E40AF' };
@@ -505,6 +737,18 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
         {/* Order Info Card */}
         <View style={styles.infoCard}>
           <Text style={styles.cardTitle}>Order Information</Text>
+
+          {detail.buyer_username ? (
+            <View style={styles.infoRow}>
+              <View style={styles.infoIconContainer}>
+                <Ionicons name="person-outline" size={20} color="#6B7280" />
+              </View>
+              <View style={styles.infoContent}>
+                <Text style={styles.infoLabel}>Buyer / Pembeli</Text>
+                <Text style={styles.infoValue}>{detail.buyer_username}</Text>
+              </View>
+            </View>
+          ) : null}
 
           <View style={styles.infoRow}>
             <View style={styles.infoIconContainer}>
@@ -730,10 +974,33 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
           style={[styles.actionButton, styles.backButton]}
           onPress={() => navigation.goBack()}
         >
-          <Ionicons name="scan-outline" size={18} color="#f59e0b" />
-          <Text style={styles.backButtonText}>Scan Lagi</Text>
+          <Ionicons
+            name={source === 'pesanan_v2' ? 'arrow-back-outline' : 'scan-outline'}
+            size={18}
+            color="#f59e0b"
+          />
+          <Text style={styles.backButtonText} numberOfLines={1}>
+            {source === 'pesanan_v2' ? 'Kembali' : 'Scan Lagi'}
+          </Text>
         </TouchableOpacity>
 
+        {/* Chat Pembeli Button - Available in ALL statuses */}
+        <TouchableOpacity
+          style={[styles.actionButton, styles.chatButton, chatLoading && styles.buttonDisabled]}
+          onPress={handleChatBuyer}
+          disabled={chatLoading}
+        >
+          {chatLoading ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <>
+              <Ionicons name="chatbubble-ellipses-outline" size={17} color="#fff" />
+              <Text style={styles.chatButtonText} numberOfLines={1}>Chat Pembeli</Text>
+            </>
+          )}
+        </TouchableOpacity>
+
+        {/* Status-Aware Action Buttons */}
         {isCancellationPending ? (
           <TouchableOpacity
             style={[
@@ -749,24 +1016,60 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
             ) : (
               <>
                 <Ionicons name="close-circle-outline" size={18} color="#fff" />
-                <Text style={styles.cancelOrderButtonText}>Terima Pembatalan</Text>
+                <Text style={styles.cancelOrderButtonText} numberOfLines={1}>Terima Batal</Text>
               </>
             )}
           </TouchableOpacity>
         ) : isAlreadyCancelled ? (
           <View style={[styles.actionButton, styles.cancelledDisabledButton]}>
             <Ionicons name="ban" size={18} color="#6B7280" />
-            <Text style={styles.cancelledDisabledButtonText}>Pesanan Dibatalkan</Text>
+            <Text style={styles.cancelledDisabledButtonText} numberOfLines={1}>Dibatalkan</Text>
           </View>
+        ) : isUnpaid ? (
+          <TouchableOpacity
+            style={[styles.actionButton, styles.reminderButton, reminderLoading && styles.buttonDisabled]}
+            disabled={reminderLoading}
+            onPress={handleSendReminder}
+          >
+            {reminderLoading ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <>
+                <Ionicons name="notifications-outline" size={17} color="#fff" />
+                <Text style={styles.reminderButtonText} numberOfLines={1}>Ingatkan Bayar</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        ) : isReturn ? (
+          <TouchableOpacity
+            style={[
+              styles.actionButton,
+              styles.returButton,
+              (!canCreate || detail.has_retur) && styles.buttonDisabled,
+            ]}
+            disabled={!canCreate || detail.has_retur}
+            onPress={handleCreateRetur}
+          >
+            <Ionicons name="return-up-back-outline" size={17} color="#fff" />
+            <Text style={styles.returButtonText} numberOfLines={1}>
+              {detail.has_retur ? 'Sudah Retur' : 'Buat Retur'}
+            </Text>
+          </TouchableOpacity>
         ) : (
           <>
             <TouchableOpacity
-              style={[styles.actionButton, styles.primaryButton, !canCreate && styles.buttonDisabled]}
-              disabled={!canCreate}
+              style={[
+                styles.actionButton,
+                styles.primaryButton,
+                (!canCreate || detail.has_penjualan) && styles.buttonDisabled,
+              ]}
+              disabled={!canCreate || detail.has_penjualan}
               onPress={createSales}
             >
-              <Ionicons name="cart" size={18} color="#fff" />
-              <Text style={styles.primaryButtonText}>Buat Sales</Text>
+              <Ionicons name="cart-outline" size={17} color="#fff" />
+              <Text style={styles.primaryButtonText} numberOfLines={1}>
+                {detail.has_penjualan ? 'Sales Dibuat' : 'Buat Sales'}
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -774,8 +1077,8 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
               disabled={!canCreate}
               onPress={printLabel}
             >
-              <Ionicons name="print" size={18} color="#111827" />
-              <Text style={styles.secondaryButtonText}>Print</Text>
+              <Ionicons name="print-outline" size={17} color="#111827" />
+              <Text style={styles.secondaryButtonText} numberOfLines={1}>Print</Text>
             </TouchableOpacity>
           </>
         )}
@@ -1173,9 +1476,9 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: '#fff',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    paddingBottom: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    paddingBottom: 14,
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
     shadowColor: '#000',
@@ -1184,16 +1487,18 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 8,
     flexDirection: 'row',
-    gap: 12,
+    alignItems: 'center',
+    gap: 6,
   },
   actionButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
     borderRadius: 8,
-    gap: 6,
+    gap: 4,
   },
   // Lightbox styles
   lightboxOverlay: {
@@ -1266,13 +1571,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#f59e0b',
     shadowColor: '#f59e0b',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
   },
   primaryButtonText: {
     color: '#fff',
-    fontSize: 15,
+    fontSize: 12,
     fontWeight: '700',
   },
   secondaryButton: {
@@ -1282,47 +1587,87 @@ const styles = StyleSheet.create({
   },
   secondaryButtonText: {
     color: '#111827',
-    fontSize: 15,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  chatButton: {
+    backgroundColor: '#059669',
+    shadowColor: '#059669',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  chatButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  reminderButton: {
+    backgroundColor: '#D97706',
+    shadowColor: '#D97706',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  reminderButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  returButton: {
+    backgroundColor: '#EA580C',
+    shadowColor: '#EA580C',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  returButtonText: {
+    color: '#fff',
+    fontSize: 12,
     fontWeight: '700',
   },
   buttonDisabled: {
     opacity: 0.4,
   },
   backButton: {
+    flex: 0,
+    minWidth: 72,
     backgroundColor: '#FEF3C7',
     borderWidth: 1.5,
     borderColor: '#f59e0b',
-    flexShrink: 1,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
   },
   backButtonText: {
     color: '#92400E',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
   },
   cancelOrderButton: {
-    flex: 2,
+    flex: 1,
     backgroundColor: '#DC2626',
     shadowColor: '#DC2626',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
   },
   cancelOrderButtonText: {
     color: '#fff',
-    fontSize: 15,
+    fontSize: 12,
     fontWeight: '700',
   },
   cancelledDisabledButton: {
-    flex: 2,
+    flex: 1,
     backgroundColor: '#F3F4F6',
     borderWidth: 1,
     borderColor: '#E5E7EB',
   },
   cancelledDisabledButtonText: {
     color: '#6B7280',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
   },
 });

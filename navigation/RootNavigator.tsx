@@ -34,6 +34,7 @@ import PerangkatConfigScreen from '../screens/perangkat/PerangkatConfigScreen';
 import KesehatanTokoScreen from '../screens/ecommerce/KesehatanTokoScreen';
 import FlashSaleScreen from '../screens/ecommerce/FlashSale/FlashSaleScreen';
 import CreateFlashSaleScreen from '../screens/ecommerce/FlashSale/CreateFlashSaleScreen';
+import EcommerceChatDetailScreen from '../screens/ecommerce/EcommerceChatDetailScreen';
 import { View, ActivityIndicator } from 'react-native';
 import { logNavigation, logStateChange } from '../utils/logger';
 
@@ -61,6 +62,15 @@ export type AppStackParamList = {
     packed?: boolean;
     pack_timestamp?: string | null;
     booking_sn?: string;
+    buyer_username?: string;
+    buyer_id?: string | number;
+    platform?: string;
+    ecommerce_name?: string;
+    shop_id?: string;
+    order_status?: string;
+    has_penjualan?: boolean;
+    has_retur?: boolean;
+    source?: string;
     // Pre-fetched kilat order data (from booking cache) to avoid blank detail screen
     kilat_order_data?: {
       buyer_username?: string;
@@ -93,6 +103,13 @@ export type AppStackParamList = {
   KesehatanToko: undefined;
   FlashSale: { shopId?: number } | undefined;
   CreateFlashSale: { id_ecommerce: number; shop_name?: string };
+  EcommerceChatDetail: {
+    msgId: string;
+    idEcommerce: number;
+    buyer: any;
+    platform: string;
+    shopName?: string;
+  };
 };
 
 const AuthStack = createNativeStackNavigator();
@@ -192,6 +209,7 @@ export default function RootNavigator() {
       <AppStack.Screen name="KesehatanToko" component={KesehatanTokoScreen} options={{ title: 'Kesehatan Toko' }} />
       <AppStack.Screen name="FlashSale" component={FlashSaleScreen} options={{ headerShown: false }} />
       <AppStack.Screen name="CreateFlashSale" component={CreateFlashSaleScreen} options={{ headerShown: false }} />
+      <AppStack.Screen name="EcommerceChatDetail" component={EcommerceChatDetailScreen} options={{ headerShown: false }} />
     </AppStack.Navigator>
   );
 }
