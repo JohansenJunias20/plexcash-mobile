@@ -84,6 +84,8 @@ import ProsesOtomatisScreen from '../screens/ecommerce/ProsesOtomatisScreen';
 import ProsesOtomatisConfigScreen from '../screens/ecommerce/ProsesOtomatisConfigScreen';
 import PackScreen from '../screens/ecommerce/Pack/PackScreen';
 import KesehatanTokoScreen from '../screens/ecommerce/KesehatanTokoScreen';
+import FlashSaleScreen from '../screens/ecommerce/FlashSale/FlashSaleScreen';
+import CreateFlashSaleScreen from '../screens/ecommerce/FlashSale/CreateFlashSaleScreen';
 
 // LAPORAN Section
 import NeracaScreen from '../screens/laporan/NeracaScreen';
@@ -107,6 +109,7 @@ const PesananV2Stack = createNativeStackNavigator();
 const EcommerceChatStack = createNativeStackNavigator();
 const NaikkanProdukStack = createNativeStackNavigator();
 const ProsesOtomatisStack = createNativeStackNavigator();
+const FlashSaleStack = createNativeStackNavigator();
 const PerangkatStack = createNativeStackNavigator();
 const PembelianStack = createNativeStackNavigator();
 const PenjualanStack = createNativeStackNavigator();
@@ -190,6 +193,7 @@ const OrdersStackScreen = () => (
     <OrdersStack.Screen name="OrdersListMain" component={OrdersListScreen} />
     <OrdersStack.Screen name="OrderDetail" component={OrderDetailScreen} />
     <OrdersStack.Screen name="LabelPreview" component={LabelPreviewScreen} />
+    <OrdersStack.Screen name="EcommerceChatDetail" component={EcommerceChatDetailScreen} />
   </OrdersStack.Navigator>
 );
 
@@ -202,6 +206,7 @@ const PesananV2StackScreen = () => (
     <PesananV2Stack.Screen name="PesananV2Main" component={PesananV2Screen} />
     <PesananV2Stack.Screen name="OrderDetail" component={OrderDetailScreen} />
     <PesananV2Stack.Screen name="LabelPreview" component={LabelPreviewScreen} />
+    <PesananV2Stack.Screen name="EcommerceChatDetail" component={EcommerceChatDetailScreen} />
   </PesananV2Stack.Navigator>
 );
 
@@ -269,6 +274,17 @@ const ProsesOtomatisStackScreen = () => (
     <ProsesOtomatisStack.Screen name="ProsesOtomatisMain" component={ProsesOtomatisScreen} />
     <ProsesOtomatisStack.Screen name="ProsesOtomatisConfig" component={ProsesOtomatisConfigScreen} />
   </ProsesOtomatisStack.Navigator>
+);
+
+const FlashSaleStackScreen = () => (
+  <FlashSaleStack.Navigator
+    screenOptions={{
+      headerShown: false,
+    }}
+  >
+    <FlashSaleStack.Screen name="FlashSaleMain" component={FlashSaleScreen} />
+    <FlashSaleStack.Screen name="CreateFlashSale" component={CreateFlashSaleScreen} />
+  </FlashSaleStack.Navigator>
 );
 
 const PerangkatStackScreen = () => (
@@ -380,6 +396,7 @@ const DrawerNavigatorContent = () => {
 
       {/* ECOMMERCE Section - Using Stack Navigators */}
       <Drawer.Screen name="DiskonScreen" component={DiskonScreen} />
+      <Drawer.Screen name="FlashSale" component={FlashSaleStackScreen} />
       <Drawer.Screen name="Pesanan" component={OrdersStackScreen} />
       <Drawer.Screen name="PesananV2" component={PesananV2StackScreen} />
       <Drawer.Screen name="EcommerceChat" component={EcommerceChatStackScreen} />

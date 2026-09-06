@@ -27,9 +27,11 @@ import {
   IWebSocketChatEvent,
   IWebSocketReplyEvent,
 } from './chat/types/chat.types';
+import UnpaidTemplateModal from '../../components/ecommerce/UnpaidTemplateModal';
 
 export default function EcommerceChatScreen() {
   const navigation = useNavigation();
+  const [templateModalVisible, setTemplateModalVisible] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState<string>('');
   const [platformFilter, setPlatformFilter] = useState<PlatformFilter>('ALL');
@@ -296,7 +298,15 @@ export default function EcommerceChatScreen() {
           <Ionicons name="menu" size={28} color="#f59e0b" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Ecommerce Chat</Text>
-        <View style={styles.headerRight} />
+        <View style={styles.headerRight}>
+          <TouchableOpacity
+            style={styles.headerIconButton}
+            onPress={() => setTemplateModalVisible(true)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="notifications-outline" size={22} color="#f59e0b" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Search bar */}
@@ -481,6 +491,12 @@ export default function EcommerceChatScreen() {
           contentContainerStyle={chats.length === 0 ? styles.emptyList : undefined}
         />
       </View>
+
+      {/* Unpaid Template Settings Modal */}
+      <UnpaidTemplateModal
+        visible={templateModalVisible}
+        onClose={() => setTemplateModalVisible(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -502,7 +518,8 @@ const styles = StyleSheet.create({
   },
   hamburgerButton: { padding: 5 },
   headerTitle: { fontSize: 18, fontWeight: '600', color: '#111827', flex: 1, textAlign: 'center' },
-  headerRight: { width: 38 },
+  headerRight: { width: 38, alignItems: 'flex-end', justifyContent: 'center' },
+  headerIconButton: { padding: 4 },
   loadingOverlay: {
     position: 'absolute',
     top: 0,

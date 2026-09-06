@@ -20,6 +20,7 @@ export interface ItemDetail {
   hargabeli: string;
   hargabeli_exppn: string;
   price_list: string;
+  warehouse_id?: number;
 }
 
 interface EditItemModalProps {
@@ -29,6 +30,7 @@ interface EditItemModalProps {
   item: ItemDetail | null;
   usePPN: boolean;
   ppnRate: number;
+  persentaseBiayaTambahan?: number;
 }
 
 const EditItemModal: React.FC<EditItemModalProps> = ({
@@ -38,6 +40,7 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
   item,
   usePPN,
   ppnRate,
+  persentaseBiayaTambahan = 0,
 }) => {
   const [editedItem, setEditedItem] = useState<ItemDetail | null>(item);
 
@@ -53,12 +56,15 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
   };
 
   const calculateHargaBeli = () => {
+    const persentase = persentaseBiayaTambahan || 0;
     if (usePPN) {
-      const dpp = parseFloat(editedItem.hargabeli_exppn || '0');
+      const pl = parseFloat(editedItem.price_list || editedItem.hargabeli_exppn || '0');
+      const dpp = persentase === 0 ? pl : pl * (1 + persentase);
       return (dpp * (1 + ppnRate / 100)).toFixed(2);
     } else {
-      const priceList = parseFloat(editedItem.price_list || '0');
-      return priceList.toFixed(2);
+      const priceList = parseFloat(editedItem.price_list || editedItem.hargabeli || '0');
+      const finalHb = persentase === 0 ? priceList : priceList * (1 + persentase);
+      return finalHb.toFixed(2);
     }
   };
 
@@ -126,55 +132,42 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
               />
             </View>
 
-            {/* Price List / Harga Exc PPN */}
-            {usePPN ? (
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Harga (Exclude PPN)</Text>
-                <TextInput
-                  style={styles.input}
-                  value={editedItem.hargabeli_exppn}
-                  onChangeText={(val) => {
-                    const dpp = parseFloat(val) || 0;
-                    const inclPPN = dpp * (1 + ppnRate / 100);
-                    setEditedItem({
-                      ...editedItem,
-                      hargabeli_exppn: val,
-                      hargabeli: inclPPN.toFixed(2),
-                    });
-                  }}
-                  keyboardType="numeric"
-                  placeholder="0"
-                />
-              </View>
-            ) : (
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Price List</Text>
-                <TextInput
-                  style={styles.input}
-                  value={editedItem.price_list}
-                  onChangeText={(val) => {
-                    setEditedItem({
-                      ...editedItem,
-                      price_list: val,
-                      hargabeli: val,
-                    });
-                  }}
-                  keyboardType="numeric"
-                  placeholder="0"
-                />
-              </View>
-            )}
+            {/* Price List */}
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>
+                {usePPN ? 'Price List (Harga Exclude PPN)' : 'Price List (Harga Dasar)'}
+              </Text>
+              <TextInput
+                style={styles.input}
+                value={editedItem.price_list}
+                onChangeText={(val) => {
+                  setEditedItem({
+                    ...editedItem,
+                    price_list: val,
+                    hargabeli_exppn: val,
+                    hargabeli: val,
+                  });
+                }}
+                keyboardType="numeric"
+                placeholder="0"
+              />
+            </View>
 
             {/* Harga Beli (Calculated) */}
             <View style={styles.formGroup}>
               <Text style={styles.label}>
-                {usePPN ? 'Harga Incl PPN' : 'Harga Beli'}
+                {usePPN ? 'Harga Beli (Incl PPN & Biaya)' : 'Harga Beli (Incl Biaya)'}
               </Text>
               <TextInput
                 style={[styles.input, styles.inputReadonly]}
                 value={calculateHargaBeli()}
                 editable={false}
               />
+              {persentaseBiayaTambahan > 0 && (
+                <Text style={{ fontSize: 12, color: '#d97706', fontWeight: 'bold', marginTop: 4 }}>
+                  +{(persentaseBiayaTambahan * 100).toFixed(2)}% dari Biaya Tambahan
+                </Text>
+              )}
             </View>
           </ScrollView>
 

@@ -9,6 +9,7 @@ import {
   Platform,
   Alert,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import ApiService from '../../services/api';
 import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import moment from 'moment';
@@ -72,7 +73,7 @@ export default function EcommerceChatDetailScreen() {
 
   // Use custom hooks - pass buyer.id for Shopee send message
   const { messages, loading, error, sendMessage, sendImage, sendProduct, refresh } =
-    useChatMessages(msgId, idEcommerce, buyer?.id);
+    useChatMessages(msgId, idEcommerce, buyer?.id ? String(buyer.id) : undefined);
 
   // Template list state & hook
   const {
@@ -606,23 +607,16 @@ export default function EcommerceChatDetailScreen() {
       return (
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color="#f59e0b" />
-          <Text style={styles.loadingText}>Loading messages...</Text>
-        </View>
-      );
-    }
-
-    if (error) {
-      return (
-        <View style={styles.centerContainer}>
-          <Text style={styles.errorText}>Error: {error}</Text>
+          <Text style={styles.loadingText}>Memuat pesan...</Text>
         </View>
       );
     }
 
     return (
       <View style={styles.centerContainer}>
-        <Text style={styles.emptyText}>No messages yet</Text>
-        <Text style={styles.emptySubtext}>Start the conversation!</Text>
+        <Ionicons name="chatbubbles-outline" size={48} color="#D1D5DB" style={{ marginBottom: 8 }} />
+        <Text style={styles.emptyText}>Belum ada pesan</Text>
+        <Text style={styles.emptySubtext}>Mulai percakapan dengan pembeli ini!</Text>
       </View>
     );
   };

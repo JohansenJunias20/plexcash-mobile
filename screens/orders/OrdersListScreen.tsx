@@ -433,7 +433,8 @@ export default function OrdersListScreen() {
   const onOpenActions = (item: OrderCard) => {
     const canCreate = !!access?.actions?.create;
     const itemStatus = (item.status || '').toUpperCase();
-    const isCancelled = itemStatus.includes('BATAL') || itemStatus.includes('CANCEL') || itemStatus === 'IN_CANCEL';
+    const isCancellationPending = itemStatus === 'PEMBATALAN' || itemStatus === 'IN_CANCEL' || itemStatus.includes('PEMBATALAN') || itemStatus.includes('IN_CANCEL');
+    const isAlreadyCancelled = itemStatus === 'DIBATALKAN' || itemStatus === 'CANCELLED' || itemStatus === 'CANCELED' || itemStatus === 'BATAL';
 
     const buttons: any[] = [
       { text: 'View Details', onPress: () => navigation.navigate('OrderDetail', {
@@ -443,8 +444,10 @@ export default function OrdersListScreen() {
         print_timestamp: item.print_timestamp,
         scanned: item.scanned,
       }) },
-      ...(isCancelled
+      ...(isCancellationPending
         ? [{ text: 'Terima Pembatalan', onPress: () => terimaPembatalan(item), style: canCreate ? 'destructive' as const : 'cancel' as const }]
+        : isAlreadyCancelled
+        ? []
         : [
             { text: 'Create Sales', onPress: () => createSales(item), style: canCreate ? 'default' as const : 'cancel' as const },
             { text: 'Print Label', onPress: () => printLabel(item), style: canCreate ? 'default' as const : 'cancel' as const },
@@ -465,18 +468,9 @@ export default function OrdersListScreen() {
       const detail = await ApiService.authenticatedRequest(`/get/ecommerce/order?id=${item.id}&id_ecommerce=${item.id_ecommerce}`);
       if (!detail?.status) throw new Error(detail?.reason || 'Failed to load order');
       const d = detail.data;
-      const barang = (d.items || []).map((it: any) => ({
-        price: it.price_after_discount ?? it.price ?? 0,
-        name: it.name,
-        sku: it.sku,
-        qty: it.qty,
-        id_online: it.id_online,
-        id_parent: it.id_parent,
-      }));
       const body = [{
         platform: d.from,
         id: d.id,
-        barang,
         id_ecommerce: d.id_ecommerce || item.id_ecommerce,
         date: typeof d.date === 'string' ? d.date : new Date().toISOString(),
         invoice: d.invoice,
@@ -484,14 +478,51 @@ export default function OrdersListScreen() {
         booking_sn: d.booking_sn,
         orderType: d.orderType,
         isBookingOrder: !!d.booking_sn,
-        update_stok: true,
       }];
-      const res = await ApiService.authenticatedRequest('/ecommerce/pembatalan', { method: 'POST', body: JSON.stringify(body) });
+      const res = await ApiService.authenticatedRequest('/ecommerce/pembatalan/accept', { method: 'POST', body: JSON.stringify(body) });
       if (res?.status) {
-        Alert.alert('Sukses', 'Pembatalan pesanan berhasil diterima.');
+        const list = Array.isArray(res.data) ? res.data : (res.data ? [res.data] : []);
+        const itemResult = list[0];
+
+        if (itemResult?.status === 'rejected') {
+          const rawReason = itemResult.reason;
+          const errorMsg = typeof rawReason === 'string'
+            ? rawReason
+            : (rawReason?.message || JSON.stringify(rawReason || 'Permintaan ditolak oleh marketplace'));
+          Alert.alert('Gagal Terima Pembatalan', errorMsg);
+          return;
+        }
+
+        // Also attempt local sales retur
+        try {
+          const barang = (d.items || []).map((it: any) => ({
+            price: it.price_after_discount ?? it.price ?? 0,
+            name: it.name,
+            sku: it.sku,
+            qty: it.qty,
+            id_online: it.id_online,
+            id_parent: it.id_parent,
+          }));
+          const returBody = [{
+            platform: d.from,
+            id: d.id,
+            barang,
+            id_ecommerce: d.id_ecommerce || item.id_ecommerce,
+            date: typeof d.date === 'string' ? d.date : new Date().toISOString(),
+            invoice: d.invoice,
+            from_import: false,
+            booking_sn: d.booking_sn,
+            orderType: d.orderType,
+            isBookingOrder: !!d.booking_sn,
+            update_stok: true,
+          }];
+          await ApiService.authenticatedRequest('/ecommerce/pembatalan', { method: 'POST', body: JSON.stringify(returBody) }).catch(() => null);
+        } catch {}
+
+        Alert.alert('Sukses', 'Pembatalan pesanan berhasil diterima di marketplace.');
         fetchOrders();
       } else {
-        const reason = res?.reason || res?.message || 'Gagal memproses pembatalan';
+        const reason = res?.reason || res?.message || 'Gagal memproses pembatalan ke marketplace';
         Alert.alert('Gagal', reason);
       }
     } catch (e: any) {

@@ -350,6 +350,7 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ navigation, s
       {/* ECOMMERCE Section */}
       {hasAnyTrue(a?.ecommerce) && <SectionHeader title="ECOMMERCE" />}
       {checkAccess(a?.ecommerce?.diskon) && <DrawerItem label="Diskon & Promo" icon="pricetag-outline" onPress={() => navigation.navigate('DiskonScreen')} active={currentRoute === 'DiskonScreen'} />}
+      {checkAccess(a?.ecommerce?.flash_sale ?? true) && <DrawerItem label="Flash Sale Shopee" icon="flash-outline" onPress={() => navigation.navigate('FlashSale')} active={currentRoute === 'FlashSale'} />}
 
       {checkAccess(a?.ecommerce?.pesanan) && <DrawerItem label="Pesanan V2" icon="list-circle" onPress={() => navigation.navigate('PesananV2')} active={currentRoute === 'PesananV2'} badge="NEW" />}
       {checkAccess(a?.ecommerce?.ecommerce_chat) && <DrawerItem label="Chat" icon="chatbubbles" onPress={() => navigation.navigate('EcommerceChat')} active={currentRoute === 'EcommerceChat'} />}

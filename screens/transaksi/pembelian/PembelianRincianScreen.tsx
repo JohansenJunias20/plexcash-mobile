@@ -97,6 +97,54 @@ export default function PembelianRincianScreen() {
     }
   }, [pembelianId]);
 
+  const recalculatePrices = (
+    currentItems: ItemDetail[],
+    biayaStr: string,
+    usePpn: boolean,
+    ppnRate: number
+  ): { items: ItemDetail[]; persentase: number } => {
+    const biayaValue = parseFloat(biayaStr ? biayaStr.toString() : '0');
+    const validBiaya = isNaN(biayaValue) || biayaValue < 0 ? 0 : biayaValue;
+
+    const totalOriginalValue = currentItems.reduce((sum, item) => {
+      const qty = parseFloat(item.qty as any || '0') || 0;
+      const pl = parseFloat(item.price_list || '0') || 0;
+      return sum + (qty * pl);
+    }, 0);
+
+    let persentase = totalOriginalValue > 0 ? (validBiaya / totalOriginalValue) : 0;
+    if (!isFinite(persentase) || isNaN(persentase)) {
+      persentase = 0;
+    }
+
+    const updatedItems = currentItems.map((item) => {
+      const pl = parseFloat(item.price_list || '0') || 0;
+      if (usePpn) {
+        const rate = ppnRate || 11;
+        if (persentase === 0) {
+          item.hargabeli_exppn = pl.toString();
+          item.hargabeli = Number((pl * (1 + rate / 100)).toFixed(2)).toString();
+        } else {
+          const exppnWithBiaya = pl * (1 + persentase);
+          item.hargabeli_exppn = Number(exppnWithBiaya.toFixed(2)).toString();
+          item.hargabeli = Number((exppnWithBiaya * (1 + rate / 100)).toFixed(2)).toString();
+        }
+      } else {
+        if (persentase === 0) {
+          item.hargabeli = pl.toString();
+          item.hargabeli_exppn = pl.toString();
+        } else {
+          const finalHargaBeli = pl * (1 + persentase);
+          item.hargabeli = Number(finalHargaBeli.toFixed(2)).toString();
+          item.hargabeli_exppn = Number(finalHargaBeli.toFixed(2)).toString();
+        }
+      }
+      return item;
+    });
+
+    return { items: updatedItems, persentase };
+  };
+
   const loadData = async () => {
     try {
       setLoading(true);
@@ -142,26 +190,51 @@ export default function PembelianRincianScreen() {
           tanggal_invoice: pembelian.tanggal_invoice?.replace(' ', 'T') || '',
           id_supplier: pembelian.id_supplier,
           keterangan: pembelian.keterangan,
-          biaya_tambahan: pembelian.biaya_tambahan || '0',
-          bayarKontan: pembelian.bayarkontan || '0',
+          biaya_tambahan: pembelian.biaya_tambahan !== null && pembelian.biaya_tambahan !== undefined ? String(pembelian.biaya_tambahan) : '0',
+          bayarKontan: pembelian.bayarkontan !== null && pembelian.bayarkontan !== undefined ? String(pembelian.bayarkontan) : '0',
           kodeBA: pembelian.kodeBAbayar || '',
           useppn: !!pembelian.useppn,
           ppn: pembelian.ppn || 0,
         });
 
-        const items = itemData.data.map((item: any) => ({
+        const biayaTambahanNum = parseFloat(pembelian.biaya_tambahan || '0') || 0;
+        let items: ItemDetail[] = itemData.data.map((item: any) => ({
           id: String(item.id_barang),
-          nama: item.nama,
-          merk: item.merk,
-          kategori: item.kategori,
+          nama: item.nama || '(Barang Dihapus)',
+          merk: item.merk || '-',
+          kategori: item.kategori || '-',
           qty: item.qty,
           qty_print: String(item.qty),
-          hargabeli: item.harga_beli,
-          hargabeli_exppn: item.harga_beli_exppn,
-          price_list: item.price_list,
+          hargabeli: String(item.harga_beli || '0'),
+          hargabeli_exppn: String(item.harga_beli_exppn || '0'),
+          price_list: String(item.price_list || '0'),
           warehouse_id: item.warehouse_id,
         }));
-        setItemDetails(items);
+
+        // Infer price_list if price_list was 0 (legacy data)
+        const totalHb = items.reduce((sum: number, it: any) => sum + (parseFloat(it.hargabeli || '0') * (parseFloat(it.qty as any) || 0)), 0);
+        if (biayaTambahanNum > 0 && totalHb > biayaTambahanNum) {
+          const totalOriginalEstimated = totalHb - biayaTambahanNum;
+          const ratio = totalOriginalEstimated / totalHb;
+          items = items.map((it: any) => {
+            if (parseFloat(it.price_list || '0') <= 0) {
+              const hb = parseFloat(it.hargabeli || '0') || 0;
+              it.price_list = Number((hb * ratio).toFixed(2)).toString();
+            }
+            return it;
+          });
+        } else {
+          items = items.map((it: any) => {
+            if (parseFloat(it.price_list || '0') <= 0) {
+              it.price_list = it.hargabeli;
+            }
+            return it;
+          });
+        }
+
+        const res = recalculatePrices(items, pembelian.biaya_tambahan || '0', !!pembelian.useppn, pembelian.ppn || 0);
+        setItemDetails(res.items);
+        setPersentaseBiayaTambahan(res.persentase);
 
         if (items.length > 0 && items[0].warehouse_id) {
           setSelectedWarehouse(items[0].warehouse_id);
@@ -180,15 +253,6 @@ export default function PembelianRincianScreen() {
 
         if (warehouseData.status) {
           setWarehouses(warehouseData.data);
-        }
-
-        // Calculate persentase biaya tambahan
-        const totalPriceList = items.reduce(
-          (total: number, item: any) => total + parseFloat(item.price_list || '0') * item.qty,
-          0
-        );
-        if (totalPriceList > 0) {
-          setPersentaseBiayaTambahan(parseFloat(pembelian.biaya_tambahan || '0') / totalPriceList);
         }
       } else {
         Alert.alert('Error', 'Failed to load data');
@@ -212,18 +276,24 @@ export default function PembelianRincianScreen() {
   };
 
   const handleBarangSelect = (items: BarangItem[]) => {
-    const newItems = items.map((item) => ({
-      id: String(item.id),
-      nama: item.nama,
-      merk: item.merk || '',
-      kategori: item.kategori || '',
-      qty: 0,
-      qty_print: '0',
-      hargabeli: String(item.hpp || 0),
-      hargabeli_exppn: String((item.hpp || 0) * 100 / (data.ppn + 100)),
-      price_list: String(item.hpp || 0),
-    }));
-    setItemDetails([...itemDetails, ...newItems]);
+    const newItems: ItemDetail[] = items.map((item) => {
+      const rawHb = (item.hpp || 0).toString();
+      return {
+        id: String(item.id),
+        nama: item.nama,
+        merk: item.merk || '',
+        kategori: item.kategori || '',
+        qty: 1,
+        qty_print: '1',
+        hargabeli: rawHb,
+        hargabeli_exppn: rawHb,
+        price_list: rawHb,
+      };
+    });
+    const combined = [...itemDetails, ...newItems];
+    const res = recalculatePrices(combined, data.biaya_tambahan, data.useppn, data.ppn);
+    setItemDetails(res.items);
+    setPersentaseBiayaTambahan(res.persentase);
     setShowBarangModal(false);
   };
 
@@ -233,13 +303,16 @@ export default function PembelianRincianScreen() {
       nama: newBarang.nama,
       merk: newBarang.merk,
       kategori: newBarang.kategori,
-      qty: 0,
-      qty_print: '0',
+      qty: 1,
+      qty_print: '1',
       hargabeli: '0',
       hargabeli_exppn: '0',
       price_list: '0',
     };
-    setItemDetails([...itemDetails, newItem]);
+    const combined = [...itemDetails, newItem];
+    const res = recalculatePrices(combined, data.biaya_tambahan, data.useppn, data.ppn);
+    setItemDetails(res.items);
+    setPersentaseBiayaTambahan(res.persentase);
     setShowTambahBarangModal(false);
   };
 
@@ -252,7 +325,9 @@ export default function PembelianRincianScreen() {
   const handleSaveEditItem = (item: ItemDetail) => {
     const newItems = [...itemDetails];
     newItems[editingItemIndex] = item;
-    setItemDetails(newItems);
+    const res = recalculatePrices(newItems, data.biaya_tambahan, data.useppn, data.ppn);
+    setItemDetails(res.items);
+    setPersentaseBiayaTambahan(res.persentase);
     setShowEditItemModal(false);
   };
 
@@ -268,7 +343,9 @@ export default function PembelianRincianScreen() {
           onPress: () => {
             const newItems = [...itemDetails];
             newItems.splice(index, 1);
-            setItemDetails(newItems);
+            const res = recalculatePrices(newItems, data.biaya_tambahan, data.useppn, data.ppn);
+            setItemDetails(res.items);
+            setPersentaseBiayaTambahan(res.persentase);
           },
         },
       ]
@@ -445,6 +522,13 @@ export default function PembelianRincianScreen() {
     return date.toLocaleDateString('id-ID', options);
   };
 
+  const calculatePriceListTotal = (): number => {
+    return itemDetails.reduce((total, item) => {
+      const pl = parseFloat(item.price_list || item.hargabeli || '0');
+      return total + pl * item.qty;
+    }, 0);
+  };
+
   const calculateItemTotal = (): number => {
     return itemDetails.reduce((total, item) => {
       const price = parseFloat(item.hargabeli || '0');
@@ -554,12 +638,20 @@ export default function PembelianRincianScreen() {
             value={data.biaya_tambahan}
             onChangeText={(val) => {
               if (/^\d*\.?\d*$/.test(val)) {
-                setData({ ...data, biaya_tambahan: val });
+                setData((prev) => ({ ...prev, biaya_tambahan: val }));
+                const res = recalculatePrices(itemDetails, val, data.useppn, data.ppn);
+                setItemDetails(res.items);
+                setPersentaseBiayaTambahan(res.persentase);
               }
             }}
             keyboardType="numeric"
             placeholder="0"
           />
+          {parseFloat(data.biaya_tambahan || '0') > 0 && (
+            <Text style={{ fontSize: 13, color: '#d97706', fontWeight: 'bold', marginTop: 4 }}>
+              +{(persentaseBiayaTambahan * 100).toFixed(2)}% ke harga beli
+            </Text>
+          )}
         </View>
 
         {/* Bayar Kontan - Editable */}
@@ -674,18 +766,22 @@ export default function PembelianRincianScreen() {
                     <Text style={styles.itemDetailLabel}>Qty Print:</Text>
                     <Text style={styles.itemDetailValue}>{item.qty_print}</Text>
                   </View>
-                  {!data.useppn && (
-                    <View style={styles.itemDetailRow}>
-                      <Text style={styles.itemDetailLabel}>Price List:</Text>
-                      <Text style={styles.itemDetailValue}>
-                        Rp {formatCurrency(item.price_list)}
-                      </Text>
-                    </View>
-                  )}
                   <View style={styles.itemDetailRow}>
-                    <Text style={styles.itemDetailLabel}>Harga Beli:</Text>
-                    <Text style={[styles.itemDetailValue, styles.itemSubtotal]}>
+                    <Text style={styles.itemDetailLabel}>Harga Beli (Dasar):</Text>
+                    <Text style={styles.itemDetailValue}>
+                      Rp {formatCurrency(item.price_list)}
+                    </Text>
+                  </View>
+                  <View style={styles.itemDetailRow}>
+                    <Text style={styles.itemDetailLabel}>Harga Beli (+Biaya):</Text>
+                    <Text style={[styles.itemDetailValue, styles.itemSubtotal, { color: '#059669', fontWeight: 'bold' }]}>
                       Rp {formatCurrency(item.hargabeli)}
+                    </Text>
+                  </View>
+                  <View style={styles.itemDetailRow}>
+                    <Text style={styles.itemDetailLabel}>Subtotal:</Text>
+                    <Text style={[styles.itemDetailValue, { fontWeight: '600' }]}>
+                      Rp {formatCurrency(item.qty * (parseFloat(item.hargabeli || '0')))}
                     </Text>
                   </View>
                 </View>
@@ -710,10 +806,16 @@ export default function PembelianRincianScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Total */}
+            {/* Totals */}
             <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>Total:</Text>
-              <Text style={styles.totalValue}>Rp {formatCurrency(calculateItemTotal())}</Text>
+              <Text style={styles.totalLabel}>Total Nilai Dasar:</Text>
+              <Text style={styles.totalValue}>Rp {formatCurrency(calculatePriceListTotal())}</Text>
+            </View>
+            <View style={styles.totalRow}>
+              <Text style={styles.totalLabel}>Total Harga Beli (+Biaya):</Text>
+              <Text style={[styles.totalValue, { color: '#059669', fontWeight: 'bold' }]}>
+                Rp {formatCurrency(calculateItemTotal())}
+              </Text>
             </View>
           </>
         )}
@@ -772,28 +874,50 @@ export default function PembelianRincianScreen() {
 
       {/* Summary Card */}
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Ringkasan</Text>
+        <Text style={styles.cardTitle}>Ringkasan Pembelian</Text>
+
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>Total Nilai Dasar:</Text>
+          <Text style={styles.summaryValue}>Rp {formatCurrency(calculatePriceListTotal())}</Text>
+        </View>
+
+        {parseFloat(data.biaya_tambahan || '0') > 0 && (
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryLabel}>
+              Biaya Tambahan (+{(persentaseBiayaTambahan * 100).toFixed(2)}%):
+            </Text>
+            <Text style={[styles.summaryValue, { color: '#d97706', fontWeight: 'bold' }]}>
+              + Rp {formatCurrency(data.biaya_tambahan)}
+            </Text>
+          </View>
+        )}
 
         <View style={styles.summaryRow}>
           <Text style={styles.summaryLabel}>Total Pembelian:</Text>
-          <Text style={styles.summaryValue}>Rp {formatCurrency(calculateItemTotal())}</Text>
+          <Text style={[styles.summaryValue, { color: '#059669', fontWeight: 'bold' }]}>
+            Rp {formatCurrency(calculateItemTotal())}
+          </Text>
         </View>
 
         <View style={styles.summaryRow}>
           <Text style={styles.summaryLabel}>Total Bayar:</Text>
-          <Text style={styles.summaryValue}>
-            Rp {formatCurrency(calculatePaymentTotal())}
-          </Text>
+          <Text style={styles.summaryValue}>Rp {formatCurrency(calculatePaymentTotal())}</Text>
         </View>
 
-        <View style={styles.divider} />
-
         <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabelBold}>Sisa:</Text>
-          <Text style={[
-            styles.summaryValueBold,
-            (calculateItemTotal() - calculatePaymentTotal()) > 0 ? styles.sisaPositive : styles.sisaZero
-          ]}>
+          <Text style={styles.summaryLabel}>Sisa Hutang:</Text>
+          <Text
+            style={[
+              styles.summaryValue,
+              {
+                fontWeight: 'bold',
+                color:
+                  calculateItemTotal() - calculatePaymentTotal() > 0
+                    ? '#ef4444'
+                    : '#10b981',
+              },
+            ]}
+          >
             Rp {formatCurrency(calculateItemTotal() - calculatePaymentTotal())}
           </Text>
         </View>
@@ -808,6 +932,7 @@ export default function PembelianRincianScreen() {
           <Ionicons name="print-outline" size={20} color="#fff" />
           <Text style={styles.actionButtonText}>Print Barcode</Text>
         </TouchableOpacity>
+
         <TouchableOpacity
           style={[
             styles.actionButton,
@@ -817,17 +942,12 @@ export default function PembelianRincianScreen() {
           onPress={handleSave}
           disabled={isSaveDisabled()}
         >
-          {saving ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
-            <>
-              <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
-              <Text style={styles.actionButtonText}>Simpan</Text>
-            </>
-          )}
+          <Ionicons name="save-outline" size={20} color="#fff" />
+          <Text style={styles.actionButtonText}>
+            {saving ? 'Menyimpan...' : 'Simpan Perubahan'}
+          </Text>
         </TouchableOpacity>
       </View>
-
       <View style={styles.bottomSpacer} />
     </ScrollView>
 
@@ -862,6 +982,7 @@ export default function PembelianRincianScreen() {
       item={editingItem}
       usePPN={data.useppn}
       ppnRate={data.ppn}
+      persentaseBiayaTambahan={persentaseBiayaTambahan}
     />
   </SafeAreaView>
   );
