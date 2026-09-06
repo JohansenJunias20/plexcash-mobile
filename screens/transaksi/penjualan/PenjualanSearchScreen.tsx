@@ -322,7 +322,7 @@ export default function PenjualanSearchScreen() {
 
   const handleNavigateToDetail = (id: number) => {
     // Navigate to PenjualanRincianScreen
-    navigation.navigate('PenjualanRincian' as never, { id } as never);
+    (navigation.navigate as any)('PenjualanRincian', { id });
   };
 
   // Filter items

@@ -16,10 +16,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, DrawerActions } from '@react-navigation/native';
-import { API_BASE_URL } from '../../services/api';
+import ApiService, { API_BASE_URL } from '../../services/api';
 import { getTokenAuth } from '../../services/token';
 import { useAuth } from '../../context/AuthContext';
-import { Picker } from '@react-native-picker/picker'; // You might need this or just use a custom dropdown
+import { Picker } from '@react-native-picker/picker';
 
 export interface BaganAkunItem {
   kode: string;
@@ -29,6 +29,14 @@ export interface BaganAkunItem {
   kelompok: number;
   lock: boolean | null;
   stop: boolean | number;
+}
+
+export interface BaganAkunFormData extends Partial<BaganAkunItem> {
+  editMode?: boolean;
+  originalKode?: string;
+  originalKodeInduk?: string;
+  originalDepth?: number;
+  kodeInduk?: string;
 }
 
 const generateNewKode = (parentKode: string, children: BaganAkunItem[]) => {
@@ -63,7 +71,7 @@ const generateNewKode = (parentKode: string, children: BaganAkunItem[]) => {
   return parentKode + (usedDot ? '.' : '') + (maxNum + 1);
 };
 
-export default function BaganAkunListScreen(): JSX.Element {
+export default function BaganAkunListScreen(): React.ReactNode {
   const navigation = useNavigation<any>();
   const { signOut } = useAuth();
   const [items, setItems] = useState<BaganAkunItem[]>([]);
@@ -73,10 +81,15 @@ export default function BaganAkunListScreen(): JSX.Element {
   const [filterType, setFilterType] = useState<string>('ALL');
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
 
-  // Modal State for Add/Edit
+  // Modal & Selection State
+  const [selectedItem, setSelectedItem] = useState<BaganAkunItem | null>(null);
+  const [showActionSheet, setShowActionSheet] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [formSaving, setFormSaving] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<BaganAkunItem | null>(null);
-  const [formData, setFormData] = useState<Partial<BaganAkunItem>>({});
+  const [formData, setFormData] = useState<BaganAkunFormData>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fetchItems = async () => {
@@ -683,8 +696,8 @@ export default function BaganAkunListScreen(): JSX.Element {
                 style={styles.checkboxContainer}
                 onPress={() => setFormData((p) => ({ ...p, stop: !p.stop }))}
               >
-                <View style={[styles.checkbox, formData.stop && styles.checkboxChecked]}>
-                  {formData.stop && <Ionicons name="checkmark" size={16} color="white" />}
+                <View style={[styles.checkbox, !!formData.stop && styles.checkboxChecked]}>
+                  {!!formData.stop && <Ionicons name="checkmark" size={16} color="white" />}
                 </View>
                 <View>
                   <Text style={styles.checkboxLabel}>Bukan Induk / Bisa Transaksi (STOP)</Text>

@@ -352,7 +352,7 @@ export default function PesananV2Screen() {
 
   // Live Sync Effect (matches Web's behavior for syncing from Marketplace)
   useEffect(() => {
-    if (orderTypeFilter === 'standard' || ecommerceList.length === 0 || (currentTab === 'SEMUA' && orderTypeFilter === 'semua')) {
+    if (orderTypeFilter === 'standard' || ecommerceList.length === 0) {
       return;
     }
 

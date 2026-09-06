@@ -246,7 +246,7 @@ export default function PembelianSearchScreen() {
 
   const handleNavigateToDetail = (id: number) => {
     // Navigate to PembelianRincianScreen
-    navigation.navigate('PembelianRincian' as never, { id } as never);
+    (navigation.navigate as any)('PembelianRincian', { id });
   };
 
   // Filter items

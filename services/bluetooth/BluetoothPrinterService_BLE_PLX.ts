@@ -28,6 +28,8 @@ export interface ReceiptData {
   total: number;
   payment?: number;
   change?: number;
+  paperSize?: string;
+  language?: string;
 }
 
 /**
@@ -484,8 +486,8 @@ class BluetoothPrinterService_BLE_PLX implements IBluetoothPrinterService {
       console.log('🖨️ [BT-SERVICE-PLX] Printing receipt to Bluetooth printer...');
 
       // Get paper size and language from data (with defaults)
-      const paperWidth = data.paperSize || '80mm';
-      const language = data.language || 'id';
+      const paperWidth = (data.paperSize === '58mm' ? '58mm' : '80mm');
+      const language = (data.language === 'en' ? 'en' : 'id');
 
       // Generate ESC/POS commands for thermal printer
       const escPosData = this.generateReceiptESCPOS(data, paperWidth, language);

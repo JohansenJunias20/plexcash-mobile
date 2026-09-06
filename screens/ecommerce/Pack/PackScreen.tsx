@@ -1568,37 +1568,4 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#111827',
   },
-  controlsContainer: {
-    padding: 16,
-    backgroundColor: '#F9FAFB',
-  },
-  pickerContainer: {
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-    backgroundColor: 'white',
-    height: 50,
-  },
-  picker: {
-    height: 50,
-  },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#d1d5db',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 8,
-    minWidth: 140,
-    justifyContent: 'center',
-  },
-  actionButtonActive: {
-    backgroundColor: '#3B82F6',
-  },
-  actionBtnText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: 'bold',
-    marginLeft: 8,
-  },
 });

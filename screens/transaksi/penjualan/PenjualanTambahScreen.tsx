@@ -472,7 +472,7 @@ export default function PenjualanTambahScreen() {
           harga_grosir: item.harga_grosir,
           qty_grosir: item.qty_grosir,
           harga_normal: item.hargajual,
-          is_wholesale_active: shouldUseWholesale,
+          is_wholesale_active: !!shouldUseWholesale,
         });
       }
     }

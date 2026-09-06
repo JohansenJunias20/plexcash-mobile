@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, useWindowDimensions, ActivityIndicator, FlatList, RefreshControl, Alert, Modal, Platform, StatusBar, Switch } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, useWindowDimensions, ActivityIndicator, FlatList, RefreshControl, Alert, Modal, Platform, StatusBar, Switch, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { TabView, TabBar } from 'react-native-tab-view';
 import { Ionicons } from '@expo/vector-icons';
@@ -60,6 +60,22 @@ export default function DiskonScreen({ navigation }: any) {
   const [analisisFilterEtalase, setAnalisisFilterEtalase] = useState<'all' | 'ada' | 'tidak'>('all');
   const [analisisFilterHpp, setAnalisisFilterHpp] = useState<'all' | 'ada' | 'tidak'>('all');
   const [analisisFilterBound, setAnalisisFilterBound] = useState<'all' | 'ada' | 'tidak'>('all');
+
+  // Cek Massal (bulk price check / auto-selection)
+  const [selectedLivePromoIds, setSelectedLivePromoIds] = useState<Set<string>>(new Set());
+  const [selectedShopeeDetailKeys, setSelectedShopeeDetailKeys] = useState<Set<string>>(new Set());
+  const [bulkCheckOpen, setBulkCheckOpen] = useState(false);
+  const [bulkCheckTarget, setBulkCheckTarget] = useState<'main' | 'detail'>('main');
+  const [bulkCheckPriceA, setBulkCheckPriceA] = useState<'current_promo' | 'hj2' | 'hpp'>('current_promo');
+  const [bulkCheckPriceB, setBulkCheckPriceB] = useState<'current_promo' | 'hj2' | 'hpp'>('hpp');
+  const [bulkCheckOperator, setBulkCheckOperator] = useState<'lt' | 'lte' | 'gt' | 'gte' | 'eq'>('lt');
+  const [bulkCheckVal, setBulkCheckVal] = useState('30');
+  const [loadingBulkCheck, setLoadingBulkCheck] = useState(false);
+  const [checkReportOpen, setCheckReportOpen] = useState(false);
+  const [checkReportMatched, setCheckReportMatched] = useState<any[]>([]);
+  const [checkReportUnmatched, setCheckReportUnmatched] = useState<any[]>([]);
+
+  const livePromoKey = (item: any) => `${item.discount_id}:${item.id_ecommerce}`;
 
   const openAddModalWithItems = (items: any[], shopId?: number) => {
     setPreselectedItems(items);
@@ -411,6 +427,130 @@ export default function DiskonScreen({ navigation }: any) {
     }
   };
 
+  const handleSelectCheckPreset = (preset: string) => {
+    switch (preset) {
+      case 'margin_30_hpp': setBulkCheckPriceA('current_promo'); setBulkCheckPriceB('hpp'); setBulkCheckOperator('lt'); setBulkCheckVal('30'); break;
+      case 'margin_40_hpp': setBulkCheckPriceA('current_promo'); setBulkCheckPriceB('hpp'); setBulkCheckOperator('lt'); setBulkCheckVal('40'); break;
+      case 'margin_80_hpp': setBulkCheckPriceA('current_promo'); setBulkCheckPriceB('hpp'); setBulkCheckOperator('lt'); setBulkCheckVal('80'); break;
+      case 'margin_90_hpp': setBulkCheckPriceA('current_promo'); setBulkCheckPriceB('hpp'); setBulkCheckOperator('lt'); setBulkCheckVal('90'); break;
+      case 'promo_lt_hpp': setBulkCheckPriceA('current_promo'); setBulkCheckPriceB('hpp'); setBulkCheckOperator('lt'); setBulkCheckVal('0'); break;
+      case 'disc_gt_50_hj2': setBulkCheckPriceA('current_promo'); setBulkCheckPriceB('hj2'); setBulkCheckOperator('lt'); setBulkCheckVal('-50'); break;
+    }
+  };
+
+  const getBulkCheckValue = (param: string, item: any, editVal?: string) => {
+    if (param === 'current_promo') {
+      return editVal !== undefined ? (parseFloat(editVal.replace(/[^0-9.]/g, '')) || 0) : (Number(item.harga_promo) || 0);
+    } else if (param === 'hj2') {
+      return Number(item.harga_jual_2) || 0;
+    } else if (param === 'hpp') {
+      return Number(item.hpp) || 0;
+    }
+    return 0;
+  };
+
+  const evalBulkCheckMatch = (valA: number, valB: number, pct: number) => {
+    const targetVal = valB * (1 + pct / 100);
+    switch (bulkCheckOperator) {
+      case 'gt': return valA > targetVal;
+      case 'lt': return valA < targetVal;
+      case 'eq': return Math.abs(valA - targetVal) < 0.01;
+      case 'gte': return valA >= targetVal;
+      case 'lte': return valA <= targetVal;
+      default: return false;
+    }
+  };
+
+  const handleApplyBulkCheck = async () => {
+    const pct = parseFloat(bulkCheckVal || '0');
+    if (isNaN(pct)) {
+      Alert.alert('Error', 'Nilai persentase harus berupa angka.');
+      return;
+    }
+    if (bulkCheckPriceA === bulkCheckPriceB) {
+      Alert.alert('Error', 'Parameter Harga Utama dan Harga Pembanding tidak boleh sama.');
+      return;
+    }
+
+    if (bulkCheckTarget === 'main') {
+      const promosToEvaluate = selectedLivePromoIds.size > 0
+        ? livePromos.filter((p: any) => selectedLivePromoIds.has(livePromoKey(p)))
+        : livePromos.filter((p: any) => filterShopName === 'all' || p.shop_name === filterShopName);
+
+      setLoadingBulkCheck(true);
+      setBulkCheckOpen(false);
+      try {
+        const results = await Promise.all(promosToEvaluate.map(async (p: any) => {
+          try {
+            const data = await ApiService.get(`/get/promo_detail_shopee/${p.discount_id}?id_ecommerce=${p.id_ecommerce}&_t=${Date.now()}`);
+            return { promo: p, data };
+          } catch (e) {
+            return { promo: p, data: null };
+          }
+        }));
+
+        const nextSelected = new Set<string>();
+        const matched: any[] = [];
+        const unmatched: any[] = [];
+
+        for (const res of results) {
+          const label = `${res.promo.discount_name} - ${res.promo.shop_name}`;
+          if (res.data && res.data.success) {
+            let hasMatch = false;
+            for (const item of (res.data.data || [])) {
+              if (item.is_active === false) continue;
+              const valA = getBulkCheckValue(bulkCheckPriceA, item);
+              const valB = getBulkCheckValue(bulkCheckPriceB, item);
+              if (evalBulkCheckMatch(valA, valB, pct)) {
+                hasMatch = true;
+              }
+            }
+            if (hasMatch) {
+              nextSelected.add(livePromoKey(res.promo));
+              matched.push({ label });
+            } else {
+              unmatched.push({ label });
+            }
+          } else {
+            unmatched.push({ label: `${label} (Gagal memuat detail)` });
+          }
+        }
+
+        setSelectedLivePromoIds(nextSelected);
+        setCheckReportMatched(matched);
+        setCheckReportUnmatched(unmatched);
+        setCheckReportOpen(true);
+      } catch (e: any) {
+        Alert.alert('Error', 'Gagal mengevaluasi aturan.');
+      } finally {
+        setLoadingBulkCheck(false);
+      }
+    } else {
+      const nextSelected = new Set<string>();
+      const matched: any[] = [];
+      const unmatched: any[] = [];
+      shopeeDetailItems.forEach((item: any) => {
+        if (item.is_active === false) return;
+        const key = `${item.item_id}:${item.model_id || ''}`;
+        const label = `${item.item_name || item.nama || ''}${item.model_name ? ' - ' + item.model_name : ''}`;
+        const editVal = editPriceMap[key];
+        const valA = getBulkCheckValue(bulkCheckPriceA, item, bulkCheckPriceA === 'current_promo' ? editVal : undefined);
+        const valB = getBulkCheckValue(bulkCheckPriceB, item, bulkCheckPriceB === 'current_promo' ? editVal : undefined);
+        if (evalBulkCheckMatch(valA, valB, pct)) {
+          nextSelected.add(key);
+          matched.push({ label });
+        } else {
+          unmatched.push({ label });
+        }
+      });
+      setSelectedShopeeDetailKeys(nextSelected);
+      setCheckReportMatched(matched);
+      setCheckReportUnmatched(unmatched);
+      setBulkCheckOpen(false);
+      setCheckReportOpen(true);
+    }
+  };
+
   // Rendering Tabs
   const renderShopTabs = (currentValue: any, onSelect: (val: any) => void, useName: boolean = false, allowAll: boolean = true) => {
     const data = allowAll ? [{ id: 0, name: 'Semua Toko' }, ...shops] : shops;
@@ -485,7 +625,23 @@ export default function DiskonScreen({ navigation }: any) {
     </View>
   );
 
-  const renderAktif = () => (
+  const renderAktif = () => {
+    const filteredLive = livePromos.filter((p: any) => filterShopName === 'all' || p.shop_name === filterShopName);
+    const allLiveIds = filteredLive.map((p: any) => livePromoKey(p));
+    const allLiveSelected = allLiveIds.length > 0 && allLiveIds.every((k: string) => selectedLivePromoIds.has(k));
+    const liveSelectedCount = selectedLivePromoIds.size;
+
+    const toggleLiveOne = (key: string) => {
+      setSelectedLivePromoIds(prev => {
+        const next = new Set(prev);
+        if (next.has(key)) next.delete(key); else next.add(key);
+        return next;
+      });
+    };
+    const selectAllLive = () => setSelectedLivePromoIds(new Set(allLiveIds));
+    const clearAllLive = () => setSelectedLivePromoIds(new Set());
+
+    return (
     <View style={styles.tabContent}>
       {renderShopTabs(filterShopName, setFilterShopName, true)}
       <View style={[styles.searchBarRow, { marginBottom: 12, paddingHorizontal: 0, borderBottomWidth: 0 }]}>
@@ -500,38 +656,89 @@ export default function DiskonScreen({ navigation }: any) {
           <Ionicons name="search" size={18} color="#6b7280" />
         </TouchableOpacity>
       </View>
-      {loadingAktif ? <ActivityIndicator size="large" color="#f59e0b" style={styles.loader} /> : (
+      {filteredLive.length > 0 && (
+        <View style={styles.selectAllBar}>
+          <TouchableOpacity onPress={allLiveSelected ? clearAllLive : selectAllLive} style={styles.selectAllBtn}>
+            <Ionicons name={allLiveSelected ? 'checkbox' : 'square-outline'} size={20} color="#f59e0b" />
+            <Text style={styles.selectAllText}>
+              {allLiveSelected ? 'Batal Semua' : `Pilih Semua (${filteredLive.length})`}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+      {(loadingAktif || loadingBulkCheck) ? <ActivityIndicator size="large" color="#f59e0b" style={styles.loader} /> : (
         <FlatList
-          data={livePromos.filter((p: any) => filterShopName === 'all' || p.shop_name === filterShopName)}
-          keyExtractor={(item: any) => item.discount_id.toString() + item.id_ecommerce}
+          data={filteredLive}
+          keyExtractor={(item: any) => livePromoKey(item)}
           refreshControl={<RefreshControl refreshing={loadingAktif} onRefresh={fetchLivePromos} />}
-          renderItem={({ item }) => (
-            <TouchableOpacity style={styles.card} onPress={() => openShopeeDetail(item)}>
-              <Text style={styles.cardTitle}>{item.discount_name}</Text>
-              <Text style={styles.cardShop}>{item.shop_name}</Text>
-              <View style={{flexDirection: 'row', justifyContent: 'space-between', marginTop: 8}}>
-                <Text style={styles.cardDetail}>{moment(item.start_time * 1000).format('DD MMM YYYY')}</Text>
-                <Text style={styles.cardDetail}>sd {moment(item.end_time * 1000).format('DD MMM YYYY')}</Text>
-              </View>
-              <View style={[styles.statusBadge, { alignSelf: 'flex-start', marginTop: 8 }, item.status_api === 'ongoing' ? styles.statusActive : styles.statusUpcoming]}>
-                  <Text style={styles.statusText}>{item.status_api.toUpperCase()}</Text>
-              </View>
-              {item.status_api === 'ongoing' && (
-                <TouchableOpacity 
-                  style={{ position: 'absolute', right: 16, bottom: 16, flexDirection: 'row', alignItems: 'center', backgroundColor: '#fee2e2', padding: 6, borderRadius: 6 }}
-                  onPress={() => endLivePromo(item.discount_id, item.id_ecommerce)}
+          renderItem={({ item }) => {
+            const key = livePromoKey(item);
+            const isSelected = selectedLivePromoIds.has(key);
+            return (
+            <TouchableOpacity style={[styles.card, isSelected && styles.cardSelected]} onPress={() => openShopeeDetail(item)}>
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+                <TouchableOpacity
+                  onPress={(e) => { e.stopPropagation(); toggleLiveOne(key); }}
+                  style={{ marginRight: 10, marginTop: 2 }}
                 >
-                  <Ionicons name="trash-outline" size={16} color="#ef4444" />
-                  <Text style={{ color: '#ef4444', fontSize: 12, fontWeight: 'bold', marginLeft: 4 }}>Akhiri</Text>
+                  <Ionicons name={isSelected ? 'checkbox' : 'square-outline'} size={22} color={isSelected ? '#f59e0b' : '#d1d5db'} />
                 </TouchableOpacity>
-              )}
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.cardTitle}>{item.discount_name}</Text>
+                  <Text style={styles.cardShop}>{item.shop_name}</Text>
+                  <View style={{flexDirection: 'row', justifyContent: 'space-between', marginTop: 8}}>
+                    <Text style={styles.cardDetail}>{moment(item.start_time * 1000).format('DD MMM YYYY')}</Text>
+                    <Text style={styles.cardDetail}>sd {moment(item.end_time * 1000).format('DD MMM YYYY')}</Text>
+                  </View>
+                  <View style={[styles.statusBadge, { alignSelf: 'flex-start', marginTop: 8 }, item.status_api === 'ongoing' ? styles.statusActive : styles.statusUpcoming]}>
+                      <Text style={styles.statusText}>{item.status_api.toUpperCase()}</Text>
+                  </View>
+                  {item.status_api === 'ongoing' && (
+                    <TouchableOpacity
+                      style={{ position: 'absolute', right: 16, bottom: 16, flexDirection: 'row', alignItems: 'center', backgroundColor: '#fee2e2', padding: 6, borderRadius: 6 }}
+                      onPress={(e) => { e.stopPropagation(); endLivePromo(item.discount_id, item.id_ecommerce); }}
+                    >
+                      <Ionicons name="trash-outline" size={16} color="#ef4444" />
+                      <Text style={{ color: '#ef4444', fontSize: 12, fontWeight: 'bold', marginLeft: 4 }}>Akhiri</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
             </TouchableOpacity>
-          )}
+            );
+          }}
           ListEmptyComponent={<Text style={styles.emptyText}>Tidak ada promo Shopee aktif.</Text>}
+          contentContainerStyle={{ paddingBottom: liveSelectedCount > 0 ? 100 : 16 }}
         />
       )}
+
+      {liveSelectedCount > 0 && (
+        <View style={styles.selectionActionBar}>
+          <Text style={styles.selectionCount}>{liveSelectedCount} promo dipilih</Text>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TouchableOpacity style={styles.selectionClearBtn} onPress={clearAllLive}>
+              <Text style={styles.selectionClearText}>Batal</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.selectionPromoBtn}
+              onPress={() => {
+                setBulkCheckTarget('main');
+                setBulkCheckPriceA('current_promo');
+                setBulkCheckPriceB('hpp');
+                setBulkCheckOperator('lt');
+                setBulkCheckVal('30');
+                setBulkCheckOpen(true);
+              }}
+            >
+              <Ionicons name="search" size={16} color="#fff" />
+              <Text style={styles.selectionPromoText}>Cek Massal</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </View>
-  );
+    );
+  };
 
   const renderRiwayat = () => (
     <View style={styles.tabContent}>
@@ -878,12 +1085,48 @@ export default function DiskonScreen({ navigation }: any) {
               <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#0f172a' }}>{detailPromo?.discount_name || detailPromo?.nama_promo}</Text>
               <Text style={{ fontSize: 13, color: '#64748b' }}>{detailPromo?.shop_name}</Text>
             </View>
+            {(detailPromo?.status_api === 'ongoing' || detailPromo?.status_api === 'upcoming') && shopeeDetailItems.length > 0 && (
+              <TouchableOpacity
+                onPress={() => {
+                  setBulkCheckTarget('detail');
+                  setBulkCheckPriceA('current_promo');
+                  setBulkCheckPriceB('hpp');
+                  setBulkCheckOperator('lt');
+                  setBulkCheckVal('30');
+                  setBulkCheckOpen(true);
+                }}
+                style={{ backgroundColor: '#eff6ff', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, marginRight: 8 }}
+              >
+                <Text style={{ color: '#2563eb', fontWeight: 'bold', fontSize: 13 }}>Cek Massal</Text>
+              </TouchableOpacity>
+            )}
             {(detailPromo?.status_api === 'ongoing' || detailPromo?.status_api === 'upcoming') && (
               <TouchableOpacity onPress={handleSavePromoPrice} disabled={savingPrice} style={{ backgroundColor: '#f59e0b', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }}>
                 {savingPrice ? <ActivityIndicator size="small" color="#fff" /> : <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 13 }}>Simpan</Text>}
               </TouchableOpacity>
             )}
           </View>
+          {shopeeDetailItems.length > 0 && (
+            <View style={[styles.selectAllBar, { backgroundColor: '#fff' }]}>
+              <TouchableOpacity
+                onPress={() => {
+                  const allKeys = shopeeDetailItems.map((it: any) => `${it.item_id}:${it.model_id || ''}`);
+                  const allSel = allKeys.length > 0 && allKeys.every((k: string) => selectedShopeeDetailKeys.has(k));
+                  setSelectedShopeeDetailKeys(allSel ? new Set() : new Set(allKeys));
+                }}
+                style={styles.selectAllBtn}
+              >
+                <Ionicons
+                  name={shopeeDetailItems.every((it: any) => selectedShopeeDetailKeys.has(`${it.item_id}:${it.model_id || ''}`)) ? 'checkbox' : 'square-outline'}
+                  size={20}
+                  color="#f59e0b"
+                />
+                <Text style={styles.selectAllText}>
+                  {selectedShopeeDetailKeys.size > 0 ? `${selectedShopeeDetailKeys.size} Dipilih` : `Pilih Semua (${shopeeDetailItems.length})`}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
           {loadingShopeeDetail ? (
             <ActivityIndicator size="large" color="#f59e0b" style={{ marginTop: 40 }} />
           ) : (
@@ -891,16 +1134,33 @@ export default function DiskonScreen({ navigation }: any) {
               data={shopeeDetailItems}
               keyExtractor={(_, idx) => idx.toString()}
               contentContainerStyle={{ padding: 16 }}
-              renderItem={({ item }) => (
-                <View style={{ backgroundColor: 'white', padding: 16, borderRadius: 12, marginBottom: 12, borderWidth: 1, borderColor: '#e2e8f0' }}>
+              renderItem={({ item }) => {
+                const detailKey = `${item.item_id}:${item.model_id || ''}`;
+                const isItemSelected = selectedShopeeDetailKeys.has(detailKey);
+                return (
+                <View style={{ backgroundColor: 'white', padding: 16, borderRadius: 12, marginBottom: 12, borderWidth: isItemSelected ? 2 : 1, borderColor: isItemSelected ? '#f59e0b' : '#e2e8f0' }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
-                    <View style={{ flex: 1, paddingRight: 8 }}>
-                      <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#1e293b', marginBottom: 4 }}>
-                        {item.item_name || item.nama || `Item #${item.item_id}`} {item.model_name ? `- ${item.model_name}` : ''}
-                      </Text>
-                      <Text style={{ fontSize: 13, color: '#64748b', marginBottom: 12 }}>
-                        {item.item_sku || item.model_sku || item.sku || ''}
-                      </Text>
+                    <View style={{ flexDirection: 'row', flex: 1, paddingRight: 8 }}>
+                      <TouchableOpacity
+                        onPress={() => {
+                          setSelectedShopeeDetailKeys(prev => {
+                            const next = new Set(prev);
+                            if (next.has(detailKey)) next.delete(detailKey); else next.add(detailKey);
+                            return next;
+                          });
+                        }}
+                        style={{ marginRight: 8, marginTop: 2 }}
+                      >
+                        <Ionicons name={isItemSelected ? 'checkbox' : 'square-outline'} size={20} color={isItemSelected ? '#f59e0b' : '#d1d5db'} />
+                      </TouchableOpacity>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#1e293b', marginBottom: 4 }}>
+                          {item.item_name || item.nama || `Item #${item.item_id}`} {item.model_name ? `- ${item.model_name}` : ''}
+                        </Text>
+                        <Text style={{ fontSize: 13, color: '#64748b', marginBottom: 12 }}>
+                          {item.item_sku || item.model_sku || item.sku || ''}
+                        </Text>
+                      </View>
                     </View>
                     <View style={{ alignItems: 'center' }}>
                       {togglingItem[`${item.item_id}:${item.model_id || ''}`] ? (
@@ -963,7 +1223,8 @@ export default function DiskonScreen({ navigation }: any) {
                     </View>
                   </View>
                 </View>
-              )}
+                );
+              }}
               ListEmptyComponent={
                 <View style={{ alignItems: 'center', marginTop: 30, padding: 20 }}>
                   <Ionicons name="time-outline" size={48} color="#94a3b8" />
@@ -1041,6 +1302,147 @@ export default function DiskonScreen({ navigation }: any) {
                   </View>
                 </View>
               )}
+            />
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal Cek Massal (Bulk Check / Auto-Selection) */}
+      <Modal visible={bulkCheckOpen} transparent animationType="fade" onRequestClose={() => setBulkCheckOpen(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <View style={{ backgroundColor: 'white', borderRadius: 16, width: '100%', maxHeight: '85%', padding: 20 }}>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#0f172a' }}>Cek Massal (Seleksi Otomatis)</Text>
+                <TouchableOpacity onPress={() => setBulkCheckOpen(false)}>
+                  <Ionicons name="close-circle" size={28} color="#94a3b8" />
+                </TouchableOpacity>
+              </View>
+              <Text style={{ fontSize: 13, color: '#64748b', marginBottom: 12 }}>
+                Centang otomatis {bulkCheckTarget === 'main' ? 'promo' : 'barang'} yang memenuhi aturan perbandingan harga di bawah ini.
+              </Text>
+
+              <Text style={styles.bulkCheckLabel}>Template Cepat:</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                {[
+                  { label: 'Margin < 30% dari HPP', preset: 'margin_30_hpp' },
+                  { label: 'Margin < 40% dari HPP', preset: 'margin_40_hpp' },
+                  { label: 'Margin < 80% dari HPP', preset: 'margin_80_hpp' },
+                  { label: 'Margin < 90% dari HPP', preset: 'margin_90_hpp' },
+                  { label: 'Promo < HPP (Rugi)', preset: 'promo_lt_hpp' },
+                  { label: 'Diskon > 50% dari HJ-2', preset: 'disc_gt_50_hj2' },
+                ].map(t => (
+                  <TouchableOpacity key={t.preset} style={styles.bulkCheckPresetChip} onPress={() => handleSelectCheckPreset(t.preset)}>
+                    <Text style={styles.bulkCheckPresetChipText}>{t.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.bulkCheckLabel}>Harga Utama (Parameter 1)</Text>
+              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+                {(['current_promo', 'hj2', 'hpp'] as const).map(v => (
+                  <TouchableOpacity key={v} style={[styles.filterChip, bulkCheckPriceA === v && styles.filterChipActive]} onPress={() => setBulkCheckPriceA(v)}>
+                    <Text style={[styles.filterChipText, bulkCheckPriceA === v && styles.filterChipTextActive]}>
+                      {v === 'current_promo' ? 'Harga Promo' : v === 'hj2' ? 'HJ-2' : 'HPP'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.bulkCheckLabel}>Harga Pembanding (Parameter 2)</Text>
+              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+                {(['current_promo', 'hj2', 'hpp'] as const).map(v => (
+                  <TouchableOpacity key={v} style={[styles.filterChip, bulkCheckPriceB === v && styles.filterChipActive]} onPress={() => setBulkCheckPriceB(v)}>
+                    <Text style={[styles.filterChipText, bulkCheckPriceB === v && styles.filterChipTextActive]}>
+                      {v === 'current_promo' ? 'Harga Promo' : v === 'hj2' ? 'HJ-2' : 'HPP'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.bulkCheckLabel}>Hubungan (Operator)</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                {([
+                  { v: 'lt', label: '< Kurang dari' },
+                  { v: 'lte', label: '≤ Kurang/sama' },
+                  { v: 'gt', label: '> Lebih dari' },
+                  { v: 'gte', label: '≥ Lebih/sama' },
+                  { v: 'eq', label: '= Sama dengan' },
+                ] as const).map(o => (
+                  <TouchableOpacity key={o.v} style={[styles.filterChip, bulkCheckOperator === o.v && styles.filterChipActive]} onPress={() => setBulkCheckOperator(o.v)}>
+                    <Text style={[styles.filterChipText, bulkCheckOperator === o.v && styles.filterChipTextActive]}>{o.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.bulkCheckLabel}>Persentase Selisih (%)</Text>
+              <TextInput
+                style={styles.analisisSearchInput}
+                keyboardType="numeric"
+                value={bulkCheckVal}
+                onChangeText={setBulkCheckVal}
+                placeholder="30"
+              />
+
+              <View style={{ backgroundColor: '#eff6ff', borderRadius: 8, padding: 10, marginTop: 12, marginBottom: 4 }}>
+                <Text style={{ fontSize: 12, color: '#1e3a8a' }}>
+                  Aturan: {bulkCheckPriceA === 'current_promo' ? 'Harga Promo' : bulkCheckPriceA === 'hj2' ? 'HJ-2' : 'HPP'}
+                  {' '}{bulkCheckOperator === 'lt' ? '<' : bulkCheckOperator === 'lte' ? '≤' : bulkCheckOperator === 'gt' ? '>' : bulkCheckOperator === 'gte' ? '≥' : '='}{' '}
+                  {bulkCheckPriceB === 'current_promo' ? 'Harga Promo' : bulkCheckPriceB === 'hj2' ? 'HJ-2' : 'HPP'}
+                  {' '}{(parseFloat(bulkCheckVal || '0') >= 0 ? '+' : '')}{bulkCheckVal || '0'}%
+                </Text>
+              </View>
+
+              <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 16 }}>
+                <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setBulkCheckOpen(false)}>
+                  <Text style={{ color: '#374151', fontWeight: '600' }}>Batal</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.selectionPromoBtn, (bulkCheckPriceA === bulkCheckPriceB || !bulkCheckVal || isNaN(parseFloat(bulkCheckVal))) && { opacity: 0.5 }]}
+                  disabled={bulkCheckPriceA === bulkCheckPriceB || !bulkCheckVal || isNaN(parseFloat(bulkCheckVal))}
+                  onPress={handleApplyBulkCheck}
+                >
+                  <Text style={styles.selectionPromoText}>Terapkan Cek</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal Laporan Cek Massal */}
+      <Modal visible={checkReportOpen} transparent animationType="fade" onRequestClose={() => setCheckReportOpen(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <View style={{ backgroundColor: 'white', borderRadius: 16, width: '100%', maxHeight: '80%', padding: 20 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#0f172a' }}>Laporan Cek Massal</Text>
+              <TouchableOpacity onPress={() => setCheckReportOpen(false)}>
+                <Ionicons name="close-circle" size={28} color="#94a3b8" />
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={[
+                ...checkReportMatched.map((m: any) => ({ ...m, matched: true })),
+                ...checkReportUnmatched.map((m: any) => ({ ...m, matched: false })),
+              ]}
+              keyExtractor={(_, i) => i.toString()}
+              ListHeaderComponent={
+                <Text style={{ fontSize: 13, color: '#374151', marginBottom: 10 }}>
+                  {checkReportMatched.length} melanggar aturan &middot; {checkReportUnmatched.length} sesuai aturan
+                </Text>
+              }
+              renderItem={({ item }: any) => (
+                <View style={{
+                  padding: 10, borderRadius: 8, marginBottom: 8,
+                  backgroundColor: item.matched ? '#fff5f5' : '#f0fdf4',
+                  borderWidth: 1, borderColor: item.matched ? '#fee2e2' : '#dcfce7'
+                }}>
+                  <Text style={{ fontSize: 13, color: item.matched ? '#b91c1c' : '#15803d', fontWeight: '600' }}>
+                    {item.matched ? '❌ ' : '✅ '}{item.label}
+                  </Text>
+                </View>
+              )}
+              ListEmptyComponent={<Text style={styles.emptyText}>Tidak ada data.</Text>}
             />
           </View>
         </View>
@@ -1174,4 +1576,9 @@ const styles = StyleSheet.create({
   selectionClearText: { color: '#fff', fontWeight: '600', fontSize: 13 },
   selectionPromoBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#f59e0b', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8 },
   selectionPromoText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
+  // Cek Massal
+  bulkCheckLabel: { fontSize: 12, color: '#374151', fontWeight: '600', marginBottom: 6 },
+  bulkCheckPresetChip: { backgroundColor: '#f3f4f6', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: '#e5e7eb' },
+  bulkCheckPresetChipText: { fontSize: 11, color: '#374151', fontWeight: '600' },
+  modalCancelBtn: { backgroundColor: '#f3f4f6', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8, justifyContent: 'center' },
 });

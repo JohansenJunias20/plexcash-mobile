@@ -357,11 +357,11 @@ export default function MutasiAkunScreen() {
       case 'KONTAN.PB':
       case 'VALAS.PB':
       case 'RMPB':
-        navigation.navigate('PembelianRincian' as never, { id: parseInt(id, 10) } as never);
+        (navigation.navigate as any)('PembelianRincian', { id: parseInt(id, 10) });
         break;
       case 'PJ':
       case 'KONTAN.PJ':
-        navigation.navigate('PenjualanRincian' as never, { id: parseInt(id, 10) } as never);
+        (navigation.navigate as any)('PenjualanRincian', { id: parseInt(id, 10) });
         break;
       case 'PELUNASAN.PB':
       case 'P.HUTANG':

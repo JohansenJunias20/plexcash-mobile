@@ -640,7 +640,7 @@ const MySubscriptionScreen: React.FC<Props> = ({ navigation }) => {
         try {
           const dbRes = await ApiService.getCurrentDatabase();
           if (!cancelled && dbRes.status && dbRes.data) {
-            const dbData = dbRes.data;
+            const dbData: any = dbRes.data;
             setCurrentDbName(typeof dbData === 'string' ? dbData : dbData.name || JSON.stringify(dbData));
           }
         } catch (e) {

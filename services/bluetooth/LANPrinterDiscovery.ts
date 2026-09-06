@@ -8,7 +8,7 @@ import { LANPrinter } from './LANPrinterService';
  * It searches for _ipp._tcp and _printer._tcp services.
  */
 class LANPrinterDiscovery {
-  private zeroconf: Zeroconf;
+  private zeroconf: any;
   private discoveredPrinters: Map<string, LANPrinter>;
   private isScanning: boolean = false;
 

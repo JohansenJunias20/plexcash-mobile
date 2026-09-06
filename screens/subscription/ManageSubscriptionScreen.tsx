@@ -869,7 +869,7 @@ const ManageSubscriptionScreen: React.FC = () => {
       ]);
 
       if (dbRes.status && Array.isArray(dbRes.data)) {
-        const validDbs = dbRes.data.map(d => {
+        const validDbs = dbRes.data.map((d: any) => {
           if (typeof d === 'string') return d;
           if (d && typeof d === 'object') {
             return d.name || d.database_name || d.database || JSON.stringify(d);

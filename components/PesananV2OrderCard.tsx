@@ -46,6 +46,12 @@ export default function PesananV2OrderCard({ order, isSelected, onToggleSelect, 
   const [showHpp, setShowHpp] = useState(false);
   const [resolvedItems, setResolvedItems] = useState<any[]>(order.items || []);
   const [loadingHpp, setLoadingHpp] = useState(false);
+  const [biayaShopee, setBiayaShopee] = useState<{
+    commission_fee: number;
+    service_fee: number;
+    seller_order_processing_fee: number;
+  } | null>(null);
+  const [biayaShopeeChecked, setBiayaShopeeChecked] = useState(false);
 
   useEffect(() => {
     setResolvedItems(order.items || []);
@@ -53,10 +59,14 @@ export default function PesananV2OrderCard({ order, isSelected, onToggleSelect, 
 
   const handleShowHpp = async () => {
     setShowHpp(true);
-    
+
+    const isShopeeOrder = (order.platform || '').toLowerCase() === 'shopee';
     // Check if we need to resolve HPP (i.e. if any item has HPP = 0 or undefined)
     const itemsToResolve = (order.items || []).filter((item: any) => !item.hpp || Number(item.hpp) === 0);
-    if (itemsToResolve.length === 0) {
+    const needsHppResolve = itemsToResolve.length > 0;
+    const needsBiayaFetch = isShopeeOrder && !biayaShopeeChecked;
+
+    if (!needsHppResolve && !needsBiayaFetch) {
       setResolvedItems(order.items || []);
       return;
     }
@@ -66,7 +76,31 @@ export default function PesananV2OrderCard({ order, isSelected, onToggleSelect, 
       const token = await getTokenAuth();
       if (!token) return;
 
-      const updatedItems = await Promise.all(
+      // Rincian biaya asli (komisi, biaya layanan, biaya proses pesanan) dari Shopee.
+      // Tersedia begitu pesanan sudah dibayar, tidak perlu menunggu status selesai.
+      const biayaPromise = needsBiayaFetch
+        ? (async () => {
+            try {
+              const url = `${API_BASE_URL}/get/ecommerce/order/biaya?id=${order.id_online}&id_ecommerce=${order.ecommerce_id}`;
+              const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+              const data = await res.json();
+              if (data.status && data.data) {
+                setBiayaShopee({
+                  commission_fee: Number(data.data.commission_fee || 0),
+                  service_fee: Number(data.data.service_fee || 0),
+                  seller_order_processing_fee: Number(data.data.seller_order_processing_fee || 0),
+                });
+              }
+            } catch (err) {
+              console.warn('Failed to fetch biaya shopee:', err);
+            } finally {
+              setBiayaShopeeChecked(true);
+            }
+          })()
+        : Promise.resolve();
+
+      const hppPromise = needsHppResolve
+        ? Promise.all(
         (order.items || []).map(async (item: any) => {
           // If already has hpp, use it
           const currentHpp = Number(item.hpp || item.hargabeli || 0);
@@ -138,7 +172,10 @@ export default function PesananV2OrderCard({ order, isSelected, onToggleSelect, 
             hpp: hpp
           };
         })
-      );
+      )
+        : Promise.resolve(order.items || []);
+
+      const [updatedItems] = await Promise.all([hppPromise, biayaPromise]);
 
       setResolvedItems(updatedItems);
     } catch (error) {
@@ -180,6 +217,23 @@ export default function PesananV2OrderCard({ order, isSelected, onToggleSelect, 
 
   const profitText = isProfit ? `+ Rp ${selisih.toLocaleString('id-ID')}` : `- Rp ${Math.abs(selisih).toLocaleString('id-ID')}`;
   const marginText = isProfit ? `(+ ${parseFloat(marginPct.toFixed(1))}%)` : `(${parseFloat(marginPct.toFixed(1))}%)`;
+
+  // Biaya Shopee: kalau pesanan sudah dibayar, Shopee sudah punya rincian biaya ASLI
+  // (komisi + biaya layanan + biaya proses pesanan) lewat get_escrow_detail meskipun
+  // pesanan belum selesai/sampai tujuan. Kalau data itu belum bisa diambil (mis. pesanan
+  // belum dibayar/dibatalkan, atau baru belum sempat di-fetch), fallback ke estimasi
+  // umum Shopee (20% dari harga jual + Rp1.250 biaya proses pesanan).
+  const isShopee = platformKey === 'shopee';
+  const biayaShopeeAsli = biayaShopee
+    ? biayaShopee.commission_fee + biayaShopee.service_fee + biayaShopee.seller_order_processing_fee
+    : null;
+  const isBiayaAsli = biayaShopeeAsli !== null;
+  const biayaShopeeFinal = isShopee ? (biayaShopeeAsli ?? (totalJual * 0.2 + 1250)) : 0;
+  const estimasiLabaBersih = selisih - biayaShopeeFinal;
+  const isProfitBersih = estimasiLabaBersih >= 0;
+  const estimasiLabaBersihText = isProfitBersih
+    ? `+ Rp ${estimasiLabaBersih.toLocaleString('id-ID')}`
+    : `- Rp ${Math.abs(estimasiLabaBersih).toLocaleString('id-ID')}`;
 
   return (
     <View style={[styles.card, isSelected && styles.cardSelected]}>
@@ -230,6 +284,14 @@ export default function PesananV2OrderCard({ order, isSelected, onToggleSelect, 
           <Ionicons name="cube-outline" size={14} color="#6B7280" />
           <Text style={styles.infoText}> {order.nama_kurir || '-'} {order.no_resi ? `• ${order.no_resi}` : ''}</Text>
         </View>
+
+        {/* Metode Pembayaran */}
+        {!!order.payment_method && (
+          <View style={styles.row}>
+            <Ionicons name="cash-outline" size={14} color={order.payment_method === 'COD' ? '#D97706' : '#6B7280'} />
+            <Text style={[styles.infoText, order.payment_method === 'COD' && styles.codText]}> {order.payment_method}</Text>
+          </View>
+        )}
 
         {/* User */}
         <View style={styles.row}>
@@ -351,6 +413,27 @@ export default function PesananV2OrderCard({ order, isSelected, onToggleSelect, 
                   {hasPartialHpp && (
                     <Text style={styles.warningText}>* sebagian HPP belum diisi.</Text>
                   )}
+                  {isShopee && (
+                    <>
+                      <View style={styles.bsFooterRow}>
+                        <Text style={styles.bsFooterLabel}>{isBiayaAsli ? 'Biaya Shopee' : 'Estimasi Biaya Shopee'}</Text>
+                        <Text style={[styles.bsFooterValue, { color: '#EF4444' }]}>
+                          - Rp {biayaShopeeFinal.toLocaleString('id-ID')}
+                        </Text>
+                      </View>
+                      <View style={styles.bsFooterRow}>
+                        <Text style={styles.bsFooterLabel}>{isBiayaAsli ? 'Untung Bersih' : 'Estimasi Untung Bersih'}</Text>
+                        <Text style={[styles.bsFooterValue, { color: isProfitBersih ? '#10B981' : '#EF4444' }]}>
+                          {estimasiLabaBersihText}
+                        </Text>
+                      </View>
+                      {isBiayaAsli ? (
+                        <Text style={styles.warningText}>* biaya asli dari Shopee (komisi + layanan + proses pesanan).</Text>
+                      ) : (
+                        <Text style={styles.warningText}>* rincian biaya asli belum tersedia, dipakai estimasi (20% + Rp1.250/pesanan).</Text>
+                      )}
+                    </>
+                  )}
                 </>
               )}
             </View>
@@ -377,6 +460,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
   idText: { fontSize: 13, fontWeight: '600', color: '#1F2937' },
   infoText: { fontSize: 13, color: '#4B5563' },
+  codText: { color: '#D97706', fontWeight: '700' },
   itemsBox: { backgroundColor: '#F9FAFB', padding: 8, borderRadius: 6, marginTop: 4, marginBottom: 8 },
   itemText: { fontSize: 12, color: '#374151', marginBottom: 2 },
   itemMoreText: { fontSize: 11, color: '#6B7280', fontStyle: 'italic', marginTop: 2 },
