@@ -120,6 +120,11 @@ export default function ScanInScreen(): JSX.Element {
       return; // Silently ignore - no alert, no haptic
     }
 
+    // Lock immediately (synchronously) so a code re-detected on the very next
+    // camera frame can't slip through before React state (processing) updates.
+    // Every exit path below must reset this via setTimeout.
+    isCooldownRef.current = true;
+
     setScanning(false);
     setProcessing(true);
     setCurrentScan(data);
@@ -160,7 +165,7 @@ export default function ScanInScreen(): JSX.Element {
         setCurrentScan(null);
         setProcessing(false);
         // Re-enable scanning after 1 second cooldown
-        setTimeout(() => { setScanning(true); isCooldownRef.current = false; }, );
+        setTimeout(() => { setScanning(true); isCooldownRef.current = false; }, 1000);
       } else {
         // Trigger HEAVY error vibration (stronger and more noticeable)
         await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
@@ -186,7 +191,7 @@ export default function ScanInScreen(): JSX.Element {
                 setCurrentScan(null);
                 setProcessing(false);
                 // Re-enable scanning after 1 second cooldown
-                setTimeout(() => { setScanning(true); isCooldownRef.current = false; }, );
+                setTimeout(() => { setScanning(true); isCooldownRef.current = false; }, 1000);
               }
             }
           ]
@@ -225,7 +230,7 @@ export default function ScanInScreen(): JSX.Element {
               setCurrentScan(null);
               setProcessing(false);
               // Re-enable scanning after 1 second cooldown
-              setTimeout(() => { setScanning(true); isCooldownRef.current = false; }, );
+              setTimeout(() => { setScanning(true); isCooldownRef.current = false; }, 1000);
             }
           }
         ]

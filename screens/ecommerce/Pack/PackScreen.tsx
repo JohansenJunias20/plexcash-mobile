@@ -331,6 +331,11 @@ export default function PackScreen(): React.JSX.Element {
       return; // Silently ignore
     }
 
+    // Lock immediately (synchronously) so a code re-detected on the very next
+    // camera frame can't slip through before React state (processing) updates.
+    // Every exit path below must reset this via setTimeout.
+    isCooldownRef.current = true;
+
     setScanning(false);
     setProcessing(true);
     setCurrentScan(data);
