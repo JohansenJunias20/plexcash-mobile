@@ -10,6 +10,7 @@ import PesananV2FilterModal from '../../components/PesananV2FilterModal';
 import PesananV2OrderCard from '../../components/PesananV2OrderCard';
 import ProgressModal from '../../components/ProgressModal';
 import UnpaidTemplateModal from '../../components/ecommerce/UnpaidTemplateModal';
+import { acceptOrders } from '../../services/ecommerce/orderService';
 
 type Nav = NativeStackNavigationProp<any>;
 
@@ -94,6 +95,9 @@ export default function PesananV2Screen() {
 
   // Progress Modals
   const [buatProgress, setBuatProgress] = useState({ open: false, processed: 0, total: 0, status: '', title: '' });
+  const [acceptProgress, setAcceptProgress] = useState({ open: false, processed: 0, total: 0, status: '', title: '' });
+  const [acceptingOrderId, setAcceptingOrderId] = useState<string | null>(null);
+  const [isAcceptingBulk, setIsAcceptingBulk] = useState(false);
   const [cetakLoading, setCetakLoading] = useState(false);
 
   const fetchIdRef = useRef(0);
@@ -213,10 +217,24 @@ export default function PesananV2Screen() {
         // Merge with Kilat Orders if orderType !== standard
         const cachedKilat = kilatAllOrdersRef.current || [];
         if (cachedKilat.length > 0 && effectiveOrderType !== 'standard') {
+            // Map raw booking fields to display fields (mirrors web Pesanan V2 mapping)
+            const mapStatus = (s?: string) => {
+                switch ((s || '').toUpperCase()) {
+                    case 'READY_TO_SHIP': case 'RETRY_SHIP': case 'PROCESSED':
+                    case 'MATCHED': case 'ARRANGED': return 'DIPROSES';
+                    case 'SHIPPED': return 'PERJALANAN';
+                    case 'COMPLETED': return 'SELESAI';
+                    case 'CANCELLED': case 'IN_CANCEL': return 'PEMBATALAN';
+                    default: return s || 'UNKNOWN';
+                }
+            };
+
             const filterTab = (o: any) => {
                 if (effectiveStatus === 'SEMUA') return true;
-                const s = o.booking_status || o.status;
-                if (effectiveStatus === 'PESANAN BARU' && s === 'PESANAN BARU') return true;
+                const s = mapStatus(o.booking_status || o.status);
+                // Kilat Shopee tidak punya status 'PESANAN BARU' di platform — mereka masuk sebagai READY_TO_SHIP → DIPROSES.
+                // Jadi di tab PESANAN BARU, kilat dengan status DIPROSES juga ditampilkan (persis seperti di web Pesanan V2).
+                if (effectiveStatus === 'PESANAN BARU' && (s === 'PESANAN BARU' || ((o.isBookingOrder || !!o.booking_sn) && s === 'DIPROSES'))) return true;
                 if (effectiveStatus === 'SIAP DIKIRIM' && s === 'DIPROSES') return true;
                 if (effectiveStatus === 'DIKIRIM' && s === 'PERJALANAN') return true;
                 if (effectiveStatus === 'SELESAI' && s === 'SELESAI') return true;
@@ -237,18 +255,6 @@ export default function PesananV2Screen() {
                 if (effectiveKurirs.length === 0) return true;
                 const courierName = (o.shipping_carrier || o.nama_kurir || '').toLowerCase();
                 return effectiveKurirs.some((k: string) => k.toLowerCase() === courierName);
-            };
-            
-            // Map raw booking fields to display fields (mirrors web Pesanan V2 mapping)
-            const mapStatus = (s?: string) => {
-                switch ((s || '').toUpperCase()) {
-                    case 'READY_TO_SHIP': case 'RETRY_SHIP': case 'PROCESSED':
-                    case 'MATCHED': case 'ARRANGED': return 'DIPROSES';
-                    case 'SHIPPED': return 'PERJALANAN';
-                    case 'COMPLETED': return 'SELESAI';
-                    case 'CANCELLED': case 'IN_CANCEL': return 'PEMBATALAN';
-                    default: return s || 'UNKNOWN';
-                }
             };
 
             const filterScanLocal = (o: any) => {
@@ -279,7 +285,10 @@ export default function PesananV2Screen() {
                     // Use order_sn if available (for OrderDetail lookup), fallback to booking_sn
                     id_online: o.order_sn || o.booking_sn,
                     booking_sn: o.booking_sn,
+                    order_sn: o.order_sn || o.booking_sn,
                     ecommerce_id: o.id_ecommerce || o.ecommerce_id,
+                    ecommerce_name: ecommerceList.find((e: any) => e.id === (o.id_ecommerce || o.ecommerce_id))?.name || `Shop ID: ${o.id_ecommerce || o.ecommerce_id}`,
+                    platform: o.platform || 'SHOPEE',
                     // Map display fields from raw booking response
                     status: mapStatus(o.booking_status || o.status),
                     buyer_username: o.recipient_address?.name || o.buyer_username || '-',
@@ -293,6 +302,8 @@ export default function PesananV2Screen() {
                         nama: item.name || item.nama || '-',
                         qty: item.qty || 1,
                         harga_jual: item.price || item.harga_jual || 0,
+                        varian: item.varian || '',
+                        image: item.image_url || item.image || null,
                     })),
                     orderType: 'PENGIRIMAN KILAT',
                 }))
@@ -351,73 +362,69 @@ export default function PesananV2Screen() {
             setRefreshing(false);
         }
     }
-  }, [currentTab, pagination.page, pagination.per_page, searchTags, searchType, sortMethod, dateType, dateStart, dateEnd, filterCetak, filterScan, selectedEcommerces, hasPenjualan, kurirFilters, platformFilter, filterResep, orderTypeFilter]);
+  }, [currentTab, pagination.page, pagination.per_page, searchTags, searchType, sortMethod, dateType, dateStart, dateEnd, filterCetak, filterScan, selectedEcommerces, hasPenjualan, kurirFilters, platformFilter, filterResep, orderTypeFilter, ecommerceList]);
 
-  // Live Sync Effect (matches Web's behavior for syncing from Marketplace)
-  useEffect(() => {
+  // Live Sync (matches Web's behavior for syncing Instant/Kilat orders from Marketplace)
+  const syncLiveOrders = useCallback(async () => {
     if (orderTypeFilter === 'standard' || ecommerceList.length === 0 || (currentTab === 'SEMUA' && orderTypeFilter === 'semua')) {
       return;
     }
 
-    const syncLiveOrders = async () => {
-      syncIdRef.current++;
-      const currentSyncId = syncIdRef.current;
-      
-      const dEnd = moment(dateEnd).unix();
-      const bStart = moment(dateEnd).subtract(10, 'days').unix();
-      const dStart = Math.max(moment(dateStart).unix(), bStart);
-      
-      const targetEcommerces = selectedEcommerces.length > 0 
-        ? ecommerceList.filter(e => selectedEcommerces.includes(e.id))
-        : ecommerceList;
+    syncIdRef.current++;
+    const currentSyncId = syncIdRef.current;
+    
+    const dEnd = moment(dateEnd).unix();
+    const bStart = moment(dateEnd).subtract(10, 'days').unix();
+    const dStart = Math.max(moment(dateStart).unix(), bStart);
+    
+    const targetEcommerces = selectedEcommerces.length > 0 
+      ? ecommerceList.filter(e => selectedEcommerces.includes(e.id))
+      : ecommerceList;
 
-      if (targetEcommerces.length === 0) return;
+    if (targetEcommerces.length === 0) return;
 
-      setIsSyncing(true);
+    setIsSyncing(true);
+    
+    try {
+      const storeIds = targetEcommerces.map((store: any) => store.id).join(",");
+      const res = await ApiService.authenticatedRequest(
+        `/get/ecommerce/order/date/${dStart}/${dEnd}?id_ecommerce=${storeIds}&mode=cepat&t=${Date.now()}`
+      );
       
-      try {
-        const settled = await Promise.allSettled(
-          targetEcommerces.map(shop => 
-            ApiService.authenticatedRequest(
-              `/get/ecommerce/order/date/${dStart}/${dEnd}?id_ecommerce=${shop.id}&mode=cepat&t=${Date.now()}`
-            )
-          )
-        );
-        
-        // Extract kilat bookings
-        const allKilatOrders: any[] = [];
-        settled.forEach((res) => {
-          if (res.status === 'fulfilled' && res.value?.bookings) {
-            allKilatOrders.push(...res.value.bookings);
-          }
-        });
-        kilatAllOrdersRef.current = allKilatOrders;
-
-        // After syncing, if we are still on the same sync run, refresh the local database view 
-        if (currentSyncId === syncIdRef.current) {
-          fetchOrders({ isRefresh: true });
-        }
-      } catch (err) {
-        console.warn('[PesananV2] Sync failed:', err);
-      } finally {
-        if (currentSyncId === syncIdRef.current) {
-          setIsSyncing(false);
-        }
+      let allKilatOrders: any[] = [];
+      if (res?.status && Array.isArray(res.bookings)) {
+        allKilatOrders = res.bookings;
       }
-    };
+      kilatAllOrdersRef.current = allKilatOrders;
 
+      // After syncing, if we are still on the same sync run, refresh the local database view 
+      if (currentSyncId === syncIdRef.current) {
+        fetchOrders({ isRefresh: true });
+      }
+    } catch (err) {
+      console.warn('[PesananV2] Sync failed:', err);
+    } finally {
+      if (currentSyncId === syncIdRef.current) {
+        setIsSyncing(false);
+      }
+    }
+  }, [currentTab, dateStart, dateEnd, selectedEcommerces, ecommerceList, orderTypeFilter, fetchOrders]);
+
+  useEffect(() => {
     syncLiveOrders();
-  }, [currentTab, dateStart, dateEnd, selectedEcommerces, ecommerceList, orderTypeFilter]);
+  }, [syncLiveOrders]);
 
   useFocusEffect(
     useCallback(() => {
       fetchOrders({ page: 1, isRefresh: true });
-    }, [fetchOrders])
+      syncLiveOrders();
+    }, [fetchOrders, syncLiveOrders])
   );
 
   const onRefresh = () => {
     setRefreshing(true);
     fetchOrders({ page: 1, isRefresh: true });
+    syncLiveOrders();
   };
 
   const loadMore = () => {
@@ -466,6 +473,147 @@ export default function PesananV2Screen() {
           setSelectedOrders(new Set(orders.map(o => o.id_online)));
           setSelectAllMode('page');
       }
+  };
+
+  // Terima Pesanan actions
+  const handleAcceptSingleOrder = (order: any) => {
+    if (!userInfo.canUpdate) return Alert.alert('Permission Error', 'Anda tidak memiliki akses.');
+
+    const orderId = order.id_online || order.booking_sn || order.id;
+    Alert.alert(
+      'Terima Pesanan',
+      `Pilih metode pengiriman untuk pesanan ${orderId}:`,
+      [
+        { text: 'Batal', style: 'cancel' },
+        { text: 'Dropoff (Antar ke Gerai)', onPress: () => executeAcceptOrders([order], 'dropoff') },
+        { text: 'Pickup (Kurir Jemput)', onPress: () => executeAcceptOrders([order], 'pickup') },
+      ]
+    );
+  };
+
+  const bulkTerimaPesanan = () => {
+    if (!userInfo.canUpdate) return Alert.alert('Permission Error', 'Anda tidak memiliki akses.');
+
+    const selectedArr = Array.from(selectedOrders);
+    if (selectedArr.length === 0) return;
+
+    const ordersToProcess = orders.filter(o => selectedArr.includes(o.id_online));
+    if (ordersToProcess.length === 0) return;
+
+    Alert.alert(
+      'Terima Pesanan Massal',
+      `Pilih metode pengiriman untuk ${ordersToProcess.length} pesanan yang dipilih:`,
+      [
+        { text: 'Batal', style: 'cancel' },
+        { text: 'Dropoff (Antar ke Gerai)', onPress: () => executeAcceptOrders(ordersToProcess, 'dropoff') },
+        { text: 'Pickup (Kurir Jemput)', onPress: () => executeAcceptOrders(ordersToProcess, 'pickup') },
+      ]
+    );
+  };
+
+  const executeAcceptOrders = async (ordersToProcess: any[], method_ship: 'pickup' | 'dropoff') => {
+    if (!ordersToProcess || ordersToProcess.length === 0) return;
+
+    const isSingle = ordersToProcess.length === 1;
+    if (isSingle) {
+      setAcceptingOrderId(ordersToProcess[0].id_online);
+    } else {
+      setIsAcceptingBulk(true);
+      setAcceptProgress({
+        open: true,
+        processed: 0,
+        total: ordersToProcess.length,
+        status: 'Mempersiapkan penerimaan pesanan...',
+        title: 'Menerima Pesanan...'
+      });
+    }
+
+    const CHUNK_SIZE = 10;
+    const accumulatedResults: any[] = [];
+
+    try {
+      for (let i = 0; i < ordersToProcess.length; i += CHUNK_SIZE) {
+        const chunk = ordersToProcess.slice(i, i + CHUNK_SIZE);
+        if (!isSingle) {
+          setAcceptProgress(prev => ({
+            ...prev,
+            status: `Memproses ${i + 1} - ${Math.min(i + CHUNK_SIZE, ordersToProcess.length)} dari ${ordersToProcess.length}`
+          }));
+        }
+
+        const res = await acceptOrders(chunk, method_ship);
+        accumulatedResults.push(...res.results);
+
+        if (!isSingle) {
+          setAcceptProgress(prev => ({ ...prev, processed: Math.min(i + chunk.length, ordersToProcess.length) }));
+        }
+      }
+    } catch (e: any) {
+      console.error('[PesananV2] Error in executeAcceptOrders:', e);
+    } finally {
+      if (isSingle) {
+        setAcceptingOrderId(null);
+      } else {
+        setAcceptProgress({ open: false, processed: 0, total: 0, status: '', title: '' });
+        setIsAcceptingBulk(false);
+      }
+    }
+
+    const successCount = accumulatedResults.filter(r => r.success).length;
+    const rejectedItems = accumulatedResults.filter(r => !r.success);
+    const failCount = rejectedItems.length;
+    const hasLogisticsError = rejectedItems.some(r => r.hasLogisticsError);
+
+    if (failCount === 0) {
+      Alert.alert('Sukses', `Berhasil menerima ${successCount} pesanan.`);
+      setSelectedOrders(new Set());
+      fetchOrders({ isRefresh: true });
+      syncLiveOrders();
+    } else {
+      // If courier pickup error occurred, offer option to switch to Dropoff (matches web Plexseller)
+      if (method_ship === 'pickup' && hasLogisticsError) {
+        Alert.alert(
+          'Gagal Booking Pickup',
+          `Berhasil: ${successCount}\nGagal: ${failCount}\n\nBeberapa pesanan gagal diproses dengan penjemputan kurir (Pickup).\n\nApakah Anda ingin mencoba memproses pesanan yang gagal menggunakan metode Dropoff (Antar ke Gerai)?`,
+          [
+            {
+              text: 'Tutup',
+              style: 'cancel',
+              onPress: () => {
+                setSelectedOrders(new Set());
+                fetchOrders({ isRefresh: true });
+                syncLiveOrders();
+              }
+            },
+            {
+              text: 'Ganti ke Dropoff',
+              onPress: () => {
+                const failedOrders = rejectedItems.map(r => r.originalOrder);
+                executeAcceptOrders(failedOrders, 'dropoff');
+              }
+            }
+          ]
+        );
+      } else {
+        const reasons = rejectedItems.map(r => `${r.order_id}: ${r.reason || 'Gagal diproses'}`);
+        const errorText = reasons.slice(0, 10).join('\n- ');
+        const moreText = reasons.length > 10 ? `\n...dan ${reasons.length - 10} pesanan lainnya` : '';
+        Alert.alert(
+          'Hasil Terima Pesanan',
+          `Berhasil: ${successCount}\nGagal: ${failCount}\n\nDetail Gagal:\n- ${errorText}${moreText}`,
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                setSelectedOrders(new Set());
+                fetchOrders({ isRefresh: true });
+                syncLiveOrders();
+              }
+            }
+          ]
+        );
+      }
+    }
   };
 
   // Bulk actions
@@ -861,7 +1009,16 @@ export default function PesananV2Screen() {
       {selectedOrders.size > 0 && (
           <View style={styles.selectionBar}>
               <Text style={styles.selectionText}>{selectedOrders.size} Dipilih</Text>
-              <View style={styles.selectionActions}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.selectionActions}>
+                  {currentTab === 'PESANAN BARU' && (
+                      <TouchableOpacity
+                          style={[styles.actionBtn, { backgroundColor: '#10B981' }]}
+                          onPress={bulkTerimaPesanan}
+                          disabled={isAcceptingBulk}
+                      >
+                          <Text style={styles.actionBtnText}>Terima Pesanan</Text>
+                      </TouchableOpacity>
+                  )}
                   <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#F97316' }]} onPress={bulkBuatRetur}>
                       <Text style={styles.actionBtnText}>Buat Retur</Text>
                   </TouchableOpacity>
@@ -874,7 +1031,7 @@ export default function PesananV2Screen() {
                   <TouchableOpacity style={styles.clearBtn} onPress={() => setSelectedOrders(new Set())}>
                       <Ionicons name="close" size={20} color="#EF4444" />
                   </TouchableOpacity>
-              </View>
+              </ScrollView>
           </View>
       )}
 
@@ -892,11 +1049,14 @@ export default function PesananV2Screen() {
                       isSelected={selectedOrders.has(item.id_online)}
                       onToggleSelect={() => toggleSelection(item.id_online)}
                       isUnpaidTab={currentTab === 'BELUM DIBAYAR'}
+                      isPesananBaruTab={currentTab === 'PESANAN BARU'}
                       isReminded={remindedOrderIds.has(item.id_online || item.order_sn || item.booking_sn)}
                       onOpenTemplateSetting={() => setTemplateModalVisible(true)}
                       onReminderSuccess={(sn) => {
                         setRemindedOrderIds((prev) => new Set(prev).add(sn));
                       }}
+                      onAcceptOrder={handleAcceptSingleOrder}
+                      isAccepting={acceptingOrderId === item.id_online}
                       onPress={() => {
                            navigation.navigate('OrderDetail', {
                               // For kilat orders: pass booking_sn so detail screen can use it
@@ -968,6 +1128,16 @@ export default function PesananV2Screen() {
           progress={buatProgress.total > 0 ? (buatProgress.processed / buatProgress.total) : 0}
           processed={buatProgress.processed}
           total={buatProgress.total}
+      />
+
+      {/* Accept Progress Modal */}
+      <ProgressModal
+          visible={acceptProgress.open}
+          title={acceptProgress.title || "Menerima Pesanan..."}
+          status={acceptProgress.status}
+          progress={acceptProgress.total > 0 ? (acceptProgress.processed / acceptProgress.total) : 0}
+          processed={acceptProgress.processed}
+          total={acceptProgress.total}
       />
 
       {/* Unpaid Payment Reminder Template Settings Modal */}

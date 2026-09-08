@@ -30,6 +30,9 @@ export default function ScanOutScreen(): JSX.Element {
   const [isCameraActive, setIsCameraActive] = useState(true);
   const inputRef = useRef<TextInput>(null);
   const isCooldownRef = useRef(false);
+  const isProcessingRef = useRef(false);
+  const lastScannedTimeRef = useRef(0);
+  const lastScannedCodeRef = useRef('');
   const device = useCameraDevice('back');
   const isFocused = useIsFocused();
   
@@ -58,12 +61,47 @@ export default function ScanOutScreen(): JSX.Element {
   };
 
   const codeScanner = useCodeScanner({
-    codeTypes: ['qr', 'code-128', 'code-39', 'ean-13', 'ean-8'],
+    codeTypes: ['code-128', 'code-39', 'ean-13', 'ean-8', 'qr'],
     onCodeScanned: (codes) => {
-      if (isCooldownRef.current) return;
-      if (codes.length > 0 && codes[0].value) {
-        handleBarcodeScanned({ data: codes[0].value });
+      // 1. Cek lock synchronous agar frame berikutnya langsung diblokir seketika
+      if (isCooldownRef.current || isProcessingRef.current) return;
+      if (!codes || codes.length === 0) return;
+
+      const now = Date.now();
+
+      // 2. Jika ada barcode 1D dan QR Code bersamaan dalam 1 frame resi:
+      // Prioritaskan Barcode 1D (code-128 / code-39) karena hampir selalu merupakan No. Resi.
+      // Jika paket hanya memiliki QR Code, selectedCode akan otomatis mengambil QR Code tersebut.
+      const barcode1D = codes.find(c => c.value && ['code-128', 'code-39', 'ean-13', 'ean-8'].includes(c.type));
+      const selectedCode = barcode1D || codes.find(c => c.value);
+
+      if (!selectedCode || !selectedCode.value) return;
+
+      // Normalisasi karakter kontrol & non-printable
+      const normalizedValue = selectedCode.value
+        .replace(/[\x00-\x1F\x7F]/g, '')
+        .replace(/[\u200B-\u200D\uFEFF]/g, '')
+        .trim();
+
+      if (!normalizedValue) return;
+
+      // 3. Debounce: Cegah membaca kode yang sama dalam jeda 3 detik (mencegah scan ulang di paket yang sama)
+      if (normalizedValue === lastScannedCodeRef.current && (now - lastScannedTimeRef.current < 3000)) {
+        return;
       }
+
+      // Cegah scan kode apapun dalam rentang 1.5 detik (memberi waktu operator mengarahkan kamera ke paket baru)
+      if (now - lastScannedTimeRef.current < 1500) {
+        return;
+      }
+
+      // 4. Kunci seketika secara synchronous
+      isCooldownRef.current = true;
+      isProcessingRef.current = true;
+      lastScannedTimeRef.current = now;
+      lastScannedCodeRef.current = normalizedValue;
+
+      handleBarcodeScanned({ data: normalizedValue });
     },
   });
 
@@ -192,25 +230,43 @@ export default function ScanOutScreen(): JSX.Element {
     return false; // This is likely a resi (tracking number)
   };
 
+  const resetCooldown = (delayMs: number = 1500) => {
+    setCurrentScan(null);
+    setProcessing(false);
+    isProcessingRef.current = false;
+    setTimeout(() => {
+      setScanning(true);
+      isCooldownRef.current = false;
+    }, delayMs);
+  };
+
   const handleManualSubmit = () => {
     const trimmedInput = manualInput.trim();
     if (trimmedInput) {
+      if (isProcessingRef.current) return;
+      isProcessingRef.current = true;
+      isCooldownRef.current = true;
+      lastScannedCodeRef.current = trimmedInput;
+      lastScannedTimeRef.current = Date.now();
       handleBarcodeScanned({ data: trimmedInput });
       setManualInput(''); // Clear input after submission
     }
   };
 
   const handleBarcodeScanned = async ({ data }: { data: string }) => {
-    if (processing || isCooldownRef.current) return;
+    if (processing) return;
 
     // Check if this resi is already being processed (prevent duplicate scans)
     if (pendingScans.has(data)) {
       console.log(`Ignoring duplicate scan for resi: ${data} (already pending)`);
+      resetCooldown(1500);
       return; // Silently ignore - no alert, no haptic
     }
 
     setScanning(false);
     setProcessing(true);
+    isProcessingRef.current = true;
+    isCooldownRef.current = true;
     setCurrentScan(data);
 
     // Filter out order numbers (no pesanan), only accept resi (tracking numbers)
@@ -235,10 +291,7 @@ export default function ScanOutScreen(): JSX.Element {
           {
             text: 'OK',
             onPress: () => {
-              setCurrentScan(null);
-              setProcessing(false);
-              // Re-enable scanning after 1 second cooldown
-              setTimeout(() => { setScanning(true); isCooldownRef.current = false; }, );
+              resetCooldown(1500);
             }
           }
         ]
@@ -279,10 +332,8 @@ export default function ScanOutScreen(): JSX.Element {
         setScannedOrders(prev => [newOrder, ...prev]);
 
         // NO ALERT for success - only visual feedback (green card) and haptic
-        setCurrentScan(null);
-        setProcessing(false);
-        // Re-enable scanning after 1 second cooldown
-        setTimeout(() => { setScanning(true); isCooldownRef.current = false; }, );
+        // Berikan cooldown 1.5 detik agar operator sempat memindahkan kamera ke paket berikutnya
+        resetCooldown(1500);
       } else {
         // Trigger HEAVY error vibration (stronger and more noticeable)
         await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
@@ -320,10 +371,7 @@ export default function ScanOutScreen(): JSX.Element {
             {
               text: 'OK',
               onPress: () => {
-                setCurrentScan(null);
-                setProcessing(false);
-                // Re-enable scanning after 1 second cooldown
-                setTimeout(() => { setScanning(true); isCooldownRef.current = false; }, );
+                resetCooldown(1500);
               }
             }
           ]
@@ -359,10 +407,7 @@ export default function ScanOutScreen(): JSX.Element {
           {
             text: 'OK',
             onPress: () => {
-              setCurrentScan(null);
-              setProcessing(false);
-              // Re-enable scanning after 1 second cooldown
-              setTimeout(() => { setScanning(true); isCooldownRef.current = false; }, );
+              resetCooldown(1500);
             }
           }
         ]
