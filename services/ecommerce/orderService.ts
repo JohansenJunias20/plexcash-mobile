@@ -5,6 +5,7 @@
  */
 
 import ApiService from '../api';
+import { transformErrorMessage } from '../../utils/transformErrorMessage';
 
 export interface IOrderItem {
   id?: string;
@@ -209,4 +210,213 @@ export const filterOrdersByBuyer = (
     return false;
   });
 };
+
+export interface IAcceptOrderResultItem {
+  order_id: string;
+  id_ecommerce: number;
+  success: boolean;
+  status: 'fulfilled' | 'rejected';
+  reason?: string;
+  originalOrder: any;
+  hasLogisticsError?: boolean;
+}
+
+export interface IAcceptOrdersResult {
+  status: boolean;
+  total: number;
+  successCount: number;
+  failCount: number;
+  results: IAcceptOrderResultItem[];
+  rejectedItems: IAcceptOrderResultItem[];
+  hasLogisticsError: boolean;
+  rawResponse?: any;
+}
+
+/**
+ * Accept orders (Standard and Booking Kilat) matching web Plexseller's behavior.
+ * 
+ * @param orders - Array of orders to accept
+ * @param method_ship - 'pickup' | 'dropoff' (defaults to 'pickup')
+ * @returns Object with aggregated success/failure details and friendly error messages
+ */
+export const acceptOrders = async (
+  orders: any[],
+  method_ship: 'pickup' | 'dropoff' = 'pickup'
+): Promise<IAcceptOrdersResult> => {
+  if (!orders || orders.length === 0) {
+    return {
+      status: false,
+      total: 0,
+      successCount: 0,
+      failCount: 0,
+      results: [],
+      rejectedItems: [],
+      hasLogisticsError: false,
+    };
+  }
+
+  // Separate standard orders from booking kilat orders
+  const bookingOrders: any[] = [];
+  const standardOrders: any[] = [];
+
+  orders.forEach((o) => {
+    if (o.isBookingOrder || !!o.booking_sn) {
+      bookingOrders.push(o);
+    } else {
+      standardOrders.push(o);
+    }
+  });
+
+  const results: IAcceptOrderResultItem[] = [];
+
+  // 1. Process Booking Orders (Shopee Kilat)
+  if (bookingOrders.length > 0) {
+    const bookingBody = bookingOrders.map((b) => ({
+      id_ecommerce: Number(b.ecommerce_id || b.id_ecommerce),
+      order_id: String(b.booking_sn || b.id_online || b.order_sn || b.id),
+      method_ship,
+    }));
+
+    try {
+      const res = await ApiService.authenticatedRequest('/ecommerce/shopee/ship_booking', {
+        method: 'POST',
+        body: JSON.stringify(bookingBody),
+      });
+
+      if (res && res.status && Array.isArray(res.data)) {
+        res.data.forEach((r: any, idx: number) => {
+          const original = bookingOrders[idx];
+          const orderId = String(original.booking_sn || original.id_online || original.id);
+          const isFulfilled = r?.status === 'fulfilled' && r?.value !== false;
+          const rawReason = r?.reason || (r?.value === false ? 'Gagal proses booking' : '');
+          const isLogisticsErr = typeof rawReason === 'string' && rawReason.includes('logistics.error_booking_order');
+          const cleanReason = isFulfilled ? undefined : transformErrorMessage(rawReason || 'Gagal menerima booking');
+
+          results.push({
+            order_id: orderId,
+            id_ecommerce: Number(original.ecommerce_id || original.id_ecommerce),
+            success: isFulfilled,
+            status: isFulfilled ? 'fulfilled' : 'rejected',
+            reason: cleanReason,
+            originalOrder: original,
+            hasLogisticsError: isLogisticsErr,
+          });
+        });
+      } else {
+        // Entire booking call failed
+        const failMsg = transformErrorMessage(res?.reason || res?.message || 'Gagal memproses booking');
+        bookingOrders.forEach((original) => {
+          results.push({
+            order_id: String(original.booking_sn || original.id_online || original.id),
+            id_ecommerce: Number(original.ecommerce_id || original.id_ecommerce),
+            success: false,
+            status: 'rejected',
+            reason: failMsg,
+            originalOrder: original,
+            hasLogisticsError: false,
+          });
+        });
+      }
+    } catch (err: any) {
+      bookingOrders.forEach((original) => {
+        results.push({
+          order_id: String(original.booking_sn || original.id_online || original.id),
+          id_ecommerce: Number(original.ecommerce_id || original.id_ecommerce),
+          success: false,
+          status: 'rejected',
+          reason: transformErrorMessage(err?.message || 'Terjadi kesalahan koneksi'),
+          originalOrder: original,
+          hasLogisticsError: false,
+        });
+      });
+    }
+  }
+
+  // 2. Process Standard Orders
+  if (standardOrders.length > 0) {
+    const standardBody = standardOrders.map((p) => {
+      const itemIdBlibli = Array.isArray(p.items)
+        ? p.items.map((i: any) => i.itemId_blibli).filter(Boolean)
+        : undefined;
+
+      return {
+        id_ecommerce: Number(p.ecommerce_id || p.id_ecommerce),
+        order_id: String(p.id_online || p.id),
+        package_id: p.package_id || undefined,
+        method_ship,
+        item_id_blibli: itemIdBlibli && itemIdBlibli.length > 0 ? itemIdBlibli : undefined,
+        item_ids: p.item_pack_id || null,
+      };
+    });
+
+    try {
+      const res = await ApiService.authenticatedRequest('/ecommerce/order/accept', {
+        method: 'POST',
+        body: JSON.stringify(standardBody),
+      });
+
+      if (res && res.status && Array.isArray(res.data)) {
+        res.data.forEach((r: any, idx: number) => {
+          const original = standardOrders[idx];
+          const orderId = String(original.id_online || original.id);
+          const isFulfilled = r?.status === 'fulfilled' && r?.value !== false;
+          const rawReason = r?.reason || (r?.value === false ? 'Gagal proses, silakan coba lagi beberapa saat' : '');
+          const isLogisticsErr = typeof rawReason === 'string' && rawReason.includes('logistics.error_booking_order');
+          const cleanReason = isFulfilled ? undefined : transformErrorMessage(rawReason || 'Gagal menerima pesanan');
+
+          results.push({
+            order_id: orderId,
+            id_ecommerce: Number(original.ecommerce_id || original.id_ecommerce),
+            success: isFulfilled,
+            status: isFulfilled ? 'fulfilled' : 'rejected',
+            reason: cleanReason,
+            originalOrder: original,
+            hasLogisticsError: isLogisticsErr,
+          });
+        });
+      } else {
+        const failMsg = transformErrorMessage(res?.reason || res?.message || 'Gagal memproses pesanan');
+        standardOrders.forEach((original) => {
+          results.push({
+            order_id: String(original.id_online || original.id),
+            id_ecommerce: Number(original.ecommerce_id || original.id_ecommerce),
+            success: false,
+            status: 'rejected',
+            reason: failMsg,
+            originalOrder: original,
+            hasLogisticsError: false,
+          });
+        });
+      }
+    } catch (err: any) {
+      standardOrders.forEach((original) => {
+        results.push({
+          order_id: String(original.id_online || original.id),
+          id_ecommerce: Number(original.ecommerce_id || original.id_ecommerce),
+          success: false,
+          status: 'rejected',
+          reason: transformErrorMessage(err?.message || 'Terjadi kesalahan koneksi'),
+          originalOrder: original,
+          hasLogisticsError: false,
+        });
+      });
+    }
+  }
+
+  const successCount = results.filter((r) => r.success).length;
+  const rejectedItems = results.filter((r) => !r.success);
+  const failCount = rejectedItems.length;
+  const hasLogisticsError = rejectedItems.some((r) => r.hasLogisticsError);
+
+  return {
+    status: successCount > 0,
+    total: orders.length,
+    successCount,
+    failCount,
+    results,
+    rejectedItems,
+    hasLogisticsError,
+  };
+};
+
 

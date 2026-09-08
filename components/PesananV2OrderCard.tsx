@@ -42,9 +42,12 @@ interface Props {
   onToggleSelect: () => void;
   onPress: () => void;
   isUnpaidTab?: boolean;
+  isPesananBaruTab?: boolean;
   isReminded?: boolean;
   onOpenTemplateSetting?: () => void;
   onReminderSuccess?: (orderSn: string) => void;
+  onAcceptOrder?: (order: any) => void;
+  isAccepting?: boolean;
 }
 
 export default function PesananV2OrderCard({
@@ -53,9 +56,12 @@ export default function PesananV2OrderCard({
   onToggleSelect,
   onPress,
   isUnpaidTab = false,
+  isPesananBaruTab = false,
   isReminded = false,
   onOpenTemplateSetting,
   onReminderSuccess,
+  onAcceptOrder,
+  isAccepting = false,
 }: Props) {
   const { access } = useAccess();
   const [showHpp, setShowHpp] = useState(false);
@@ -257,6 +263,7 @@ export default function PesananV2OrderCard({
     : `- Rp ${Math.abs(estimasiLabaBersih).toLocaleString('id-ID')}`;
 
   const isUnpaid = isUnpaidTab || (order.status || '').toUpperCase() === 'BELUM DIBAYAR';
+  const isPesananBaru = isPesananBaruTab || (order.status || '').toUpperCase() === 'PESANAN BARU';
 
   const handleSendReminder = async () => {
     if (isReminded || localReminded || reminderLoading) return;
@@ -485,6 +492,30 @@ export default function PesananV2OrderCard({
         </View>
       )}
 
+      {/* Terima Pesanan Action Bar */}
+      {isPesananBaru && onAcceptOrder && (
+        <View style={styles.acceptOrderBar}>
+          <TouchableOpacity
+            style={[
+              styles.acceptOrderButton,
+              isAccepting && styles.acceptOrderButtonDisabled,
+            ]}
+            onPress={() => onAcceptOrder(order)}
+            disabled={isAccepting}
+            activeOpacity={0.8}
+          >
+            {isAccepting ? (
+              <ActivityIndicator size="small" color="#FFF" style={styles.actionIcon} />
+            ) : (
+              <Ionicons name="checkmark-circle-outline" size={18} color="#FFF" style={styles.actionIcon} />
+            )}
+            <Text style={styles.acceptOrderButtonText}>
+              {isAccepting ? 'Memproses...' : 'Terima Pesanan'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* HPP Modal */}
       <Modal visible={showHpp} transparent={true} animationType="fade" onRequestClose={() => setShowHpp(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowHpp(false)}>
@@ -659,5 +690,41 @@ const styles = StyleSheet.create({
     borderColor: '#FDE68A',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  acceptOrderBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#ECFDF5',
+    borderTopWidth: 1,
+    borderTopColor: '#A7F3D0',
+    gap: 8,
+  },
+  acceptOrderButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#10B981',
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  acceptOrderButtonDisabled: {
+    opacity: 0.7,
+  },
+  actionIcon: {
+    marginRight: 6,
+  },
+  acceptOrderButtonText: {
+    color: '#FFF',
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

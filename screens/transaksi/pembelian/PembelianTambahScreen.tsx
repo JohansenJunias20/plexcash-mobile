@@ -58,6 +58,7 @@ interface PreOrderData {
   notes: string;
   items: PreOrderItem[];
   id_pembelian?: number;
+  merged_into_id?: number;
 }
 
 // Helper function to format datetime for MySQL
@@ -222,7 +223,7 @@ export default function PembelianTambahScreen() {
 
       if (data.status && data.data) {
         const pending = data.data.filter(
-          (po: PreOrderData) => !po.id_pembelian && po.id_supplier === supplier.id
+          (po: PreOrderData) => !po.id_pembelian && !po.merged_into_id && po.id_supplier === supplier.id
         );
         setPendingPreOrdersCount(pending.length);
       }
@@ -316,10 +317,10 @@ export default function PembelianTambahScreen() {
           return;
         }
 
-        // Validate not converted
-        const anyConverted = preOrders.some((po: PreOrderData) => po.id_pembelian);
-        if (anyConverted) {
-          Alert.alert('Error', 'Beberapa pre-order sudah dikonversi');
+        // Validate not converted or merged
+        const anyConvertedOrMerged = preOrders.some((po: PreOrderData) => po.id_pembelian || po.merged_into_id);
+        if (anyConvertedOrMerged) {
+          Alert.alert('Error', 'Beberapa pre-order sudah dikonversi atau di-merge');
           return;
         }
 
@@ -394,8 +395,8 @@ export default function PembelianTambahScreen() {
       const data = await response.json();
 
       if (data.status && data.data) {
-        // Filter only pending pre-orders
-        const pending = data.data.filter((po: PreOrderData) => !po.id_pembelian);
+        // Filter only pending pre-orders (not converted, not merged)
+        const pending = data.data.filter((po: PreOrderData) => !po.id_pembelian && !po.merged_into_id);
         setPreOrders(pending);
       }
     } catch (error) {

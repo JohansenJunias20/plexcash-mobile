@@ -41,15 +41,26 @@ interface PreOrderData {
   notes: string;
   items: PreOrderItem[];
   id_pembelian?: number;
+  merged_into_id?: number;
   status?: string;
 }
 
 interface FilterState {
   dateFrom: string;
   dateTo: string;
-  status: 'all' | 'pending' | 'converted';
+  status: 'all' | 'pending' | 'converted' | 'merged';
   supplierId: number | null;
 }
+
+export const getPreOrderStatus = (po: PreOrderData): 'pending' | 'converted' | 'merged' => {
+  if (po.id_pembelian || po.status === 'converted') {
+    return 'converted';
+  }
+  if (po.merged_into_id || po.status === 'merged' || po.status === 'merge') {
+    return 'merged';
+  }
+  return 'pending';
+};
 
 export default function PreOrderScreen() {
   const navigation = useNavigation();
@@ -275,8 +286,7 @@ export default function PreOrderScreen() {
 
       // Filter by status
       if (filters.status !== 'all') {
-        const isConverted = po.id_pembelian || po.status === 'merge' || po.status === 'merged' || po.status === 'converted';
-        const poStatus = isConverted ? 'converted' : 'pending';
+        const poStatus = getPreOrderStatus(po);
         if (poStatus !== filters.status) return false;
       }
 
@@ -396,9 +406,18 @@ export default function PreOrderScreen() {
       return;
     }
 
-    const isConverted = preOrder.id_pembelian || preOrder.status === 'merge' || preOrder.status === 'merged' || preOrder.status === 'converted';
-    if (isConverted) {
-      Alert.alert('Error', 'Cannot delete pre-order that has been converted to pembelian');
+    const poStatus = getPreOrderStatus(preOrder);
+    if (poStatus === 'converted') {
+      Alert.alert('Error', 'Tidak dapat menghapus pre-order yang sudah dikonversi ke pembelian');
+      return;
+    }
+    if (poStatus === 'merged') {
+      Alert.alert(
+        'Error',
+        preOrder.merged_into_id
+          ? `Tidak dapat menghapus pre-order yang sudah di-merge ke PO #${preOrder.merged_into_id}`
+          : 'Tidak dapat menghapus pre-order yang sudah di-merge'
+      );
       return;
     }
 
@@ -532,6 +551,19 @@ export default function PreOrderScreen() {
       return;
     }
 
+    // Validate that none of the selected pre-orders are already converted or merged
+    const hasConverted = selectedPOs.some(po => getPreOrderStatus(po) === 'converted');
+    if (hasConverted) {
+      Alert.alert('Error', 'Beberapa pre-order yang dipilih sudah dikonversi ke pembelian');
+      return;
+    }
+
+    const hasMerged = selectedPOs.some(po => getPreOrderStatus(po) === 'merged');
+    if (hasMerged) {
+      Alert.alert('Error', 'Beberapa pre-order yang dipilih sudah di-merge ke PO lain');
+      return;
+    }
+
     // Navigate to PembelianTambah with pre-order IDs
     const poIds = selectedPOs.map(po => po.id).join(',');
     (navigation as any).navigate('PembelianTambah', { po_ids: poIds });
@@ -539,9 +571,21 @@ export default function PreOrderScreen() {
 
   const renderPreOrderItem = ({ item, index }: { item: PreOrderData; index: number }) => {
     const isSelected = selectedPreOrders.includes(index);
-    const isConverted = item.id_pembelian || item.status === 'merge' || item.status === 'merged' || item.status === 'converted';
-    const status = isConverted ? 'Converted' : 'Pending';
-    const statusColor = isConverted ? '#10b981' : '#f59e0b';
+    const poStatus = getPreOrderStatus(item);
+    const isConverted = poStatus === 'converted';
+    const isMerged = poStatus === 'merged';
+    const isLocked = isConverted || isMerged;
+
+    let statusText = 'Pending';
+    let statusColor = '#f59e0b'; // Amber
+
+    if (isConverted) {
+      statusText = 'Converted';
+      statusColor = '#10b981'; // Green
+    } else if (isMerged) {
+      statusText = 'Merged';
+      statusColor = '#8b5cf6'; // Purple
+    }
 
     return (
       <TouchableOpacity
@@ -562,7 +606,7 @@ export default function PreOrderScreen() {
             </View>
           </View>
           <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
-            <Text style={styles.statusText}>{status}</Text>
+            <Text style={styles.statusText}>{statusText}</Text>
           </View>
         </View>
 
@@ -581,12 +625,20 @@ export default function PreOrderScreen() {
             <Ionicons name="cube-outline" size={16} color="#6B7280" />
             <Text style={styles.infoText}>{item.items.length} item(s)</Text>
           </View>
-          {item.notes && (
+          {item.merged_into_id ? (
+            <View style={styles.infoRow}>
+              <Ionicons name="git-merge-outline" size={16} color="#8b5cf6" />
+              <Text style={[styles.infoText, { color: '#8b5cf6', fontWeight: '500' }]}>
+                Merged ke PO #{item.merged_into_id}
+              </Text>
+            </View>
+          ) : null}
+          {item.notes ? (
             <View style={styles.infoRow}>
               <Ionicons name="document-text-outline" size={16} color="#6B7280" />
               <Text style={styles.infoText} numberOfLines={1}>{item.notes}</Text>
             </View>
-          )}
+          ) : null}
         </View>
 
         <View style={styles.preOrderActions}>
@@ -598,18 +650,18 @@ export default function PreOrderScreen() {
             <Text style={styles.actionButtonText}>Edit</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.actionButton, !!isConverted && styles.actionButtonDisabled]}
+            style={[styles.actionButton, isLocked && styles.actionButtonDisabled]}
             onPress={() => handleDeletePreOrder(item)}
-            disabled={!!isConverted}
+            disabled={isLocked}
           >
             <Ionicons
               name="trash-outline"
               size={20}
-              color={isConverted ? '#9CA3AF' : '#ef4444'}
+              color={isLocked ? '#9CA3AF' : '#ef4444'}
             />
             <Text style={[
               styles.actionButtonText,
-              !!isConverted && styles.actionButtonTextDisabled
+              isLocked && styles.actionButtonTextDisabled
             ]}>
               Hapus
             </Text>
@@ -991,6 +1043,22 @@ export default function PreOrderScreen() {
                       ]}
                     >
                       Converted
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.filterChip,
+                      tempFilters.status === 'merged' && styles.filterChipSelected,
+                    ]}
+                    onPress={() => setTempFilters({ ...tempFilters, status: 'merged' })}
+                  >
+                    <Text
+                      style={[
+                        styles.filterChipText,
+                        tempFilters.status === 'merged' && styles.filterChipTextSelected,
+                      ]}
+                    >
+                      Merged
                     </Text>
                   </TouchableOpacity>
                 </View>
