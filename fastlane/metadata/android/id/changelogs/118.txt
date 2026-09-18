@@ -1,0 +1,1 @@
+Tambah menu AI Assist, alarm pesanan baru, tolak/cancel pesanan, penyempurnaan Pesanan V2 & detail pesanan, flash sale, dan perbaikan lainnya.
