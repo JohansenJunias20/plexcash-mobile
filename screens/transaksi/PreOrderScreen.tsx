@@ -22,6 +22,7 @@ import { API_BASE_URL } from '../../services/api';
 import { getTokenAuth } from '../../services/token';
 import SearchSupplierModal, { SupplierItem } from '../../components/pembelian/SearchSupplierModal';
 import SearchBarangModal, { BarangItem } from '../../components/SearchBarangModal';
+import AttachmentUploader, { DriveFile } from '../../components/AttachmentUploader';
 
 interface PreOrderItem {
   id_masterbarang: number;
@@ -77,7 +78,9 @@ export default function PreOrderScreen() {
   const [showTanggalPOPicker, setShowTanggalPOPicker] = useState(false);
   const [showPerkiraanSampaiPicker, setShowPerkiraanSampaiPicker] = useState(false);
   const [suppliers, setSuppliers] = useState<SupplierItem[]>([]);
-  
+  const [isGDriveConnected, setIsGDriveConnected] = useState(false);
+  const [pendingAttachments, setPendingAttachments] = useState<DriveFile[]>([]);
+
   const [currentPreOrder, setCurrentPreOrder] = useState<PreOrderData>({
     tanggal_po: moment().format('YYYY-MM-DDTHH:mm:ss'),
     tanggal_perkiraan_sampai: moment().add(7, 'days').format('YYYY-MM-DD'),
@@ -154,6 +157,22 @@ export default function PreOrderScreen() {
   useEffect(() => {
     fetchPreOrders();
     fetchSuppliers();
+  }, []);
+
+  useEffect(() => {
+    const checkGDriveStatus = async () => {
+      try {
+        const token = await getTokenAuth();
+        const res = await fetch(`${API_BASE_URL}/google-drive/status`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        setIsGDriveConnected(!!data.connected);
+      } catch (e) {
+        console.error('Failed to check Google Drive status:', e);
+      }
+    };
+    checkGDriveStatus();
   }, []);
 
   // Handle new item from BarangEdit screen
@@ -385,6 +404,29 @@ export default function PreOrderScreen() {
       const data = await response.json();
 
       if (data.status) {
+        const preorderId = currentPreOrder.id || data.id;
+
+        // Link pending Google Drive attachments (matches web PreOrder.tsx)
+        if (pendingAttachments.length > 0 && preorderId) {
+          try {
+            await fetch(`${API_BASE_URL}/google-drive/link-attachments`, {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                type: 'preorder',
+                transaction_id: preorderId,
+                files: pendingAttachments,
+              }),
+            });
+            setPendingAttachments([]);
+          } catch (e) {
+            console.error('Failed to link attachments:', e);
+          }
+        }
+
         Alert.alert('Sukses', 'Pre-order berhasil disimpan');
         setShowDialog(false);
         resetCurrentPreOrder();
@@ -470,6 +512,7 @@ export default function PreOrderScreen() {
       notes: '',
       items: [],
     });
+    setPendingAttachments([]);
   };
 
   const handleTanggalPOChange = (_: DateTimePickerEvent, selectedDate?: Date) => {
@@ -515,6 +558,7 @@ export default function PreOrderScreen() {
 
   const handleEditPreOrder = (preOrder: PreOrderData) => {
     setCurrentPreOrder(preOrder);
+    setPendingAttachments([]);
     setShowDialog(true);
   };
 
@@ -843,7 +887,7 @@ export default function PreOrderScreen() {
               <View style={styles.formGroup}>
                 <Text style={styles.formLabel}>Shortcut Perkiraan Sampai</Text>
                 <View style={styles.shortcutChipRow}>
-                  {[3, 7, 10, 14, 30].map((days) => {
+                  {[3, 7, 10, 14, 30, 40, 45, 60].map((days) => {
                     const isSelected = getSelectedShortcutDays() === days;
                     return (
                       <TouchableOpacity
@@ -936,6 +980,14 @@ export default function PreOrderScreen() {
                   </View>
                 ))}
               </View>
+
+              {/* Attachment Uploader */}
+              <AttachmentUploader
+                transactionType="preorder"
+                transactionId={currentPreOrder.id || null}
+                isGDriveConnected={isGDriveConnected}
+                onPendingFilesChange={setPendingAttachments}
+              />
             </ScrollView>
 
             <View style={styles.modalFooter}>

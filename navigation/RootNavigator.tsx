@@ -13,6 +13,10 @@ import SupplierListScreen from '../screens/supplier/SupplierListScreen';
 import SupplierEditScreen from '../screens/supplier/SupplierEditScreen';
 import CustomerListScreen from '../screens/customer/CustomerListScreen';
 import CustomerEditScreen from '../screens/customer/CustomerEditScreen';
+import KaryawanListScreen from '../screens/master/karyawan/KaryawanListScreen';
+import KaryawanEditScreen from '../screens/master/karyawan/KaryawanEditScreen';
+import AbsensiScreen from '../screens/transaksi/absensi/AbsensiScreen';
+import BayarGajiScreen from '../screens/transaksi/bayar_gaji/BayarGajiScreen';
 import OrdersListScreen from '../screens/orders/OrdersListScreen';
 import PesananV2Screen from '../screens/ecommerce/PesananV2Screen';
 import OrderDetailScreen from '../screens/orders/OrderDetailScreen';
@@ -40,6 +44,7 @@ import { logNavigation, logStateChange } from '../utils/logger';
 
 export type AppStackParamList = {
   MainHome: undefined;
+  AIAssist: undefined;
   BarangList: undefined;
   BarangEdit: { id: number } | undefined;
   Kartustok: { id: number };
@@ -50,6 +55,10 @@ export type AppStackParamList = {
   SupplierEdit: { id: number } | undefined;
   CustomerList: undefined;
   CustomerEdit: { id: number } | undefined;
+  KaryawanList: undefined;
+  KaryawanEdit: { id?: number } | undefined;
+  Absensi: undefined;
+  BayarGaji: undefined;
   OrdersList: undefined;
   PesananV2: undefined;
   OrderDetail: {
@@ -188,6 +197,10 @@ export default function RootNavigator() {
       <AppStack.Screen name="SupplierEdit" component={SupplierEditScreen} options={{ title: 'Supplier' }} />
       <AppStack.Screen name="CustomerList" component={CustomerListScreen} options={{ title: 'Customer' }} />
       <AppStack.Screen name="CustomerEdit" component={CustomerEditScreen} options={{ title: 'Customer' }} />
+      <AppStack.Screen name="KaryawanList" component={KaryawanListScreen} options={{ headerShown: false }} />
+      <AppStack.Screen name="KaryawanEdit" component={KaryawanEditScreen} options={{ title: 'Karyawan' }} />
+      <AppStack.Screen name="Absensi" component={AbsensiScreen} options={{ headerShown: false }} />
+      <AppStack.Screen name="BayarGaji" component={BayarGajiScreen} options={{ headerShown: false }} />
       <AppStack.Screen name="UserList" component={UserListScreen} options={{ title: 'User Management' }} />
       <AppStack.Screen name="UserEdit" component={UserEditScreen} options={{ title: 'User Permissions' }} />
       <AppStack.Screen name="OrdersList" component={OrdersListScreen} options={{ title: 'Pesanan' }} />

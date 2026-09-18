@@ -54,6 +54,15 @@ print_info() {
 # Configuration
 # ============================================
 
+# Optional: pass release notes as the first argument to also auto-upload
+# the AAB to Google Play via fastlane. Second argument picks the track:
+#   production (default, draft status) | beta (open testing, i.e. "early access")
+#   | alpha (closed testing) | internal
+# Example: ./build-aab.sh "Catatan rilis" beta
+# Without a release-notes argument, the script only builds the AAB (old behavior).
+RELEASE_NOTES="$1"
+DEPLOY_TRACK="${2:-production}"
+
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ANDROID_DIR="$PROJECT_DIR/android"
 
@@ -138,6 +147,12 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
 else
     # Linux/Git Bash
     sed -i "s/versionCode $CURRENT_VERSION_CODE/versionCode $NEW_VERSION_CODE/" "$BUILD_GRADLE"
+fi
+
+# Synchronize app.json versionCode if present
+APP_JSON="$PROJECT_DIR/app.json"
+if [ -f "$APP_JSON" ]; then
+    sed -i "s/\"versionCode\": [0-9]*/\"versionCode\": $NEW_VERSION_CODE/" "$APP_JSON" || true
 fi
 
 print_success "Version code incremented: $CURRENT_VERSION_CODE → $NEW_VERSION_CODE"
@@ -228,6 +243,9 @@ else
     exit 1
 fi
 
+# Back to project root — the fastlane/ folder and later steps expect this as cwd
+cd "$PROJECT_DIR"
+
 # ============================================
 # Verify Output
 # ============================================
@@ -240,12 +258,10 @@ if [ ! -f "$AAB_FILE" ]; then
 fi
 
 # Get file size
-if [ "$IS_WINDOWS" = true ]; then
-    # Windows (Git Bash) - use PowerShell to get file size
-    FILE_SIZE=$(powershell.exe -Command "(Get-Item '$AAB_FILE').Length")
-else
-    # Linux/Mac
-    FILE_SIZE=$(stat -f%z "$AAB_FILE" 2>/dev/null || stat -c%s "$AAB_FILE" 2>/dev/null)
+FILE_SIZE=$(stat -c%s "$AAB_FILE" 2>/dev/null || stat -f%z "$AAB_FILE" 2>/dev/null)
+if [ -z "$FILE_SIZE" ] && [ "$IS_WINDOWS" = true ]; then
+    WIN_AAB_PATH="$(cygpath -w "$AAB_FILE" 2>/dev/null || echo "$AAB_FILE")"
+    FILE_SIZE=$(powershell.exe -Command "(Get-Item '$WIN_AAB_PATH').Length" 2>/dev/null)
 fi
 
 # Convert to MB
@@ -257,10 +273,10 @@ print_info "File: $AAB_FILE"
 print_info "Size: ${FILE_SIZE_MB} MB"
 
 # Get file timestamp
-if [ "$IS_WINDOWS" = true ]; then
-    FILE_TIME=$(powershell.exe -Command "(Get-Item '$AAB_FILE').LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss')")
-else
-    FILE_TIME=$(date -r "$AAB_FILE" "+%Y-%m-%d %H:%M:%S" 2>/dev/null || stat -c %y "$AAB_FILE" 2>/dev/null | cut -d'.' -f1)
+FILE_TIME=$(date -r "$AAB_FILE" "+%Y-%m-%d %H:%M:%S" 2>/dev/null || stat -c %y "$AAB_FILE" 2>/dev/null | cut -d'.' -f1)
+if [ -z "$FILE_TIME" ] && [ "$IS_WINDOWS" = true ]; then
+    WIN_AAB_PATH="$(cygpath -w "$AAB_FILE" 2>/dev/null || echo "$AAB_FILE")"
+    FILE_TIME=$(powershell.exe -Command "(Get-Item '$WIN_AAB_PATH').LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss')" 2>/dev/null)
 fi
 print_info "Created: $FILE_TIME"
 
@@ -301,10 +317,52 @@ print_info "5. Fill release notes and submit"
 echo ""
 
 # ============================================
+# Optional: Auto-upload to Google Play (only if release notes were given)
+# ============================================
+
+if [ -n "$RELEASE_NOTES" ]; then
+    print_header "Uploading to Google Play (track: $DEPLOY_TRACK)"
+
+    if ! command -v fastlane &> /dev/null; then
+        print_warning "fastlane not found — skipping auto-upload."
+        print_info "Install it with: gem install fastlane"
+        print_info "Then re-run: ./build-aab.sh \"$RELEASE_NOTES\" $DEPLOY_TRACK"
+    else
+        JSON_KEY_PATH="${GOOGLE_PLAY_JSON_KEY_PATH:-$PROJECT_DIR/service-account-key.json}"
+        if [ ! -f "$JSON_KEY_PATH" ]; then
+            print_warning "Service account key not found at: $JSON_KEY_PATH — skipping auto-upload."
+            print_info "Set GOOGLE_PLAY_JSON_KEY_PATH or place the key at that path, then re-run."
+        else
+            CHANGELOG_DIR="$PROJECT_DIR/fastlane/metadata/android/id/changelogs"
+            mkdir -p "$CHANGELOG_DIR"
+            echo "$RELEASE_NOTES" > "$CHANGELOG_DIR/${NEW_VERSION_CODE}.txt"
+            print_info "Release notes saved for versionCode $NEW_VERSION_CODE"
+
+            # Ruby (RubyInstaller, native Windows build) can't resolve Git Bash's
+            # POSIX-style paths (/c/Users/...) — convert to Windows form first.
+            WIN_AAB_FILE="$(cygpath -w "$AAB_FILE" 2>/dev/null || echo "$AAB_FILE")"
+            WIN_JSON_KEY_PATH="$(cygpath -w "$JSON_KEY_PATH" 2>/dev/null || echo "$JSON_KEY_PATH")"
+
+            if GOOGLE_PLAY_JSON_KEY_PATH="$WIN_JSON_KEY_PATH" fastlane android deploy aab_path:"$WIN_AAB_FILE" track:"$DEPLOY_TRACK"; then
+                if [ "$DEPLOY_TRACK" = "production" ]; then
+                    print_success "Uploaded to Play Console as a DRAFT release (production track)."
+                    print_warning "It will NOT go live until you click 'Start rollout' in Play Console."
+                else
+                    print_success "Uploaded and published to the '$DEPLOY_TRACK' track — live for opted-in testers now."
+                fi
+            else
+                print_error "Upload to Google Play failed. AAB was still built successfully at:"
+                print_info "$AAB_FILE"
+            fi
+        fi
+    fi
+fi
+
+# ============================================
 # Optional: Copy to Desktop
 # ============================================
 
-read -p "$(echo -e ${YELLOW}Do you want to copy AAB to Desktop? [y/N]: ${NC})" -n 1 -r
+read -t 10 -p "$(echo -e ${YELLOW}Do you want to copy AAB to Desktop? [y/N]: ${NC})" -n 1 -r || REPLY="n"
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     if [ "$IS_WINDOWS" = true ]; then

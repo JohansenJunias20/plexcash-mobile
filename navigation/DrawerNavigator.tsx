@@ -40,6 +40,12 @@ import BaganAkunListScreen from '../screens/master/BaganAkunListScreen';
 import UploadScreen from '../screens/master/UploadScreen';
 import ImportBarangScreen from '../screens/master/ImportBarangScreen';
 import WarehouseListScreen from '../screens/master/WarehouseListScreen';
+import KaryawanListScreen from '../screens/master/karyawan/KaryawanListScreen';
+import KaryawanEditScreen from '../screens/master/karyawan/KaryawanEditScreen';
+
+// TRANSAKSI Section - Absensi & Bayar Gaji
+import AbsensiScreen from '../screens/transaksi/absensi/AbsensiScreen';
+import BayarGajiScreen from '../screens/transaksi/bayar_gaji/BayarGajiScreen';
 
 // TRANSAKSI Section - Pembelian
 import PembelianTambahScreen from '../screens/transaksi/pembelian/PembelianTambahScreen';
@@ -94,6 +100,7 @@ import LaporanBarangScreen from '../screens/laporan/LaporanBarangScreen';
 import IklanScreen from '../screens/laporan/IklanScreen';
 import PerangkatListScreen from '../screens/perangkat/PerangkatListScreen';
 import PerangkatConfigScreen from '../screens/perangkat/PerangkatConfigScreen';
+import AIAssistScreen from '../screens/ai/AIAssistScreen';
 
 const Drawer = createDrawerNavigator();
 const AuthStack = createNativeStackNavigator();
@@ -102,6 +109,7 @@ const AuthStack = createNativeStackNavigator();
 const BarangStack = createNativeStackNavigator();
 const SupplierStack = createNativeStackNavigator();
 const CustomerStack = createNativeStackNavigator();
+const KaryawanStack = createNativeStackNavigator();
 const UserStack = createNativeStackNavigator();
 const BundlingStack = createNativeStackNavigator();
 const OrdersStack = createNativeStackNavigator();
@@ -160,6 +168,27 @@ const CustomerStackScreen = () => (
     <CustomerStack.Screen name="CustomerListMain" component={CustomerListScreen} />
     <CustomerStack.Screen name="CustomerEdit" component={CustomerEditScreen} />
   </CustomerStack.Navigator>
+);
+
+const KaryawanStackScreen = () => (
+  <KaryawanStack.Navigator
+    screenOptions={{
+      headerShown: false,
+    }}
+  >
+    <KaryawanStack.Screen name="KaryawanListMain" component={KaryawanListScreen} />
+    <KaryawanStack.Screen
+      name="KaryawanEdit"
+      component={KaryawanEditScreen}
+      options={{
+        headerShown: true,
+        headerStyle: { backgroundColor: '#f59e0b' },
+        headerTintColor: '#fff',
+        headerTitleStyle: { fontWeight: '600' },
+        title: 'Karyawan',
+      }}
+    />
+  </KaryawanStack.Navigator>
 );
 
 const UserStackScreen = () => (
@@ -354,6 +383,9 @@ const DrawerNavigatorContent = () => {
       {/* Home */}
       <Drawer.Screen name="Main" component={MainScreen} />
 
+      {/* AI Assist */}
+      <Drawer.Screen name="AIAssist" component={AIAssistScreen} />
+
       {/* POS Kasir */}
       <Drawer.Screen name="POSKasir" component={POSKasirScreen} />
 
@@ -368,6 +400,7 @@ const DrawerNavigatorContent = () => {
       <Drawer.Screen name="BundlingList" component={BundlingStackScreen} />
       <Drawer.Screen name="ImportBarang" component={ImportBarangScreen} />
       <Drawer.Screen name="WarehouseList" component={WarehouseListScreen} />
+      <Drawer.Screen name="KaryawanList" component={KaryawanStackScreen} />
 
       {/* TRANSAKSI Section - Pembelian - Using Stack Navigator */}
       <Drawer.Screen name="PembelianTambah" component={PembelianTambahScreen} />
@@ -393,6 +426,8 @@ const DrawerNavigatorContent = () => {
       <Drawer.Screen name="MutasiAkun" component={MutasiAkunScreen} />
       <Drawer.Screen name="StokOpname" component={StokOpnameScreen} />
       <Drawer.Screen name="PesanBarang" component={PesanBarangScreen} />
+      <Drawer.Screen name="Absensi" component={AbsensiScreen} />
+      <Drawer.Screen name="BayarGaji" component={BayarGajiScreen} />
 
       {/* ECOMMERCE Section - Using Stack Navigators */}
       <Drawer.Screen name="DiskonScreen" component={DiskonScreen} />

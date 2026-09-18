@@ -306,9 +306,28 @@ const MainScreen = (): React.JSX.Element => {
             <Text style={styles.userEmail}>{(user as any)?.email || 'Guest'}</Text>
           </View>
         </View>
-        <TouchableOpacity style={styles.settingsIcon} onPress={handleOpenSettings}>
-          <Ionicons name="settings" size={24} color="white" />
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          <TouchableOpacity
+            style={styles.aiAssistButton}
+            onPress={() => navigation.navigate('AIAssist')}
+            activeOpacity={0.85}
+          >
+            <LinearGradient
+              colors={['#0284c7', '#2563eb', '#4f46e5']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.aiAssistGradient}
+            >
+              <Text style={styles.aiAssistText}>🤖 AI Assist</Text>
+              <View style={styles.aiAssistBetaBadge}>
+                <Text style={styles.aiAssistBetaText}>BETA</Text>
+              </View>
+            </LinearGradient>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.settingsIcon} onPress={handleOpenSettings}>
+            <Ionicons name="settings" size={24} color="white" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -669,7 +688,45 @@ const styles = StyleSheet.create({
     padding: 5,
   },
   userEmail: { color: 'rgba(255,255,255,0.8)', fontSize: 14 },
-  settingsIcon: { padding: 10 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  aiAssistButton: {
+    borderRadius: 20,
+    overflow: 'hidden',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowOffset: { width: 0, height: 1 },
+    shadowRadius: 3,
+  },
+  aiAssistGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 20,
+    gap: 5,
+  },
+  aiAssistText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  aiAssistBetaBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.45)',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 10,
+  },
+  aiAssistBetaText: {
+    color: '#ffffff',
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  settingsIcon: { padding: 8 },
   content: { flex: 1 },
   dashboard: { padding: 20 },
   section: { marginBottom: 30 },

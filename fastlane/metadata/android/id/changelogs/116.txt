@@ -1,0 +1,1 @@
+Modul baru: Karyawan, Absensi, Bayar Gaji. Peningkatan AI Assist Chatbot, Order Alarm untuk pesanan baru, Instant Accept, dan alasan pembatalan pesanan. Perbaikan: pesan error saat gagal buat penjualan sekarang lebih informatif (menampilkan alasan spesifik, bukan generic error).

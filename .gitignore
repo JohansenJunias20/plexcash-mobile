@@ -42,3 +42,9 @@ yarn-error.*
 
 # Google Play API service account key - JANGAN COMMIT!
 service-account-key.json
+
+# fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots
+fastlane/test_output

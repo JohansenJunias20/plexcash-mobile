@@ -16,6 +16,9 @@ export interface MenuItem {
 }
 
 export const AVAILABLE_MENUS: MenuItem[] = [
+  // AI ASSIST
+  { id: 'AIAssist', label: 'AI Assist', subtitle: 'Chatbot & Input Nota', icon: 'hardware-chip-outline', route: 'AIAssist', category: 'AI' },
+
   // POS
   { id: 'POSKasir', label: 'POS Kasir', subtitle: 'Point of Sale', icon: 'cash-outline', route: 'POSKasir', category: 'POS', accessKey: 'transaksi.penjualan.pos_kasir' },
 

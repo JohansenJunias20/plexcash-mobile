@@ -16,6 +16,7 @@ interface AccessPermissions {
     import_barang?: boolean;
     show_hpp?: boolean;
     warehouse?: boolean;
+    karyawan?: boolean;
   };
   actions?: {
     read?: boolean;
@@ -77,6 +78,8 @@ interface AccessPermissions {
     pesanbarang?: boolean;
     retur_service?: boolean;
     detailbaganakun?: boolean;
+    absensi?: boolean;
+    bayar_gaji?: boolean;
   };
   visibility?: {
     hide_harga_beli?: boolean;

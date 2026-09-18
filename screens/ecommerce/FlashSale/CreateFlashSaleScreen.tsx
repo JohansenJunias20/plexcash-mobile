@@ -47,7 +47,7 @@ export default function CreateFlashSaleScreen() {
   const [loadingTimeslots, setLoadingTimeslots] = useState(false);
   const [showTimeslotPicker, setShowTimeslotPicker] = useState(false);
 
-  const [autoRenew, setAutoRenew] = useState(false);
+  const [autoRenew, setAutoRenew] = useState(true);
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
 
@@ -129,8 +129,11 @@ export default function CreateFlashSaleScreen() {
   };
 
   const handleSubmit = async () => {
-    if (!selectedTimeslot) {
-      Alert.alert('Perhatian', 'Pilih slot waktu terlebih dahulu.');
+    if (!selectedTimeslot && !autoRenew) {
+      Alert.alert(
+        'Perhatian',
+        'Silakan pilih slot waktu terlebih dahulu, atau aktifkan "Perbarui Flash Sale Otomatis" untuk menyimpan konfigurasi.'
+      );
       return;
     }
 
@@ -193,40 +196,44 @@ export default function CreateFlashSaleScreen() {
 
     setSubmitting(true);
     try {
-      // 1. Create session at Shopee
-      const createRes = await FlashSaleService.createFlashSaleSession(
-        id_ecommerce,
-        selectedTimeslot.timeslot_id,
-        selectedTimeslot.start_time,
-        selectedTimeslot.end_time
-      );
+      let flashSaleId: number | null = null;
 
-      if (!createRes.status || !createRes.flash_sale_id) {
-        Alert.alert(
-          'Gagal Membuat Sesi Shopee',
-          createRes.reason || 'Shopee menolak pembuatan sesi untuk slot waktu ini.'
+      // 1. Create session at Shopee ONLY if a timeslot was chosen
+      if (selectedTimeslot) {
+        const createRes = await FlashSaleService.createFlashSaleSession(
+          id_ecommerce,
+          selectedTimeslot.timeslot_id,
+          selectedTimeslot.start_time,
+          selectedTimeslot.end_time
         );
-        setSubmitting(false);
-        return;
-      }
 
-      const flashSaleId = createRes.flash_sale_id;
-
-      // 2. Add items to session
-      const addRes = await FlashSaleService.addItemsToSession(flashSaleId, itemsPayload);
-
-      if (!addRes.status) {
-        if (addRes.failure_list && addRes.failure_list.length > 0) {
-          setRejectionList(addRes.failure_list);
-          setRejectionReason(
-            addRes.reason || 'Shopee menolak beberapa item yang dimasukkan ke Flash Sale.'
+        if (!createRes.status || !createRes.flash_sale_id) {
+          Alert.alert(
+            'Gagal Membuat Sesi Shopee',
+            createRes.reason || 'Shopee menolak pembuatan sesi untuk slot waktu ini.'
           );
-          setRejectionModalVisible(true);
-        } else {
-          Alert.alert('Gagal Menambahkan Item', addRes.reason || 'Terjadi kesalahan sistem.');
+          setSubmitting(false);
+          return;
         }
-        setSubmitting(false);
-        return;
+
+        flashSaleId = createRes.flash_sale_id;
+
+        // 2. Add items to session
+        const addRes = await FlashSaleService.addItemsToSession(flashSaleId, itemsPayload);
+
+        if (!addRes.status) {
+          if (addRes.failure_list && addRes.failure_list.length > 0) {
+            setRejectionList(addRes.failure_list);
+            setRejectionReason(
+              addRes.reason || 'Shopee menolak beberapa item yang dimasukkan ke Flash Sale.'
+            );
+            setRejectionModalVisible(true);
+          } else {
+            Alert.alert('Gagal Menambahkan Item', addRes.reason || 'Terjadi kesalahan sistem.');
+          }
+          setSubmitting(false);
+          return;
+        }
       }
 
       // 3. Register auto flash sale if toggled
@@ -239,18 +246,33 @@ export default function CreateFlashSaleScreen() {
 
         const formattedEndDate = endDate ? moment(endDate).format('YYYY-MM-DD') : null;
 
-        await FlashSaleService.createAutoFlashSale(
+        const autoRes = await FlashSaleService.createAutoFlashSale(
           id_ecommerce,
           autoProducts,
           formattedEndDate
         );
+
+        if (!autoRes.status) {
+          if (!selectedTimeslot) {
+            Alert.alert(
+              'Gagal Menyimpan Konfigurasi Otomatis',
+              autoRes.reason || 'Gagal menyimpan konfigurasi Flash Sale otomatis.'
+            );
+            setSubmitting(false);
+            return;
+          } else {
+            console.warn('Gagal mengaktifkan perpanjang otomatis:', autoRes.reason);
+          }
+        }
       }
 
       Alert.alert(
-        'Flash Sale Berhasil Dibuat! 🎉',
-        `Sesi Flash Sale #${flashSaleId} berhasil terdaftar di Shopee.${
-          autoRenew ? ' Konfigurasi otomatis juga telah aktif.' : ''
-        }`,
+        'Flash Sale Berhasil Disimpan! 🎉',
+        flashSaleId
+          ? `Sesi Flash Sale #${flashSaleId} berhasil terdaftar di Shopee.${
+              autoRenew ? ' Konfigurasi otomatis juga telah aktif.' : ''
+            }`
+          : 'Konfigurasi Flash Sale otomatis berhasil disimpan! Server akan mendaftarkan produk ke sesi Shopee setiap hari secara otomatis.',
         [
           {
             text: 'OK',
@@ -286,7 +308,9 @@ export default function CreateFlashSaleScreen() {
             <Text style={styles.sectionTitle}>1. Informasi Slot Waktu</Text>
           </View>
 
-          <Text style={styles.fieldLabel}>Slot Waktu (48 Jam Ke Depan)</Text>
+          <Text style={styles.fieldLabel}>
+            Slot Waktu {autoRenew ? '(Opsional jika Otomatis Aktif)' : '(Wajib)'}
+          </Text>
           {loadingTimeslots ? (
             <ActivityIndicator size="small" color="#EE4D2D" style={{ marginVertical: 10 }} />
           ) : timeslots.length === 0 ? (
@@ -294,6 +318,11 @@ export default function CreateFlashSaleScreen() {
               <Text style={styles.emptyTimeslotText}>
                 Tidak ada slot waktu Flash Sale yang tersedia di Shopee untuk 48 jam ke depan.
               </Text>
+              {autoRenew && (
+                <Text style={[styles.emptyTimeslotText, { color: '#059669', marginTop: 4, fontWeight: '600' }]}>
+                  ✓ Fitur "Perbarui Otomatis" aktif. Anda tetap bisa menyimpan konfigurasi agar didaftarkan otomatis oleh server saat slot tersedia.
+                </Text>
+              )}
             </View>
           ) : (
             <TouchableOpacity
@@ -305,19 +334,58 @@ export default function CreateFlashSaleScreen() {
                   ? `${formatDateTime(selectedTimeslot.start_time)} ~ ${formatDateTime(
                       selectedTimeslot.end_time
                     )}`
+                  : autoRenew
+                  ? 'Tidak memilih sesi (Hanya Jalankan Otomatis)'
                   : 'Pilih slot waktu...'}
               </Text>
-              <Ionicons
-                name={showTimeslotPicker ? 'chevron-up' : 'chevron-down'}
-                size={18}
-                color="#6B7280"
-              />
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                {selectedTimeslot && autoRenew && (
+                  <TouchableOpacity
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      setSelectedTimeslot(null);
+                    }}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+                  </TouchableOpacity>
+                )}
+                <Ionicons
+                  name={showTimeslotPicker ? 'chevron-up' : 'chevron-down'}
+                  size={18}
+                  color="#6B7280"
+                />
+              </View>
             </TouchableOpacity>
           )}
 
           {/* Timeslot Options Dropdown */}
           {showTimeslotPicker && (
             <View style={styles.timeslotDropdown}>
+              {autoRenew && (
+                <TouchableOpacity
+                  style={[styles.timeslotOption, !selectedTimeslot && styles.timeslotOptionSelected]}
+                  onPress={() => {
+                    setSelectedTimeslot(null);
+                    setShowTimeslotPicker(false);
+                  }}
+                >
+                  <Ionicons
+                    name={!selectedTimeslot ? 'radio-button-on' : 'radio-button-off'}
+                    size={16}
+                    color={!selectedTimeslot ? '#EE4D2D' : '#9CA3AF'}
+                    style={{ marginRight: 8 }}
+                  />
+                  <Text
+                    style={[
+                      styles.timeslotOptionText,
+                      !selectedTimeslot && styles.timeslotOptionTextSelected,
+                    ]}
+                  >
+                    Lewati sesi sekarang (Hanya jalankan otomatis setiap hari)
+                  </Text>
+                </TouchableOpacity>
+              )}
               {timeslots.map((ts) => {
                 const isSelected = selectedTimeslot?.timeslot_id === ts.timeslot_id;
                 return (
@@ -365,21 +433,76 @@ export default function CreateFlashSaleScreen() {
             />
           </View>
 
-          {/* End Date if Auto-renew is active */}
+          {/* End Date / Duration if Auto-renew is active */}
           {autoRenew && (
             <View style={styles.endDateRow}>
-              <Text style={styles.fieldLabel}>Tanggal Berakhir Promo (Opsional)</Text>
+              <Text style={styles.fieldLabel}>Durasi / Tanggal Berakhir Promo (Opsional)</Text>
+              <Text style={styles.fieldHelper}>
+                Akan berhenti otomatis setelah tanggal ini. Kosongkan jika ingin berjalan selamanya.
+              </Text>
+
+              {/* Quick duration presets */}
+              <View style={styles.durationPresetsRow}>
+                {[
+                  { label: 'Selamanya', days: 0 },
+                  { label: '3 Hari', days: 3 },
+                  { label: '7 Hari', days: 7 },
+                  { label: '14 Hari', days: 14 },
+                  { label: '30 Hari', days: 30 },
+                ].map((preset) => {
+                  const isSelected =
+                    preset.days === 0
+                      ? !endDate
+                      : !!endDate &&
+                        moment(endDate).format('YYYY-MM-DD') ===
+                          moment().add(preset.days, 'days').format('YYYY-MM-DD');
+
+                  return (
+                    <TouchableOpacity
+                      key={preset.label}
+                      style={[styles.presetChip, isSelected && styles.presetChipSelected]}
+                      onPress={() => {
+                        if (preset.days === 0) {
+                          setEndDate(null);
+                        } else {
+                          setEndDate(moment().add(preset.days, 'days').toDate());
+                        }
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.presetChipText,
+                          isSelected && styles.presetChipTextSelected,
+                        ]}
+                      >
+                        {preset.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
               <TouchableOpacity
                 style={styles.datePickerBtn}
                 onPress={() => setShowDatePicker(true)}
               >
                 <Ionicons name="calendar" size={16} color="#4B5563" />
                 <Text style={styles.datePickerBtnText}>
-                  {endDate ? moment(endDate).format('DD MMMM YYYY') : 'Selamanya (Tanpa Batas)'}
+                  {endDate
+                    ? `Berakhir: ${moment(endDate).format('DD MMMM YYYY')} (${
+                        moment(endDate).diff(moment(), 'days') + 1
+                      } hari lagi)`
+                    : 'Pilih Tanggal Spesifik (Saat ini: Selamanya)'}
                 </Text>
                 {endDate && (
-                  <TouchableOpacity onPress={() => setEndDate(null)}>
-                    <Ionicons name="close-circle" size={16} color="#9CA3AF" />
+                  <TouchableOpacity
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      setEndDate(null);
+                    }}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Ionicons name="close-circle" size={18} color="#9CA3AF" />
                   </TouchableOpacity>
                 )}
               </TouchableOpacity>
@@ -566,7 +689,9 @@ export default function CreateFlashSaleScreen() {
             <ActivityIndicator size="small" color="#FFFFFF" />
           ) : (
             <Text style={styles.submitBtnText}>
-              Konfirmasi & Buat Flash Sale ({selectedItems.length} Item)
+              {selectedTimeslot
+                ? `Konfirmasi & Buat Flash Sale (${selectedItems.length} Item)`
+                : `Simpan Flash Sale Otomatis (${selectedItems.length} Item)`}
             </Text>
           )}
         </TouchableOpacity>
@@ -738,6 +863,39 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: '#F3F4F6',
+  },
+  fieldHelper: {
+    fontSize: 11,
+    color: '#6B7280',
+    marginBottom: 8,
+    lineHeight: 15,
+  },
+  durationPresetsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 10,
+  },
+  presetChip: {
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  presetChipSelected: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FCA5A5',
+  },
+  presetChipText: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#4B5563',
+  },
+  presetChipTextSelected: {
+    color: '#EE4D2D',
+    fontWeight: '700',
   },
   datePickerBtn: {
     flexDirection: 'row',

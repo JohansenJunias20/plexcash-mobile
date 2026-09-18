@@ -1,0 +1,36 @@
+default_platform(:android)
+
+platform :android do
+  desc "Upload a locally-built AAB to Google Play"
+  desc "track: production (default) | beta (open testing) | alpha (closed testing) | internal"
+  lane :deploy do |options|
+    track = options[:track] || "production"
+
+    # Langsung rilis (completed) tanpa draft sesuai permintaan user
+    default_status = "completed"
+
+    upload_to_play_store(
+      track: track,
+      release_status: options[:release_status] || default_status,
+      aab: options[:aab_path],
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+    )
+  end
+
+  desc "Promote an already uploaded release from one track to another (e.g. beta -> production)"
+  lane :promote do |options|
+    upload_to_play_store(
+      track: options[:track] || "beta",
+      track_promote_to: options[:track_promote_to] || "production",
+      track_promote_release_status: options[:release_status] || "completed",
+      skip_upload_aab: true,
+      skip_upload_apk: true,
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      skip_upload_changelogs: true,
+    )
+  end
+end

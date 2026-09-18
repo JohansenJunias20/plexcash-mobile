@@ -18,6 +18,7 @@ import ApiService from '../../services/api';
 // Import components (to be created)
 import BelumPesanTab from './components/BelumPesanTab';
 import SudahPesanTab from './components/SudahPesanTab';
+import StockForecastTab from './components/StockForecastTab';
 
 // Types
 interface ItemBelumPesan {
@@ -54,7 +55,7 @@ interface Supplier {
   nama: string;
 }
 
-type TabType = 'belum' | 'sudah';
+type TabType = 'belum' | 'sudah' | 'forecast';
 
 export default function PesanBarangScreen() {
   const navigation = useNavigation();
@@ -152,9 +153,10 @@ export default function PesanBarangScreen() {
   useEffect(() => {
     if (activeTab === 'belum') {
       fetchBelumPesan();
-    } else {
+    } else if (activeTab === 'sudah') {
       fetchSudahPesan();
     }
+    // 'forecast' loads its own paged data inside StockForecastTab
   }, [activeTab]);
 
   // Handle refresh
@@ -162,7 +164,7 @@ export default function PesanBarangScreen() {
     setRefreshing(true);
     if (activeTab === 'belum') {
       await fetchBelumPesan();
-    } else {
+    } else if (activeTab === 'sudah') {
       await fetchSudahPesan();
     }
     setRefreshing(false);
@@ -552,11 +554,25 @@ export default function PesanBarangScreen() {
             </View>
           )}
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'forecast' && styles.activeTab]}
+          onPress={() => handleTabChange('forecast')}
+        >
+          <Text style={[styles.tabText, activeTab === 'forecast' && styles.activeTabText]}>
+            Forecast
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {/* Tab Content */}
       <View style={styles.content}>
-        {activeTab === 'belum' ? (
+        {activeTab === 'forecast' ? (
+          <StockForecastTab
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            onOrdered={fetchSudahPesan}
+          />
+        ) : activeTab === 'belum' ? (
           <BelumPesanTab
             items={itemsBelumPesan}
             loading={loadingBelum}

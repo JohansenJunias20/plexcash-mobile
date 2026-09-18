@@ -7,11 +7,13 @@ import { useAuth } from '../context/AuthContext';
 import SimpleQRScanner from './SimpleQRScanner';
 import QRCodeInput from './QRCodeInput';
 import { checkForOTAUpdates, reloadApp } from '../services/versionCheck';
+import { useOrderAlarm } from '../context/OrderAlarmContext';
 
 interface Props { onClose: () => void }
 
 const Settings = ({ onClose }: Props): JSX.Element => {
   const { user, signOut } = useAuth();
+  const { enabled: orderAlarmEnabled, setEnabled: setOrderAlarmEnabled } = useOrderAlarm();
   const [showQRScanner, setShowQRScanner] = useState(false);
   const [showQRInput, setShowQRInput] = useState(false);
   const [notifications, setNotifications] = useState(true);
@@ -159,6 +161,17 @@ const Settings = ({ onClose }: Props): JSX.Element => {
                 </View>
               </View>
               <Switch value={autoSync} onValueChange={setAutoSync} trackColor={{ false: 'rgba(255,255,255,0.3)', true: '#10B981' }} thumbColor={autoSync ? '#ffffff' : '#f4f3f4'} />
+            </View>
+
+            <View style={styles.settingItem}>
+              <View style={styles.settingLeft}>
+                <Ionicons name="alarm" size={24} color="white" />
+                <View style={styles.settingText}>
+                  <Text style={styles.settingTitle}>Pesanan Instan</Text>
+                  <Text style={styles.settingSubtitle}>Alarm bunyi & getar saat ada pesanan baru masuk</Text>
+                </View>
+              </View>
+              <Switch value={orderAlarmEnabled} onValueChange={setOrderAlarmEnabled} trackColor={{ false: 'rgba(255,255,255,0.3)', true: '#10B981' }} thumbColor={orderAlarmEnabled ? '#ffffff' : '#f4f3f4'} />
             </View>
           </View>
 

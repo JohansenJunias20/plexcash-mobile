@@ -2,6 +2,8 @@ import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, View } from 'react-native';
 import { AuthProvider } from './context/AuthContext';
 import { AccessProvider } from './context/AccessContext';
+import { OrderAlarmProvider } from './context/OrderAlarmContext';
+import OrderAlarmModal from './components/OrderAlarmModal';
 import { DeveloperModeProvider, useDeveloperMode } from './context/DeveloperModeContext';
 import { NavigationContainer } from '@react-navigation/native';
 import RootNavigator from './navigation/RootNavigator';
@@ -116,6 +118,9 @@ const AppContent = (): JSX.Element => {
 
       {/* Flash Message - Global notification system */}
       <FlashMessage position="top" />
+
+      {/* Instant Order Alarm - full-screen, shows above any screen while app is open */}
+      <OrderAlarmModal />
     </View>
   );
 };
@@ -126,7 +131,9 @@ export default function App(): JSX.Element {
       <DeveloperModeProvider>
         <AuthProvider>
           <AccessProvider>
-            <AppContent />
+            <OrderAlarmProvider>
+              <AppContent />
+            </OrderAlarmProvider>
           </AccessProvider>
         </AuthProvider>
       </DeveloperModeProvider>

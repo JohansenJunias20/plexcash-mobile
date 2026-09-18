@@ -1,0 +1,1 @@
+Fix: AI Assist crash saat buka menu (react-native-share incompatible dgn New Architecture, ganti ke expo-sharing)

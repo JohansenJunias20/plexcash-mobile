@@ -10,7 +10,20 @@ import PesananV2FilterModal from '../../components/PesananV2FilterModal';
 import PesananV2OrderCard from '../../components/PesananV2OrderCard';
 import ProgressModal from '../../components/ProgressModal';
 import UnpaidTemplateModal from '../../components/ecommerce/UnpaidTemplateModal';
-import { acceptOrders } from '../../services/ecommerce/orderService';
+import CancelReasonModal from '../../components/CancelReasonModal';
+import InstantAcceptModal from '../../components/InstantAcceptModal';
+import TolakPesananModal from '../../components/TolakPesananModal';
+import {
+  acceptOrders,
+  acceptCancellation,
+  rejectCancellation,
+  cancelSellerOrders,
+  TCancelRejectReason,
+  isInstantOrder,
+  scheduleAcceptOrders,
+  fetchScheduledAcceptOrders,
+  cancelScheduledAcceptOrder,
+} from '../../services/ecommerce/orderService';
 
 type Nav = NativeStackNavigationProp<any>;
 
@@ -22,6 +35,7 @@ const STATUS_TABS = [
   { label: 'Siap Dikirim', value: 'SIAP DIKIRIM' },
   { label: 'Dikirim', value: 'DIKIRIM' },
   { label: 'Selesai', value: 'SELESAI' },
+  { label: 'Dibatalkan', value: 'DIBATALKAN' },
   { label: 'Pembatalan', value: 'PEMBATALAN' },
   { label: 'Pengembalian', value: 'PENGEMBALIAN' },
 ];
@@ -99,6 +113,20 @@ export default function PesananV2Screen() {
   const [acceptingOrderId, setAcceptingOrderId] = useState<string | null>(null);
   const [isAcceptingBulk, setIsAcceptingBulk] = useState(false);
   const [cetakLoading, setCetakLoading] = useState(false);
+
+  // Pembatalan (Cancellation) tab: Terima/Tolak Pembatalan
+  const [cancelReasonModalVisible, setCancelReasonModalVisible] = useState(false);
+  const [isCancelActionLoading, setIsCancelActionLoading] = useState(false);
+
+  // Tolak Pesanan (Seller Order Cancellation)
+  const [tolakPesananModalVisible, setTolakPesananModalVisible] = useState(false);
+  const [isTolakPesananLoading, setIsTolakPesananLoading] = useState(false);
+
+  // Instant Order Delayed Acceptance
+  const [instantAcceptModalVisible, setInstantAcceptModalVisible] = useState(false);
+  const [instantAcceptTarget, setInstantAcceptTarget] = useState<any[]>([]);
+  const [isSchedulingInstant, setIsSchedulingInstant] = useState(false);
+  const [scheduledOrdersMap, setScheduledOrdersMap] = useState<Record<string, any>>({});
 
   const fetchIdRef = useRef(0);
   const kilatAllOrdersRef = useRef<any[]>([]);
@@ -224,7 +252,8 @@ export default function PesananV2Screen() {
                     case 'MATCHED': case 'ARRANGED': return 'DIPROSES';
                     case 'SHIPPED': return 'PERJALANAN';
                     case 'COMPLETED': return 'SELESAI';
-                    case 'CANCELLED': case 'IN_CANCEL': return 'PEMBATALAN';
+                    case 'CANCELLED': return 'DIBATALKAN';
+                    case 'IN_CANCEL': return 'PEMBATALAN';
                     default: return s || 'UNKNOWN';
                 }
             };
@@ -232,12 +261,13 @@ export default function PesananV2Screen() {
             const filterTab = (o: any) => {
                 if (effectiveStatus === 'SEMUA') return true;
                 const s = mapStatus(o.booking_status || o.status);
-                // Kilat Shopee tidak punya status 'PESANAN BARU' di platform — mereka masuk sebagai READY_TO_SHIP → DIPROSES.
-                // Jadi di tab PESANAN BARU, kilat dengan status DIPROSES juga ditampilkan (persis seperti di web Pesanan V2).
-                if (effectiveStatus === 'PESANAN BARU' && (s === 'PESANAN BARU' || ((o.isBookingOrder || !!o.booking_sn) && s === 'DIPROSES'))) return true;
+                // Kilat mengikuti mapping status yang sama seperti pesanan standar: DIPROSES
+                // hanya tampil di tab SIAP DIKIRIM, bukan didobel-tampilkan di PESANAN BARU.
+                if (effectiveStatus === 'PESANAN BARU' && s === 'PESANAN BARU') return true;
                 if (effectiveStatus === 'SIAP DIKIRIM' && s === 'DIPROSES') return true;
                 if (effectiveStatus === 'DIKIRIM' && s === 'PERJALANAN') return true;
                 if (effectiveStatus === 'SELESAI' && s === 'SELESAI') return true;
+                if (effectiveStatus === 'DIBATALKAN' && s === 'DIBATALKAN') return true;
                 if (effectiveStatus === 'PEMBATALAN' && s === 'PEMBATALAN') return true;
                 return false;
             };
@@ -414,17 +444,42 @@ export default function PesananV2Screen() {
     syncLiveOrders();
   }, [syncLiveOrders]);
 
+  const loadScheduledOrders = useCallback(async () => {
+    if (currentTab !== 'PESANAN BARU') {
+      setScheduledOrdersMap({});
+      return;
+    }
+    try {
+      const list = await fetchScheduledAcceptOrders();
+      const map: Record<string, any> = {};
+      for (const item of list) {
+        if (item.order_id) {
+          map[item.order_id] = item;
+        }
+      }
+      setScheduledOrdersMap(map);
+    } catch (e) {
+      console.error('[PesananV2Screen] loadScheduledOrders error:', e);
+    }
+  }, [currentTab]);
+
+  useEffect(() => {
+    loadScheduledOrders();
+  }, [currentTab, loadScheduledOrders]);
+
   useFocusEffect(
     useCallback(() => {
       fetchOrders({ page: 1, isRefresh: true });
       syncLiveOrders();
-    }, [fetchOrders, syncLiveOrders])
+      loadScheduledOrders();
+    }, [fetchOrders, syncLiveOrders, loadScheduledOrders])
   );
 
   const onRefresh = () => {
     setRefreshing(true);
     fetchOrders({ page: 1, isRefresh: true });
     syncLiveOrders();
+    loadScheduledOrders();
   };
 
   const loadMore = () => {
@@ -479,6 +534,13 @@ export default function PesananV2Screen() {
   const handleAcceptSingleOrder = (order: any) => {
     if (!userInfo.canUpdate) return Alert.alert('Permission Error', 'Anda tidak memiliki akses.');
 
+    const isInstant = currentTab === 'PESANAN BARU' && isInstantOrder(order);
+    if (isInstant) {
+      setInstantAcceptTarget([order]);
+      setInstantAcceptModalVisible(true);
+      return;
+    }
+
     const orderId = order.id_online || order.booking_sn || order.id;
     Alert.alert(
       'Terima Pesanan',
@@ -500,6 +562,14 @@ export default function PesananV2Screen() {
     const ordersToProcess = orders.filter(o => selectedArr.includes(o.id_online));
     if (ordersToProcess.length === 0) return;
 
+    // Cek apakah tab Pesanan Baru DAN SEMUA pesanan yang dipilih adalah kurir instan
+    const isAllInstant = currentTab === 'PESANAN BARU' && ordersToProcess.every(isInstantOrder);
+    if (isAllInstant) {
+      setInstantAcceptTarget(ordersToProcess);
+      setInstantAcceptModalVisible(true);
+      return;
+    }
+
     Alert.alert(
       'Terima Pesanan Massal',
       `Pilih metode pengiriman untuk ${ordersToProcess.length} pesanan yang dipilih:`,
@@ -507,6 +577,89 @@ export default function PesananV2Screen() {
         { text: 'Batal', style: 'cancel' },
         { text: 'Dropoff (Antar ke Gerai)', onPress: () => executeAcceptOrders(ordersToProcess, 'dropoff') },
         { text: 'Pickup (Kurir Jemput)', onPress: () => executeAcceptOrders(ordersToProcess, 'pickup') },
+      ]
+    );
+  };
+
+  const handleInstantModalNow = () => {
+    const target = instantAcceptTarget;
+    setInstantAcceptModalVisible(false);
+    if (!target || target.length === 0) return;
+
+    const isSingle = target.length === 1;
+    const promptText = isSingle
+      ? `Pilih metode pengiriman untuk pesanan ${target[0]?.id_online || target[0]?.id}:`
+      : `Pilih metode pengiriman untuk ${target.length} pesanan instan yang dipilih:`;
+
+    Alert.alert('Terima Pesanan Instan', promptText, [
+      { text: 'Batal', style: 'cancel' },
+      { text: 'Dropoff (Antar ke Gerai)', onPress: () => executeAcceptOrders(target, 'dropoff') },
+      { text: 'Pickup (Kurir Jemput)', onPress: () => executeAcceptOrders(target, 'pickup') },
+    ]);
+  };
+
+  const handleInstantModalDelay = (delayMinutes: number) => {
+    const target = instantAcceptTarget;
+    setInstantAcceptModalVisible(false);
+    if (!target || target.length === 0) return;
+
+    const isSingle = target.length === 1;
+    const promptText = isSingle
+      ? `Pilih metode pengiriman untuk pesanan instan (${delayMinutes} menit lagi):`
+      : `Pilih metode pengiriman untuk ${target.length} pesanan instan (${delayMinutes} menit lagi):`;
+
+    Alert.alert('Jadwalkan Terima Pesanan', promptText, [
+      { text: 'Batal', style: 'cancel' },
+      { text: 'Dropoff (Antar ke Gerai)', onPress: () => executeScheduleAccept(target, delayMinutes, 'dropoff') },
+      { text: 'Pickup (Kurir Jemput)', onPress: () => executeScheduleAccept(target, delayMinutes, 'pickup') },
+    ]);
+  };
+
+  const executeScheduleAccept = async (
+    ordersToProcess: any[],
+    delayMinutes: number,
+    method_ship: 'pickup' | 'dropoff'
+  ) => {
+    if (!ordersToProcess || ordersToProcess.length === 0) return;
+    setIsSchedulingInstant(true);
+    try {
+      const res = await scheduleAcceptOrders(ordersToProcess, delayMinutes, method_ship);
+      if (res && res.status) {
+        Alert.alert('Berhasil Dijadwalkan', res.message || `Pesanan akan diterima otomatis dalam ${delayMinutes} menit.`);
+        setSelectedOrders(new Set());
+        setSelectAllMode('none');
+        await loadScheduledOrders();
+      } else {
+        Alert.alert('Gagal Menjadwalkan', res?.reason || 'Terjadi kesalahan saat menjadwalkan penerimaan pesanan.');
+      }
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || 'Gagal menghubungi server.');
+    } finally {
+      setIsSchedulingInstant(false);
+      setInstantAcceptTarget([]);
+    }
+  };
+
+  const handleCancelSchedule = (order: any) => {
+    const orderId = order.id_online || order.id;
+    Alert.alert(
+      'Batalkan Jadwal',
+      `Batalkan jadwal penerimaan otomatis untuk pesanan ${orderId}? Pesanan akan tetap di Pesanan Baru dan tidak diterima otomatis.`,
+      [
+        { text: 'Kembali', style: 'cancel' },
+        {
+          text: 'Ya, Batalkan Jadwal',
+          style: 'destructive',
+          onPress: async () => {
+            const res = await cancelScheduledAcceptOrder(orderId);
+            if (res && res.status) {
+              Alert.alert('Sukses', 'Jadwal penerimaan berhasil dibatalkan.');
+              await loadScheduledOrders();
+            } else {
+              Alert.alert('Gagal', res?.message || 'Gagal membatalkan jadwal.');
+            }
+          },
+        },
       ]
     );
   };
@@ -842,6 +995,127 @@ export default function PesananV2Screen() {
       fetchOrders({ page: 1 });
   };
 
+  // Terima Pembatalan / Tolak Pembatalan (tab PEMBATALAN) — matches web Plexseller (Pesanan.tsx)
+  const bulkTerimaPembatalan = () => {
+    if (!userInfo.canUpdate) return Alert.alert('Permission Error', 'Anda tidak memiliki akses.');
+
+    const selectedArr = Array.from(selectedOrders);
+    if (selectedArr.length === 0) return;
+
+    Alert.alert(
+      'Terima Pembatalan',
+      `Terima pembatalan untuk ${selectedArr.length} pesanan yang dipilih?`,
+      [
+        { text: 'Batal', style: 'cancel' },
+        { text: 'Ya, Terima', onPress: () => executeAcceptCancellation(selectedArr) },
+      ]
+    );
+  };
+
+  const executeAcceptCancellation = async (selectedArr: string[]) => {
+    const ordersToProcess = orders.filter(o => selectedArr.includes(o.id_online));
+    if (ordersToProcess.length === 0) return;
+
+    setIsCancelActionLoading(true);
+    try {
+      const res = await acceptCancellation(ordersToProcess);
+      const failedReasons = res.results.filter(r => !r.success).map(r => `${r.id}: ${r.reason || 'Gagal diproses'}`);
+      const errorText = failedReasons.length > 0 ? `\n\nDetail Gagal:\n- ${failedReasons.slice(0, 10).join('\n- ')}` : '';
+      Alert.alert('Hasil Terima Pembatalan', `Berhasil: ${res.successCount}\nGagal: ${res.failCount}${errorText}`);
+    } finally {
+      setIsCancelActionLoading(false);
+      setSelectedOrders(new Set());
+      fetchOrders({ isRefresh: true });
+    }
+  };
+
+  const bulkTolakPembatalan = () => {
+    if (!userInfo.canUpdate) return Alert.alert('Permission Error', 'Anda tidak memiliki akses.');
+    if (selectedOrders.size === 0) return;
+    setCancelReasonModalVisible(true);
+  };
+
+  const executeRejectCancellation = async (reason: TCancelRejectReason) => {
+    const selectedArr = Array.from(selectedOrders);
+    const ordersToProcess = orders.filter(o => selectedArr.includes(o.id_online));
+    if (ordersToProcess.length === 0) {
+      setCancelReasonModalVisible(false);
+      return;
+    }
+
+    setIsCancelActionLoading(true);
+    try {
+      const res = await rejectCancellation(ordersToProcess, reason);
+      const failedReasons = res.results.filter(r => !r.success).map(r => `${r.id}: ${r.reason || 'Gagal diproses'}`);
+      const errorText = failedReasons.length > 0 ? `\n\nDetail Gagal:\n- ${failedReasons.slice(0, 10).join('\n- ')}` : '';
+      Alert.alert('Hasil Tolak Pembatalan', `Berhasil: ${res.successCount}\nGagal: ${res.failCount}${errorText}`);
+    } finally {
+      setIsCancelActionLoading(false);
+      setCancelReasonModalVisible(false);
+      setSelectedOrders(new Set());
+      fetchOrders({ isRefresh: true });
+    }
+  };
+
+  // Tolak Pesanan (Seller Order Cancellation)
+  const bulkTolakPesanan = () => {
+    if (!userInfo.canUpdate) return Alert.alert('Permission Error', 'Anda tidak memiliki akses.');
+    if (selectedOrders.size === 0) return;
+    setTolakPesananModalVisible(true);
+  };
+
+  const executeTolakPesanan = async (reasonsByPlatform: Record<string, string>) => {
+    const selectedArr = Array.from(selectedOrders);
+    const ordersToProcess = orders.filter(o => selectedArr.includes(o.id_online));
+    if (ordersToProcess.length === 0) {
+      setTolakPesananModalVisible(false);
+      return;
+    }
+
+    setIsTolakPesananLoading(true);
+    try {
+      const res = await cancelSellerOrders(ordersToProcess, reasonsByPlatform);
+
+      const successfulIds = new Set(res.results.filter(r => r.success).map(r => r.order_id));
+      const failedItems = res.results.filter(r => !r.success);
+
+      if (res.successCount > 0) {
+        // Filter pesanan yang berhasil dibatalkan jika di tab PESANAN BARU / SIAP DIKIRIM
+        if (currentTab === 'PESANAN BARU' || currentTab === 'SIAP DIKIRIM') {
+          setOrders(prev => prev.filter(o => !successfulIds.has(o.id_online)));
+        } else {
+          setOrders(prev => prev.map(o => successfulIds.has(o.id_online) ? { ...o, status: 'DIBATALKAN' } : o));
+        }
+
+        setSelectedOrders(prev => {
+          const next = new Set(prev);
+          successfulIds.forEach(id => next.delete(id));
+          return next;
+        });
+      }
+
+      setTolakPesananModalVisible(false);
+
+      if (failedItems.length > 0) {
+        const failedDetails = failedItems.slice(0, 5).map(f => `• ${f.order_id}: ${f.reason}`).join('\n');
+        const moreCount = failedItems.length > 5 ? `\n...dan ${failedItems.length - 5} pesanan lainnya.` : '';
+        Alert.alert(
+          'Hasil Tolak Pesanan',
+          `Berhasil: ${res.successCount}\nGagal: ${res.failCount}\n\nDetail Gagal:\n${failedDetails}${moreCount}`,
+          [{ text: 'OK', onPress: () => { fetchOrders({ isRefresh: true }); syncLiveOrders(); } }]
+        );
+      } else {
+        Alert.alert('Sukses', `Berhasil membatalkan ${res.successCount} pesanan.`, [
+          { text: 'OK', onPress: () => { fetchOrders({ isRefresh: true }); syncLiveOrders(); } }
+        ]);
+      }
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || 'Gagal membatalkan pesanan.');
+    } finally {
+      setIsTolakPesananLoading(false);
+    }
+  };
+
   const handlePrintLabels = async () => {
     if (!userInfo.canUpdate) return Alert.alert('Permission Error', 'Anda tidak memiliki akses.');
     
@@ -1019,12 +1293,43 @@ export default function PesananV2Screen() {
                           <Text style={styles.actionBtnText}>Terima Pesanan</Text>
                       </TouchableOpacity>
                   )}
-                  <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#F97316' }]} onPress={bulkBuatRetur}>
-                      <Text style={styles.actionBtnText}>Buat Retur</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.actionBtn} onPress={bulkBuatPenjualan}>
-                      <Text style={styles.actionBtnText}>Buat Penjualan</Text>
-                  </TouchableOpacity>
+                  {(currentTab === 'PESANAN BARU' || currentTab === 'SIAP DIKIRIM' || currentTab === 'SEMUA') && (
+                      <TouchableOpacity
+                          style={[styles.actionBtn, { backgroundColor: '#EF4444' }]}
+                          onPress={bulkTolakPesanan}
+                          disabled={isTolakPesananLoading}
+                      >
+                          <Text style={styles.actionBtnText}>Tolak Pesanan</Text>
+                      </TouchableOpacity>
+                  )}
+                  {currentTab === 'PEMBATALAN' && (
+                      <>
+                          <TouchableOpacity
+                              style={[styles.actionBtn, { backgroundColor: '#10B981' }]}
+                              onPress={bulkTerimaPembatalan}
+                              disabled={isCancelActionLoading}
+                          >
+                              <Text style={styles.actionBtnText}>Terima Pembatalan</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                              style={[styles.actionBtn, { backgroundColor: '#EF4444' }]}
+                              onPress={bulkTolakPembatalan}
+                              disabled={isCancelActionLoading}
+                          >
+                              <Text style={styles.actionBtnText}>Tolak Pembatalan</Text>
+                          </TouchableOpacity>
+                      </>
+                  )}
+                  {currentTab === 'DIBATALKAN' && (
+                      <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#EF4444' }]} onPress={bulkBuatRetur}>
+                          <Text style={styles.actionBtnText}>Buat Retur</Text>
+                      </TouchableOpacity>
+                  )}
+                  {currentTab !== 'PEMBATALAN' && currentTab !== 'DIBATALKAN' && (
+                      <TouchableOpacity style={styles.actionBtn} onPress={bulkBuatPenjualan}>
+                          <Text style={styles.actionBtnText}>Buat Penjualan</Text>
+                      </TouchableOpacity>
+                  )}
                   <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#F3F4F6' }]} onPress={handlePrintLabels}>
                       <Text style={[styles.actionBtnText, { color: '#374151' }]}>Cetak</Text>
                   </TouchableOpacity>
@@ -1057,6 +1362,8 @@ export default function PesananV2Screen() {
                       }}
                       onAcceptOrder={handleAcceptSingleOrder}
                       isAccepting={acceptingOrderId === item.id_online}
+                      scheduledInfo={scheduledOrdersMap[item.id_online]}
+                      onCancelSchedule={handleCancelSchedule}
                       onPress={() => {
                            navigation.navigate('OrderDetail', {
                               // For kilat orders: pass booking_sn so detail screen can use it
@@ -1144,6 +1451,34 @@ export default function PesananV2Screen() {
       <UnpaidTemplateModal
         visible={templateModalVisible}
         onClose={() => setTemplateModalVisible(false)}
+      />
+
+      {/* Tolak Pembatalan — Reason Modal */}
+      <CancelReasonModal
+        visible={cancelReasonModalVisible}
+        orderCount={selectedOrders.size}
+        loading={isCancelActionLoading}
+        onClose={() => !isCancelActionLoading && setCancelReasonModalVisible(false)}
+        onConfirm={executeRejectCancellation}
+      />
+
+      {/* Tolak Pesanan — Seller Cancellation Reason Modal */}
+      <TolakPesananModal
+        visible={tolakPesananModalVisible}
+        orders={orders.filter(o => selectedOrders.has(o.id_online))}
+        loading={isTolakPesananLoading}
+        onClose={() => !isTolakPesananLoading && setTolakPesananModalVisible(false)}
+        onConfirm={executeTolakPesanan}
+      />
+
+      {/* Instant Accept Modal */}
+      <InstantAcceptModal
+        visible={instantAcceptModalVisible}
+        orderCount={instantAcceptTarget.length}
+        loading={isSchedulingInstant}
+        onClose={() => !isSchedulingInstant && setInstantAcceptModalVisible(false)}
+        onSelectNow={handleInstantModalNow}
+        onSelectDelay={handleInstantModalDelay}
       />
     </SafeAreaView>
   );

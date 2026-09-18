@@ -285,6 +285,15 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ navigation, s
           active={currentRoute === 'Main'}
         />
 
+        {/* AI Assist - always visible */}
+        <DrawerItem
+          label="🤖 AI Assist"
+          icon="hardware-chip-outline"
+          badge="BETA"
+          onPress={() => navigation.navigate('AIAssist')}
+          active={currentRoute === 'AIAssist'}
+        />
+
       {/* MASTER Section - only if user has any master access */}
       {hasAnyTrue(a?.master) && <SectionHeader title="MASTER" />}
       {checkAccess(a?.master?.barang) && <DrawerItem label="Barang" icon="cube" onPress={() => navigation.navigate('BarangList')} active={currentRoute === 'BarangList'} />}
@@ -297,6 +306,7 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ navigation, s
       {checkAccess(a?.master?.bundling) && <DrawerItem label="Bundling" icon="albums" onPress={() => navigation.navigate('BundlingList')} active={currentRoute === 'BundlingList'} />}
       {checkAccess(a?.master?.import_barang) && <DrawerItem label="Import" icon="download" onPress={() => navigation.navigate('ImportBarang')} active={currentRoute === 'ImportBarang'} />}
       {checkAccess(a?.master?.warehouse) && <DrawerItem label="Warehouse" icon="business" onPress={() => navigation.navigate('WarehouseList')} active={currentRoute === 'WarehouseList'} badge="NEW" />}
+      {checkAccess(a?.master?.karyawan ?? a?.karyawan) && <DrawerItem label="Karyawan" icon="people-outline" onPress={() => navigation.navigate('KaryawanList')} active={currentRoute === 'KaryawanList'} />}
 
       {/* TRANSAKSI Section */}
       {(() => {
@@ -346,6 +356,8 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ navigation, s
       {checkAccess(a?.transaksi?.detailbaganakun) && <DrawerItem label="Mutasi Akun" icon="swap-horizontal" onPress={() => navigation.navigate('MutasiAkun')} active={currentRoute === 'MutasiAkun'} />}
       {checkAccess(a?.transaksi?.stokopname) && <DrawerItem label="Stok Opname" icon="clipboard" onPress={() => navigation.navigate('StokOpname')} active={currentRoute === 'StokOpname'} />}
       {checkAccess(a?.transaksi?.pesanbarang) && <DrawerItem label="Pesan Barang" icon="cube" onPress={() => navigation.navigate('PesanBarang')} active={currentRoute === 'PesanBarang'} />}
+      {checkAccess(a?.transaksi?.absensi ?? a?.absensi) && <DrawerItem label="Absensi" icon="finger-print-outline" onPress={() => navigation.navigate('Absensi')} active={currentRoute === 'Absensi'} />}
+      {checkAccess(a?.transaksi?.bayar_gaji ?? a?.bayar_gaji) && <DrawerItem label="Bayar Gaji" icon="cash-outline" onPress={() => navigation.navigate('BayarGaji')} active={currentRoute === 'BayarGaji'} />}
 
       {/* ECOMMERCE Section */}
       {hasAnyTrue(a?.ecommerce) && <SectionHeader title="ECOMMERCE" />}

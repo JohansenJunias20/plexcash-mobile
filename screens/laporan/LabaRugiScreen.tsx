@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Platform,
+  Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -51,6 +52,7 @@ export default function LabaRugiScreen() {
   const [biayaLainnya, setBiayaLainnya] = useState<IAccountData[]>([]);
 
   const [metode, setMetode] = useState<'average' | 'fifo'>('average');
+  const [includeKilat, setIncludeKilat] = useState(true);
 
   const shortcuts = [
     {
@@ -119,8 +121,9 @@ export default function LabaRugiScreen() {
       const startStr = moment(dateStart).format("YYYY-MM-DD");
       const endStr = moment(dateEnd).format("YYYY-MM-DD");
       const useFifoParam = metode === "fifo" ? 1 : 0;
+      const includeKilatParam = includeKilat ? 1 : 0;
 
-      const response = await ApiService.get(`/get/laporan/labarugi?use_fifo=${useFifoParam}&start=${startStr}&end=${endStr}&use_new=1`);
+      const response = await ApiService.get(`/get/laporan/labarugi?use_fifo=${useFifoParam}&start=${startStr}&end=${endStr}&use_new=1&include_kilat=${includeKilatParam}`);
 
       if (response && response.status && response.data) {
         setPendapatan(response.data.pendapatan || []);
@@ -134,7 +137,7 @@ export default function LabaRugiScreen() {
     } finally {
       setFetching(false);
     }
-  }, [dateStart, dateEnd, metode]);
+  }, [dateStart, dateEnd, metode, includeKilat]);
 
   useEffect(() => {
     fetchData();
@@ -276,6 +279,23 @@ export default function LabaRugiScreen() {
                 </TouchableOpacity>
               </View>
             </View>
+          </View>
+
+          <View style={styles.kilatContainer}>
+            <View style={styles.kilatRow}>
+              <Text style={styles.optionLabel}>Tampilkan Pengiriman Kilat (Booking Order)</Text>
+              <Switch
+                value={includeKilat}
+                onValueChange={setIncludeKilat}
+                trackColor={{ false: '#d1d5db', true: '#10b981' }}
+                thumbColor="#ffffff"
+              />
+            </View>
+            <Text style={styles.kilatHint}>
+              Jika aktif, transaksi Pengiriman Kilat (booking Shopee) yang belum punya order asli
+              yang terkonfirmasi tetap ikut dihitung di Laba Rugi ini. Nonaktifkan untuk
+              mengeluarkan booking yang belum terkonfirmasi tersebut dari perhitungan.
+            </Text>
           </View>
 
           <TouchableOpacity style={styles.searchButton} onPress={fetchData}>
@@ -475,6 +495,24 @@ const styles = StyleSheet.create({
   radioTextActive: {
     color: '#111827',
     fontWeight: '500',
+  },
+  kilatContainer: {
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 6,
+    padding: 12,
+    marginBottom: 16,
+  },
+  kilatRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  kilatHint: {
+    fontSize: 11,
+    color: '#6b7280',
+    marginTop: 6,
   },
   searchButton: {
     backgroundColor: '#10b981',

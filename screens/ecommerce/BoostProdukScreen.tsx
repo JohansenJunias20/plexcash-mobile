@@ -43,6 +43,7 @@ interface Product {
   images: string[];
   qty?: number;
   harga?: number;
+  already_boosted?: boolean;
 }
 
 // ==================== CONSTANTS ====================
@@ -207,6 +208,12 @@ export default function BoostProdukScreen() {
   };
 
   const toggleSelectItem = (item_id: number) => {
+    const product = products.find((p) => p.item_id === item_id);
+    if (product?.already_boosted) {
+      showToast('Produk ini sudah dinaikkan dan tidak bisa dipilih lagi', 'error');
+      return;
+    }
+
     setSelectedItems((prev) => {
       if (prev.includes(item_id)) {
         // Deselect item
@@ -224,14 +231,16 @@ export default function BoostProdukScreen() {
   };
 
   const toggleSelectAll = () => {
-    if (selectedItems.length === filteredProducts.length) {
+    const selectableProducts = filteredProducts.filter((p) => !p.already_boosted);
+
+    if (selectedItems.length === selectableProducts.length) {
       // Deselect all
       setSelectedItems([]);
     } else {
-      // Select all (up to MAX_BOOST_ITEMS)
-      const itemsToSelect = filteredProducts.slice(0, MAX_BOOST_ITEMS).map((p) => p.item_id);
+      // Select all selectable products (up to MAX_BOOST_ITEMS)
+      const itemsToSelect = selectableProducts.slice(0, MAX_BOOST_ITEMS).map((p) => p.item_id);
 
-      if (filteredProducts.length > MAX_BOOST_ITEMS) {
+      if (selectableProducts.length > MAX_BOOST_ITEMS) {
         showToast(
           `Hanya ${MAX_BOOST_ITEMS} produk pertama yang dipilih (maksimal ${MAX_BOOST_ITEMS} produk)`,
           'info'
@@ -350,19 +359,25 @@ export default function BoostProdukScreen() {
   // ==================== RENDER FUNCTIONS ====================
   const renderProductItem = useCallback(({ item: product }: { item: Product }) => {
     const isSelected = selectedItems.includes(product.item_id);
+    const isBoosted = !!product.already_boosted;
     const imageUrl = product.images && product.images.length > 0 ? product.images[0] : '';
 
     return (
       <TouchableOpacity
-        style={[styles.productCard, isSelected && styles.productCardSelected]}
+        style={[
+          styles.productCard,
+          isSelected && styles.productCardSelected,
+          isBoosted && styles.productCardDisabled,
+        ]}
         onPress={() => toggleSelectItem(product.item_id)}
-        activeOpacity={0.7}
+        activeOpacity={isBoosted ? 1 : 0.7}
+        disabled={isBoosted}
       >
         <View style={styles.checkbox}>
           <Ionicons
             name={isSelected ? 'checkbox' : 'square-outline'}
             size={24}
-            color={isSelected ? '#f59e0b' : '#9ca3af'}
+            color={isBoosted ? '#d1d5db' : isSelected ? '#f59e0b' : '#9ca3af'}
           />
         </View>
 
@@ -388,6 +403,12 @@ export default function BoostProdukScreen() {
           )}
           {product.qty !== undefined && (
             <Text style={styles.productStock}>Stok: {product.qty}</Text>
+          )}
+          {isBoosted && (
+            <View style={styles.boostedBadge}>
+              <Ionicons name="trending-up" size={12} color="#d97706" />
+              <Text style={styles.boostedBadgeText}>Sudah Dinaikkan</Text>
+            </View>
           )}
         </View>
       </TouchableOpacity>
@@ -796,6 +817,10 @@ const styles = StyleSheet.create({
     borderColor: '#f59e0b',
     backgroundColor: '#fffbeb',
   },
+  productCardDisabled: {
+    backgroundColor: '#f9fafb',
+    opacity: 0.6,
+  },
   checkbox: {
     marginRight: 12,
     justifyContent: 'center',
@@ -835,6 +860,22 @@ const styles = StyleSheet.create({
   productStock: {
     fontSize: 12,
     color: '#6b7280',
+  },
+  boostedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: '#fef3c7',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginTop: 4,
+    gap: 4,
+  },
+  boostedBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#d97706',
   },
 
   // Loading & Empty States

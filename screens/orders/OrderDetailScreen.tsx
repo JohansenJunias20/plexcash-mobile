@@ -7,7 +7,12 @@ import ApiService from '../../services/api';
 import type { AppStackParamList } from '../../navigation/RootNavigator';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Clipboard from 'expo-clipboard';
 import { sendPaymentReminder } from '../../services/ecommerce/paymentReminderService';
+import { acceptOrders, rejectCancellation, TCancelRejectReason, cancelSellerOrders } from '../../services/ecommerce/orderService';
+import CancelReasonModal from '../../components/CancelReasonModal';
+import TolakPesananModal from '../../components/TolakPesananModal';
+import { transformErrorMessage } from '../../utils/transformErrorMessage';
 
 const SHOW_IMAGES_KEY = '@order_detail_show_images';
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -33,9 +38,54 @@ export type OrderDetail = {
   pack_timestamp?: string | null;
   buyer_username?: string;
   buyer_id?: string | number;
+  no_resi?: string;
   shop_id?: string;
   has_penjualan?: boolean;
   has_retur?: boolean;
+  package_id?: string[];
+  item_pack_id?: number[] | null;
+  /** Menunjukkan siapa yang membatalkan pesanan di marketplace: "buyer" | "seller" | "system" */
+  cancel_by?: string;
+  /** Alasan pembatalan mentah dari marketplace (kode/teks asli platform) */
+  cancel_reason?: string;
+  /** Waktu pembatalan pesanan sudah final (dari marketplace) */
+  date_cancelled?: string;
+  /** Waktu pengajuan permintaan pembatalan oleh buyer (status PEMBATALAN, sebelum diterima/ditolak seller) */
+  date_cancel_requested?: string;
+};
+
+// Menerjemahkan siapa yang membatalkan pesanan (dari data marketplace) ke label Bahasa Indonesia
+const translateCancelBy = (cancelBy?: string | null): string => {
+  switch ((cancelBy || '').toLowerCase()) {
+    case 'buyer': return 'Pembeli';
+    case 'seller': return 'Penjual';
+    case 'system': return 'Sistem Marketplace';
+    default: return 'Tidak Diketahui';
+  }
+};
+
+// Menerjemahkan kode/teks alasan pembatalan mentah dari marketplace ke Bahasa Indonesia yang mudah dipahami
+const translateCancelReason = (cancelReason?: string | null): string | null => {
+  if (!cancelReason) return null;
+  const map: Record<string, string> = {
+    'OUT_OF_STOCK': 'Stok barang habis',
+    'CUSTOMER_REQUEST': 'Permintaan pembeli',
+    'UNDELIVERABLE_AREA': 'Area tidak terjangkau kurir',
+    'COD_NOT_SUPPORTED': 'COD tidak didukung di area ini',
+    'Unpaid Order': 'Pesanan tidak dibayar (kadaluarsa)',
+    'Failed Delivery': 'Gagal pengiriman',
+    'Package delivery failed': 'Gagal pengiriman',
+    'Pengiriman paket gagal': 'Gagal pengiriman',
+    'Package lost': 'Paket hilang',
+    'Paket hilang': 'Paket hilang',
+  };
+  return map[cancelReason] || cancelReason;
+};
+
+type RakMap = {
+  hasRak: boolean;
+  skuRakMap: Record<string, string>;
+  onlineRakMap: Record<string, string>;
 };
 
 type Props = NativeStackScreenProps<AppStackParamList, 'OrderDetail'>;
@@ -72,8 +122,30 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
   const [lightboxVisible, setLightboxVisible] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [processingCancel, setProcessingCancel] = useState(false);
+  const [rejectingCancel, setRejectingCancel] = useState(false);
+  const [cancelReasonModalVisible, setCancelReasonModalVisible] = useState(false);
   const [chatLoading, setChatLoading] = useState(false);
   const [reminderLoading, setReminderLoading] = useState(false);
+  const [accepting, setAccepting] = useState(false);
+  const [tolakPesananModalVisible, setTolakPesananModalVisible] = useState(false);
+  const [isTolakPesananLoading, setIsTolakPesananLoading] = useState(false);
+  const [rakMap, setRakMap] = useState<RakMap>({ hasRak: false, skuRakMap: {}, onlineRakMap: {} });
+
+  // Resolve the rak (shelf) location of an item, mirroring the web Pesanan screen:
+  // match by SKU first, then fall back to the marketplace binding (id_online).
+  // Returns '' when the user has no raks at all or this item is not assigned to one.
+  const getRakName = (it: { sku?: string; id_online?: string }): string => {
+    if (!rakMap.hasRak) return '';
+    const itemSku = String(it.sku || '').trim();
+    const idOnline = String(it.id_online || '').trim();
+    return rakMap.skuRakMap[itemSku] || (idOnline ? rakMap.onlineRakMap[idOnline] : '') || '';
+  };
+
+  const copyToClipboard = async (text: string | undefined | null, label: string) => {
+    if (!text) return;
+    await Clipboard.setStringAsync(text);
+    Alert.alert('Disalin', `${label} berhasil disalin.`);
+  };
 
   const orderStatusUpper = useMemo(() => (detail?.status || '').toUpperCase(), [detail?.status]);
 
@@ -105,6 +177,27 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
       orderStatusUpper === 'RETUR' ||
       orderStatusUpper === 'DIRETUR' ||
       orderStatusUpper === 'TELAH DIRETUR'
+    );
+  }, [orderStatusUpper]);
+
+  // New order awaiting acceptance — mirrors "PESANAN BARU" tab on the web Pesanan.tsx
+  const isPesananBaru = useMemo(() => {
+    return (
+      orderStatusUpper === 'PESANAN BARU' ||
+      orderStatusUpper === 'NEW_ORDER' ||
+      orderStatusUpper === 'UNFULFILLED'
+    );
+  }, [orderStatusUpper]);
+
+  // Order in process / ready to ship — mirrors "SIAP DIKIRIM" / "DIPROSES" tab
+  const isDiproses = useMemo(() => {
+    return (
+      orderStatusUpper === 'DIPROSES' ||
+      orderStatusUpper === 'SIAP DIKIRIM' ||
+      orderStatusUpper === 'PROCESSED' ||
+      orderStatusUpper === 'READY_TO_SHIP' ||
+      orderStatusUpper === 'ARRANGED' ||
+      orderStatusUpper.includes('PROSES')
     );
   }, [orderStatusUpper]);
 
@@ -160,10 +253,30 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
     })();
   }, [showImages, imagesLoaded]);
 
+  const fetchRakMap = async () => {
+    try {
+      const res = await ApiService.post('/get/picking_rak', {});
+      if (res?.status && res.has_rak) {
+        setRakMap({
+          hasRak: true,
+          skuRakMap: res.sku_rak_map || {},
+          onlineRakMap: res.online_rak_map || {},
+        });
+      } else {
+        setRakMap({ hasRak: false, skuRakMap: {}, onlineRakMap: {} });
+      }
+    } catch (e) {
+      // Rak info is supplementary - never block the order detail because of it
+      console.log('Error fetching picking rak map:', e);
+    }
+  };
+
   const fetchOrderDetail = async (isRefresh = false) => {
     try {
       if (isRefresh) setRefreshing(true);
       else setLoading(true);
+
+      fetchRakMap();
 
       const encodedId = encodeURIComponent(id || '');
       const res = await ApiService.authenticatedRequest(`/get/ecommerce/order?id=${encodedId}&id_ecommerce=${id_ecommerce}`);
@@ -215,9 +328,16 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
           pack_timestamp: finalPackTimestamp,
           buyer_username: resolvedBuyer,
           buyer_id: resolvedBuyerId,
+          no_resi: d.no_resi || d.tracking_number || undefined,
           shop_id: resolvedShopId,
           has_penjualan: resolvedHasPenjualan,
           has_retur: resolvedHasRetur,
+          package_id: d.package_id ?? undefined,
+          item_pack_id: d.item_pack_id ?? d.item_ids ?? null,
+          cancel_by: d.cancel_by || undefined,
+          cancel_reason: d.cancel_reason || undefined,
+          date_cancelled: d.date_cancelled || undefined,
+          date_cancel_requested: d.date_cancel_requested || undefined,
         });
       } else if (booking_sn) {
         // Kilat order: the marketplace API might not support lookup by booking_sn.
@@ -252,6 +372,7 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
           pack_timestamp: pack_timestamp || null,
           buyer_username: kd?.buyer_username || buyer_username || '',
           buyer_id: buyer_id || '',
+          no_resi: kd?.no_resi || undefined,
           shop_id: shop_id || '',
           has_penjualan: has_penjualan,
           has_retur: has_retur,
@@ -272,16 +393,21 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
 
   const canCreate = !!access?.actions?.create;
 
-  const formatDate = (dateString?: string | null): string => {
+  const formatDate = (dateString?: string | null, includeSeconds = false): string => {
     if (!dateString) return '';
     try {
-      const date = new Date(dateString);
+      const normalized = typeof dateString === 'string' && dateString.includes(' ') && !dateString.includes('T')
+        ? dateString.replace(' ', 'T')
+        : dateString;
+      const date = new Date(normalized);
+      if (isNaN(date.getTime())) return dateString;
       return date.toLocaleDateString('id-ID', {
         day: '2-digit',
         month: '2-digit',
         year: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
+        ...(includeSeconds ? { second: '2-digit' } : {}),
       });
     } catch {
       return dateString;
@@ -304,8 +430,16 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
         isBookingOrder: !!detail.booking_sn,
       }];
       const res = await ApiService.authenticatedRequest('/ecommerce/pesanan', { method: 'POST', body: JSON.stringify(body) });
-      if (res?.status) Alert.alert('Success', 'Sales created.'); else Alert.alert('Failed', res?.reason || 'Failed to create sales');
-    } catch (e: any) { console.error('createSales', e); Alert.alert('Error', e?.message || 'Failed'); }
+      if (res?.status) {
+        Alert.alert('Sukses', 'Penjualan berhasil dibuat.');
+      } else {
+        const rawReason = res?.id?.[0]?.reason || res?.reason;
+        Alert.alert('Gagal Membuat Penjualan', transformErrorMessage(rawReason || 'Gagal membuat penjualan.'));
+      }
+    } catch (e: any) {
+      console.error('createSales', e);
+      Alert.alert('Gagal Membuat Penjualan', transformErrorMessage(e?.message || 'Terjadi kesalahan saat membuat penjualan.'));
+    }
   };
 
   const handleTerimaPembatalan = () => {
@@ -417,6 +551,133 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
       Alert.alert('Error', e?.message || 'Terjadi kesalahan saat memproses pembatalan');
     } finally {
       setProcessingCancel(false);
+    }
+  };
+
+  const handleTolakPembatalan = () => {
+    if (!canCreate || !detail) {
+      Alert.alert('Permission', 'You do not have permission');
+      return;
+    }
+    setCancelReasonModalVisible(true);
+  };
+
+  const executeTolakPembatalan = async (reason: TCancelRejectReason) => {
+    if (!detail) {
+      setCancelReasonModalVisible(false);
+      return;
+    }
+    setRejectingCancel(true);
+    try {
+      const res = await rejectCancellation([{
+        id_online: detail.id,
+        cancel_id: detail.id,
+        platform: detail.platform,
+        id_ecommerce: detail.id_ecommerce,
+        tanggal_order: typeof detail.date === 'string' ? detail.date : new Date().toISOString(),
+        invoice: detail.invoice,
+      }], reason);
+
+      if (res.successCount > 0) {
+        setDetail(prev => prev ? { ...prev, status: 'DIBATALKAN' } : null);
+        Alert.alert('Sukses', 'Permintaan pembatalan berhasil ditolak.', [
+          { text: 'OK', onPress: () => fetchOrderDetail(true) },
+        ]);
+      } else {
+        const failReason = res.results[0]?.reason || 'Gagal menolak pembatalan.';
+        Alert.alert('Gagal Tolak Pembatalan', failReason);
+      }
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || 'Terjadi kesalahan saat menolak pembatalan');
+    } finally {
+      setRejectingCancel(false);
+      setCancelReasonModalVisible(false);
+    }
+  };
+
+  // Terima Pesanan — mirrors web Pesanan.tsx: ask for shipping method (pickup/dropoff) then accept
+  const handleTerimaPesanan = () => {
+    if (!canCreate || !detail) {
+      Alert.alert('Permission', 'You do not have permission');
+      return;
+    }
+    Alert.alert(
+      'Terima Pesanan',
+      `Pilih metode pengiriman untuk pesanan ${detail.id}:`,
+      [
+        { text: 'Batal', style: 'cancel' },
+        { text: 'Dropoff (Antar ke Gerai)', onPress: () => executeTerimaPesanan('dropoff') },
+        { text: 'Pickup (Kurir Jemput)', onPress: () => executeTerimaPesanan('pickup') },
+      ]
+    );
+  };
+
+  const executeTerimaPesanan = async (method_ship: 'pickup' | 'dropoff') => {
+    if (!detail) return;
+    setAccepting(true);
+    try {
+      const res = await acceptOrders([detail], method_ship);
+      if (res.successCount > 0) {
+        Alert.alert('Sukses', 'Pesanan berhasil diterima.', [
+          { text: 'OK', onPress: () => fetchOrderDetail(true) },
+        ]);
+      } else {
+        const rejected = res.rejectedItems[0];
+        const hasLogisticsError = res.hasLogisticsError;
+        if (method_ship === 'pickup' && hasLogisticsError) {
+          Alert.alert(
+            'Gagal Booking Pickup',
+            `${rejected?.reason || 'Kurir tidak bisa menjemput pesanan ini.'}\n\nApakah Anda ingin mencoba menggunakan metode Dropoff (Antar ke Gerai)?`,
+            [
+              { text: 'Tutup', style: 'cancel' },
+              { text: 'Ganti ke Dropoff', onPress: () => executeTerimaPesanan('dropoff') },
+            ]
+          );
+        } else {
+          Alert.alert('Gagal Terima Pesanan', rejected?.reason || 'Pesanan gagal diproses, silakan coba lagi.');
+        }
+      }
+    } catch (e: any) {
+      console.error('executeTerimaPesanan error', e);
+      Alert.alert('Error', e?.message || 'Terjadi kesalahan saat menerima pesanan');
+    } finally {
+      setAccepting(false);
+    }
+  };
+
+  const handleTolakPesanan = () => {
+    if (!canCreate || !detail) {
+      Alert.alert('Permission', 'Anda tidak memiliki akses.');
+      return;
+    }
+    setTolakPesananModalVisible(true);
+  };
+
+  const executeTolakPesanan = async (reasonsByPlatform: Record<string, string>) => {
+    if (!detail) {
+      setTolakPesananModalVisible(false);
+      return;
+    }
+
+    setIsTolakPesananLoading(true);
+    try {
+      const res = await cancelSellerOrders([detail], reasonsByPlatform);
+
+      setTolakPesananModalVisible(false);
+
+      if (res.successCount > 0) {
+        setDetail((prev) => (prev ? { ...prev, status: 'DIBATALKAN' } : null));
+        Alert.alert('Sukses', 'Pesanan berhasil dibatalkan / ditolak.', [
+          { text: 'OK', onPress: () => fetchOrderDetail(true) },
+        ]);
+      } else {
+        const failReason = res.results[0]?.reason || 'Gagal membatalkan pesanan.';
+        Alert.alert('Gagal Tolak Pesanan', failReason);
+      }
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || 'Gagal membatalkan pesanan.');
+    } finally {
+      setIsTolakPesananLoading(false);
     }
   };
 
@@ -703,7 +964,16 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
               <Ionicons name="storefront" size={24} color="#f59e0b" />
               <View style={styles.headerTextContainer}>
                 <Text style={styles.platformName}>{detail.ecommerce_name || detail.platform}</Text>
-                <Text style={styles.orderId}>Order #{detail.id}</Text>
+                <View style={styles.copyableRow}>
+                  <Text style={styles.orderId} numberOfLines={1}>Order #{detail.id}</Text>
+                  <TouchableOpacity
+                    onPress={() => copyToClipboard(detail.id, 'Nomor pesanan')}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    style={styles.copyIconButton}
+                  >
+                    <Ionicons name="copy-outline" size={16} color="#6B7280" />
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
             <View style={{ alignItems: 'flex-end' }}>
@@ -738,6 +1008,43 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
         <View style={styles.infoCard}>
           <Text style={styles.cardTitle}>Order Information</Text>
 
+          {isCancellationPending ? (
+            <View style={[styles.infoRow, { backgroundColor: '#FFFBEB', borderRadius: 8, padding: 8 }]}>
+              <View style={styles.infoIconContainer}>
+                <Ionicons name="alert-circle-outline" size={20} color="#B45309" />
+              </View>
+              <View style={styles.infoContent}>
+                <Text style={[styles.infoLabel, { color: '#B45309' }]}>Permintaan Pembatalan Oleh</Text>
+                <Text style={[styles.infoValue, { color: '#B45309', fontWeight: '700' }]}>{translateCancelBy(detail.cancel_by)}</Text>
+                {translateCancelReason(detail.cancel_reason) ? (
+                  <Text style={[styles.infoLabel, { color: '#B45309', marginTop: 2 }]}>Alasan: {translateCancelReason(detail.cancel_reason)}</Text>
+                ) : null}
+                {detail.date_cancel_requested ? (
+                  <Text style={[styles.infoLabel, { color: '#B45309', marginTop: 2 }]}>Waktu Permintaan: {formatDate(detail.date_cancel_requested, true)}</Text>
+                ) : null}
+              </View>
+            </View>
+          ) : detail.status === 'DIBATALKAN' ? (
+            <View style={[styles.infoRow, { backgroundColor: '#FEF2F2', borderRadius: 8, padding: 8 }]}>
+              <View style={styles.infoIconContainer}>
+                <Ionicons name="close-circle-outline" size={20} color="#B91C1C" />
+              </View>
+              <View style={styles.infoContent}>
+                <Text style={[styles.infoLabel, { color: '#B91C1C' }]}>Dibatalkan Oleh</Text>
+                <Text style={[styles.infoValue, { color: '#B91C1C', fontWeight: '700' }]}>{translateCancelBy(detail.cancel_by)}</Text>
+                {translateCancelReason(detail.cancel_reason) ? (
+                  <Text style={[styles.infoLabel, { color: '#B91C1C', marginTop: 2 }]}>Alasan: {translateCancelReason(detail.cancel_reason)}</Text>
+                ) : null}
+                {detail.date_cancel_requested ? (
+                  <Text style={[styles.infoLabel, { color: '#B91C1C', marginTop: 2 }]}>Waktu Permintaan: {formatDate(detail.date_cancel_requested, true)}</Text>
+                ) : null}
+                {detail.date_cancelled ? (
+                  <Text style={[styles.infoLabel, { color: '#B91C1C', marginTop: 2 }]}>Waktu Dibatalkan: {formatDate(detail.date_cancelled, true)}</Text>
+                ) : null}
+              </View>
+            </View>
+          ) : null}
+
           {detail.buyer_username ? (
             <View style={styles.infoRow}>
               <View style={styles.infoIconContainer}>
@@ -759,6 +1066,27 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
               <Text style={styles.infoValue}>{detail.invoice || 'No Invoice'}</Text>
             </View>
           </View>
+
+          {detail.no_resi ? (
+            <View style={styles.infoRow}>
+              <View style={styles.infoIconContainer}>
+                <Ionicons name="barcode-outline" size={20} color="#6B7280" />
+              </View>
+              <View style={styles.infoContent}>
+                <Text style={styles.infoLabel}>Nomor Resi</Text>
+                <View style={styles.copyableRow}>
+                  <Text style={styles.infoValue} numberOfLines={1}>{detail.no_resi}</Text>
+                  <TouchableOpacity
+                    onPress={() => copyToClipboard(detail.no_resi, 'Nomor resi')}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    style={styles.copyIconButton}
+                  >
+                    <Ionicons name="copy-outline" size={16} color="#6B7280" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          ) : null}
 
           <View style={styles.infoRow}>
             <View style={styles.infoIconContainer}>
@@ -840,7 +1168,7 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
               <Text style={styles.infoLabel}>Scan Date</Text>
               {detail.scan_timestamp ? (
                 <Text style={[styles.infoValue, styles.scanTimestampHighlight]}>
-                  {formatDate(detail.scan_timestamp)}
+                  {formatDate(detail.scan_timestamp, true)}
                 </Text>
               ) : (
                 <Text style={[styles.infoValue, { color: '#EF4444' }]}>Belum Scan</Text>
@@ -952,6 +1280,15 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
                     <Text style={styles.itemDetailLabel}>Quantity:</Text>
                     <Text style={styles.itemQtyBadge}>×{it.qty}</Text>
                   </View>
+                  {!!getRakName(it) && (
+                    <View style={styles.itemDetailRow}>
+                      <Text style={styles.itemDetailLabel}>Rak:</Text>
+                      <View style={styles.itemRakBadge}>
+                        <Ionicons name="location-outline" size={12} color="#0369a1" />
+                        <Text style={styles.itemRakText}>{getRakName(it)}</Text>
+                      </View>
+                    </View>
+                  )}
                   {it.price !== undefined && (
                     <View style={styles.itemDetailRow}>
                       <Text style={styles.itemDetailLabel}>Price:</Text>
@@ -969,120 +1306,249 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
 
       {/* Action Buttons - Fixed at bottom */}
       <View style={styles.actionContainer}>
-        {/* Kembali / Scan Lagi */}
-        <TouchableOpacity
-          style={[styles.actionButton, styles.backButton]}
-          onPress={() => navigation.goBack()}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.actionScrollContent}
         >
-          <Ionicons
-            name={source === 'pesanan_v2' ? 'arrow-back-outline' : 'scan-outline'}
-            size={18}
-            color="#f59e0b"
-          />
-          <Text style={styles.backButtonText} numberOfLines={1}>
-            {source === 'pesanan_v2' ? 'Kembali' : 'Scan Lagi'}
-          </Text>
-        </TouchableOpacity>
-
-        {/* Chat Pembeli Button - Available in ALL statuses */}
-        <TouchableOpacity
-          style={[styles.actionButton, styles.chatButton, chatLoading && styles.buttonDisabled]}
-          onPress={handleChatBuyer}
-          disabled={chatLoading}
-        >
-          {chatLoading ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <>
-              <Ionicons name="chatbubble-ellipses-outline" size={17} color="#fff" />
-              <Text style={styles.chatButtonText} numberOfLines={1}>Chat Pembeli</Text>
-            </>
-          )}
-        </TouchableOpacity>
-
-        {/* Status-Aware Action Buttons */}
-        {isCancellationPending ? (
+          {/* Kembali / Scan Lagi */}
           <TouchableOpacity
-            style={[
-              styles.actionButton,
-              styles.cancelOrderButton,
-              (!canCreate || processingCancel) && styles.buttonDisabled,
-            ]}
-            disabled={!canCreate || processingCancel}
-            onPress={handleTerimaPembatalan}
+            style={[styles.actionButton, styles.backButton]}
+            onPress={() => navigation.goBack()}
           >
-            {processingCancel ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <>
-                <Ionicons name="close-circle-outline" size={18} color="#fff" />
-                <Text style={styles.cancelOrderButtonText} numberOfLines={1}>Terima Batal</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        ) : isAlreadyCancelled ? (
-          <View style={[styles.actionButton, styles.cancelledDisabledButton]}>
-            <Ionicons name="ban" size={18} color="#6B7280" />
-            <Text style={styles.cancelledDisabledButtonText} numberOfLines={1}>Dibatalkan</Text>
-          </View>
-        ) : isUnpaid ? (
-          <TouchableOpacity
-            style={[styles.actionButton, styles.reminderButton, reminderLoading && styles.buttonDisabled]}
-            disabled={reminderLoading}
-            onPress={handleSendReminder}
-          >
-            {reminderLoading ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <>
-                <Ionicons name="notifications-outline" size={17} color="#fff" />
-                <Text style={styles.reminderButtonText} numberOfLines={1}>Ingatkan Bayar</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        ) : isReturn ? (
-          <TouchableOpacity
-            style={[
-              styles.actionButton,
-              styles.returButton,
-              (!canCreate || detail.has_retur) && styles.buttonDisabled,
-            ]}
-            disabled={!canCreate || detail.has_retur}
-            onPress={handleCreateRetur}
-          >
-            <Ionicons name="return-up-back-outline" size={17} color="#fff" />
-            <Text style={styles.returButtonText} numberOfLines={1}>
-              {detail.has_retur ? 'Sudah Retur' : 'Buat Retur'}
+            <Ionicons
+              name={source === 'pesanan_v2' ? 'arrow-back-outline' : 'scan-outline'}
+              size={18}
+              color="#f59e0b"
+            />
+            <Text style={styles.backButtonText} numberOfLines={1}>
+              {source === 'pesanan_v2' ? 'Kembali' : 'Scan Lagi'}
             </Text>
           </TouchableOpacity>
-        ) : (
-          <>
+
+          {/* Chat Pembeli Button - Available in ALL statuses */}
+          <TouchableOpacity
+            style={[styles.actionButton, styles.chatButton, chatLoading && styles.buttonDisabled]}
+            onPress={handleChatBuyer}
+            disabled={chatLoading}
+          >
+            {chatLoading ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <>
+                <Ionicons name="chatbubble-ellipses-outline" size={17} color="#fff" />
+                <Text style={styles.chatButtonText} numberOfLines={1}>Chat Pembeli</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          {/* Status-Aware Action Buttons */}
+          {isCancellationPending ? (
+            <>
+              <TouchableOpacity
+                style={[
+                  styles.actionButton,
+                  styles.cancelOrderButton,
+                  (!canCreate || processingCancel || rejectingCancel) && styles.buttonDisabled,
+                ]}
+                disabled={!canCreate || processingCancel || rejectingCancel}
+                onPress={handleTerimaPembatalan}
+              >
+                {processingCancel ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="checkmark-circle-outline" size={18} color="#fff" />
+                    <Text style={styles.cancelOrderButtonText} numberOfLines={1}>Terima Batal</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.actionButton,
+                  styles.rejectCancelButton,
+                  (!canCreate || processingCancel || rejectingCancel) && styles.buttonDisabled,
+                ]}
+                disabled={!canCreate || processingCancel || rejectingCancel}
+                onPress={handleTolakPembatalan}
+              >
+                {rejectingCancel ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="close-circle-outline" size={18} color="#fff" />
+                    <Text style={styles.rejectCancelButtonText} numberOfLines={1}>Tolak Batal</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </>
+          ) : isAlreadyCancelled ? (
+            <View style={[styles.actionButton, styles.cancelledDisabledButton]}>
+              <Ionicons name="ban" size={18} color="#6B7280" />
+              <Text style={styles.cancelledDisabledButtonText} numberOfLines={1}>Dibatalkan</Text>
+            </View>
+          ) : isUnpaid ? (
+            <TouchableOpacity
+              style={[styles.actionButton, styles.reminderButton, reminderLoading && styles.buttonDisabled]}
+              disabled={reminderLoading}
+              onPress={handleSendReminder}
+            >
+              {reminderLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <>
+                  <Ionicons name="notifications-outline" size={17} color="#fff" />
+                  <Text style={styles.reminderButtonText} numberOfLines={1}>Ingatkan Bayar</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          ) : isReturn ? (
             <TouchableOpacity
               style={[
                 styles.actionButton,
-                styles.primaryButton,
-                (!canCreate || detail.has_penjualan) && styles.buttonDisabled,
+                styles.returButton,
+                (!canCreate || detail.has_retur) && styles.buttonDisabled,
               ]}
-              disabled={!canCreate || detail.has_penjualan}
-              onPress={createSales}
+              disabled={!canCreate || detail.has_retur}
+              onPress={handleCreateRetur}
             >
-              <Ionicons name="cart-outline" size={17} color="#fff" />
-              <Text style={styles.primaryButtonText} numberOfLines={1}>
-                {detail.has_penjualan ? 'Sales Dibuat' : 'Buat Sales'}
+              <Ionicons name="return-up-back-outline" size={17} color="#fff" />
+              <Text style={styles.returButtonText} numberOfLines={1}>
+                {detail.has_retur ? 'Sudah Retur' : 'Buat Retur'}
               </Text>
             </TouchableOpacity>
+          ) : isPesananBaru ? (
+            <>
+              <TouchableOpacity
+                style={[
+                  styles.actionButton,
+                  styles.acceptOrderButton,
+                  (!canCreate || accepting) && styles.buttonDisabled,
+                ]}
+                disabled={!canCreate || accepting}
+                onPress={handleTerimaPesanan}
+              >
+                {accepting ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="checkmark-circle-outline" size={18} color="#fff" />
+                    <Text style={styles.acceptOrderButtonText} numberOfLines={1}>Terima Pesanan</Text>
+                  </>
+                )}
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.actionButton, styles.secondaryButton, !canCreate && styles.buttonDisabled]}
-              disabled={!canCreate}
-              onPress={printLabel}
-            >
-              <Ionicons name="print-outline" size={17} color="#111827" />
-              <Text style={styles.secondaryButtonText} numberOfLines={1}>Print</Text>
-            </TouchableOpacity>
-          </>
-        )}
+              <TouchableOpacity
+                style={[
+                  styles.actionButton,
+                  styles.tolakPesananButton,
+                  (!canCreate || isTolakPesananLoading) && styles.buttonDisabled,
+                ]}
+                disabled={!canCreate || isTolakPesananLoading}
+                onPress={handleTolakPesanan}
+              >
+                {isTolakPesananLoading ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="close-circle-outline" size={17} color="#fff" />
+                    <Text style={styles.tolakPesananButtonText} numberOfLines={1}>Tolak Pesanan</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </>
+          ) : isDiproses ? (
+            <>
+              <TouchableOpacity
+                style={[
+                  styles.actionButton,
+                  styles.primaryButton,
+                  (!canCreate || detail.has_penjualan) && styles.buttonDisabled,
+                ]}
+                disabled={!canCreate || detail.has_penjualan}
+                onPress={createSales}
+              >
+                <Ionicons name="cart-outline" size={17} color="#fff" />
+                <Text style={styles.primaryButtonText} numberOfLines={1}>
+                  {detail.has_penjualan ? 'Sales Dibuat' : 'Buat Sales'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.actionButton, styles.secondaryButton, !canCreate && styles.buttonDisabled]}
+                disabled={!canCreate}
+                onPress={printLabel}
+              >
+                <Ionicons name="print-outline" size={17} color="#111827" />
+                <Text style={styles.secondaryButtonText} numberOfLines={1}>Print</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.actionButton,
+                  styles.tolakPesananButton,
+                  (!canCreate || isTolakPesananLoading) && styles.buttonDisabled,
+                ]}
+                disabled={!canCreate || isTolakPesananLoading}
+                onPress={handleTolakPesanan}
+              >
+                {isTolakPesananLoading ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="close-circle-outline" size={17} color="#fff" />
+                    <Text style={styles.tolakPesananButtonText} numberOfLines={1}>Tolak Pesanan</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <TouchableOpacity
+                style={[
+                  styles.actionButton,
+                  styles.primaryButton,
+                  (!canCreate || detail.has_penjualan) && styles.buttonDisabled,
+                ]}
+                disabled={!canCreate || detail.has_penjualan}
+                onPress={createSales}
+              >
+                <Ionicons name="cart-outline" size={17} color="#fff" />
+                <Text style={styles.primaryButtonText} numberOfLines={1}>
+                  {detail.has_penjualan ? 'Sales Dibuat' : 'Buat Sales'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.actionButton, styles.secondaryButton, !canCreate && styles.buttonDisabled]}
+                disabled={!canCreate}
+                onPress={printLabel}
+              >
+                <Ionicons name="print-outline" size={17} color="#111827" />
+                <Text style={styles.secondaryButtonText} numberOfLines={1}>Print</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </ScrollView>
       </View>
+
+      {/* Tolak Pesanan — Seller Cancellation Modal */}
+      <TolakPesananModal
+        visible={tolakPesananModalVisible}
+        orders={detail ? [detail] : []}
+        loading={isTolakPesananLoading}
+        onClose={() => !isTolakPesananLoading && setTolakPesananModalVisible(false)}
+        onConfirm={executeTolakPesanan}
+      />
+
+      {/* Tolak Pembatalan — Reason Modal */}
+      <CancelReasonModal
+        visible={cancelReasonModalVisible}
+        orderCount={1}
+        loading={rejectingCancel}
+        onClose={() => !rejectingCancel && setCancelReasonModalVisible(false)}
+        onConfirm={executeTolakPembatalan}
+      />
 
       {/* Lightbox Modal */}
       <Modal
@@ -1248,6 +1714,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6B7280',
     fontWeight: '500',
+    flexShrink: 1,
+  },
+  copyableRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  copyIconButton: {
+    marginLeft: 6,
+    padding: 2,
   },
   statusBadge: {
     paddingHorizontal: 12,
@@ -1315,6 +1790,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#111827',
     fontWeight: '600',
+    flexShrink: 1,
   },
   infoValueHighlight: {
     fontSize: 16,
@@ -1468,6 +1944,22 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 6,
   },
+  itemRakBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#E0F2FE',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    flexShrink: 1,
+  },
+  itemRakText: {
+    fontSize: 14,
+    color: '#0369a1',
+    fontWeight: '700',
+    flexShrink: 1,
+  },
 
   // Action Buttons
   actionContainer: {
@@ -1476,7 +1968,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: '#fff',
-    paddingHorizontal: 10,
     paddingVertical: 10,
     paddingBottom: 14,
     borderTopWidth: 1,
@@ -1486,17 +1977,22 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 8,
+  },
+  actionScrollContent: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: 10,
     gap: 6,
+    flexGrow: 1,
   },
   actionButton: {
     flex: 1,
+    minWidth: 80,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 10,
-    paddingHorizontal: 6,
+    paddingHorizontal: 8,
     borderRadius: 8,
     gap: 4,
   },
@@ -1629,6 +2125,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
+  acceptOrderButton: {
+    backgroundColor: '#10B981',
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  acceptOrderButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
   buttonDisabled: {
     opacity: 0.4,
   },
@@ -1647,14 +2156,28 @@ const styles = StyleSheet.create({
   },
   cancelOrderButton: {
     flex: 1,
-    backgroundColor: '#DC2626',
-    shadowColor: '#DC2626',
+    backgroundColor: '#10B981',
+    shadowColor: '#10B981',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 6,
     elevation: 3,
   },
   cancelOrderButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  rejectCancelButton: {
+    flex: 1,
+    backgroundColor: '#EF4444',
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  rejectCancelButtonText: {
     color: '#fff',
     fontSize: 12,
     fontWeight: '700',
@@ -1669,5 +2192,18 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     fontSize: 12,
     fontWeight: '600',
+  },
+  tolakPesananButton: {
+    backgroundColor: '#EF4444',
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  tolakPesananButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
   },
 });

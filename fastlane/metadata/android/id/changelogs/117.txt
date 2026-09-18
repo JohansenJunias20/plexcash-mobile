@@ -1,0 +1,1 @@
+Pembaruan modul karyawan, absensi, bayar gaji, order alarm, instant accept, dan perbaikan kestabilan aplikasi.

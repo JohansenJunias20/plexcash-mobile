@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import ApiService from '../../services/api';
+import KartuStokModal from '../../components/KartuStokModal';
 
 interface Item {
   id: number;
@@ -72,6 +73,15 @@ const StokOpnameScreen = ({ navigation }: any) => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [searchLoading, setSearchLoading] = useState<boolean>(false);
+  const [showKartuStok, setShowKartuStok] = useState<boolean>(false);
+  const [kartuStokItemId, setKartuStokItemId] = useState<number | null>(null);
+  const [kartuStokItemNama, setKartuStokItemNama] = useState<string>('');
+
+  const openKartuStokInline = (item: Item) => {
+    setKartuStokItemId(item.id);
+    setKartuStokItemNama(item.nama);
+    setShowKartuStok(true);
+  };
 
   useEffect(() => {
     if (mode === 'list') {
@@ -527,9 +537,17 @@ const StokOpnameScreen = ({ navigation }: any) => {
                     </Text>
                     <Text style={styles.itemSku}>SKU: {item.sku || '-'}</Text>
                   </View>
-                  <TouchableOpacity onPress={() => handleRemoveItem(index)}>
-                    <Ionicons name="trash-outline" size={20} color="#EF4444" />
-                  </TouchableOpacity>
+                  <View style={styles.itemHeaderActions}>
+                    <TouchableOpacity
+                      style={styles.infoBtn}
+                      onPress={() => openKartuStokInline(item)}
+                    >
+                      <Ionicons name="information-circle" size={22} color="#3b82f6" />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => handleRemoveItem(index)}>
+                      <Ionicons name="trash-outline" size={20} color="#EF4444" />
+                    </TouchableOpacity>
+                  </View>
                 </View>
 
                 <View style={styles.itemInputs}>
@@ -690,6 +708,14 @@ const StokOpnameScreen = ({ navigation }: any) => {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Kartu Stok Inline Modal */}
+      <KartuStokModal
+        visible={showKartuStok}
+        itemId={kartuStokItemId}
+        itemNama={kartuStokItemNama}
+        onClose={() => setShowKartuStok(false)}
+      />
     </View>
   );
 };
@@ -885,6 +911,14 @@ const styles = StyleSheet.create({
   },
   itemHeaderLeft: {
     flex: 1,
+  },
+  itemHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  infoBtn: {
+    padding: 2,
   },
   itemName: {
     fontSize: 15,

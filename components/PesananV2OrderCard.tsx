@@ -29,6 +29,34 @@ const getStatusColor = (status: string) => {
     }
 };
 
+// Menerjemahkan siapa yang membatalkan pesanan (dari data marketplace) ke label Bahasa Indonesia
+const translateCancelBy = (cancelBy?: string | null): string => {
+    switch ((cancelBy || '').toLowerCase()) {
+        case 'buyer': return 'Pembeli';
+        case 'seller': return 'Penjual';
+        case 'system': return 'Sistem Marketplace';
+        default: return 'Tidak Diketahui';
+    }
+};
+
+// Menerjemahkan kode/teks alasan pembatalan mentah dari marketplace ke Bahasa Indonesia yang mudah dipahami
+const translateCancelReason = (cancelReason?: string | null): string | null => {
+    if (!cancelReason) return null;
+    const map: Record<string, string> = {
+        'OUT_OF_STOCK': 'Stok barang habis',
+        'CUSTOMER_REQUEST': 'Permintaan pembeli',
+        'UNDELIVERABLE_AREA': 'Area tidak terjangkau kurir',
+        'COD_NOT_SUPPORTED': 'COD tidak didukung di area ini',
+        'Unpaid Order': 'Pesanan tidak dibayar (kadaluarsa)',
+        'Failed Delivery': 'Gagal pengiriman',
+        'Package delivery failed': 'Gagal pengiriman',
+        'Pengiriman paket gagal': 'Gagal pengiriman',
+        'Package lost': 'Paket hilang',
+        'Paket hilang': 'Paket hilang',
+    };
+    return map[cancelReason] || cancelReason;
+};
+
 const PLATFORM_LOGO: any = {
     shopee: { bg: '#FFF7ED', color: '#EA580C', border: '#FDBA74' },
     tokopedia: { bg: '#ECFDF5', color: '#059669', border: '#A7F3D0' },
@@ -48,6 +76,8 @@ interface Props {
   onReminderSuccess?: (orderSn: string) => void;
   onAcceptOrder?: (order: any) => void;
   isAccepting?: boolean;
+  scheduledInfo?: { scheduled_at: string; delay_minutes: number; status?: string };
+  onCancelSchedule?: (order: any) => void;
 }
 
 export default function PesananV2OrderCard({
@@ -62,6 +92,8 @@ export default function PesananV2OrderCard({
   onReminderSuccess,
   onAcceptOrder,
   isAccepting = false,
+  scheduledInfo,
+  onCancelSchedule,
 }: Props) {
   const { access } = useAccess();
   const [showHpp, setShowHpp] = useState(false);
@@ -397,6 +429,17 @@ export default function PesananV2OrderCard({
           <Text style={styles.infoText}> {order.tanggal_order ? moment(order.tanggal_order).format('DD/MM/YYYY HH:mm') : '-'}</Text>
         </View>
 
+        {/* Dibatalkan oleh — agar penjual tahu apakah pembatalan dari pembeli, penjual, atau sistem marketplace */}
+        {order.status === 'DIBATALKAN' && (
+          <View style={styles.row}>
+            <Ionicons name="close-circle-outline" size={14} color="#B91C1C" />
+            <Text style={[styles.infoText, { color: '#B91C1C', fontWeight: '600' }]}>
+              {' '}Dibatalkan oleh: {translateCancelBy(order.cancel_by)}
+              {translateCancelReason(order.cancel_reason) ? ` (${translateCancelReason(order.cancel_reason)})` : ''}
+            </Text>
+          </View>
+        )}
+
         {/* Print Date */}
         {(order.print_timestamp || order.print) && (
           <View style={styles.row}>
@@ -434,6 +477,13 @@ export default function PesananV2OrderCard({
                 )}
                 {(order.has_retur || order.retur) && (
                     <View style={[styles.miniBadge, { backgroundColor: '#FFEDD5' }]}><Text style={[styles.miniBadgeText, { color: '#C2410C' }]}>SUDAH RETUR</Text></View>
+                )}
+                {scheduledInfo && scheduledInfo.status === 'PENDING' && (
+                    <View style={[styles.miniBadge, { backgroundColor: '#E0F2FE', borderColor: '#BAE6FD', borderWidth: 1 }]}>
+                        <Text style={[styles.miniBadgeText, { color: '#0369A1' }]}>
+                            ⏱️ TERJADWAL PK {moment(scheduledInfo.scheduled_at).format('HH:mm')}
+                        </Text>
+                    </View>
                 )}
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -494,25 +544,60 @@ export default function PesananV2OrderCard({
 
       {/* Terima Pesanan Action Bar */}
       {isPesananBaru && onAcceptOrder && (
-        <View style={styles.acceptOrderBar}>
-          <TouchableOpacity
-            style={[
-              styles.acceptOrderButton,
-              isAccepting && styles.acceptOrderButtonDisabled,
-            ]}
-            onPress={() => onAcceptOrder(order)}
-            disabled={isAccepting}
-            activeOpacity={0.8}
-          >
-            {isAccepting ? (
-              <ActivityIndicator size="small" color="#FFF" style={styles.actionIcon} />
-            ) : (
-              <Ionicons name="checkmark-circle-outline" size={18} color="#FFF" style={styles.actionIcon} />
-            )}
-            <Text style={styles.acceptOrderButtonText}>
-              {isAccepting ? 'Memproses...' : 'Terima Pesanan'}
-            </Text>
-          </TouchableOpacity>
+        <View style={[styles.acceptOrderBar, scheduledInfo?.status === 'PENDING' && { backgroundColor: '#F0F9FF', borderTopColor: '#BAE6FD' }]}>
+          {scheduledInfo?.status === 'PENDING' ? (
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <View style={{ flex: 1, marginRight: 8 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Ionicons name="time-outline" size={16} color="#0284C7" style={{ marginRight: 4 }} />
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#0369A1' }}>
+                    Diterima pk {moment(scheduledInfo.scheduled_at).format('HH:mm')}
+                  </Text>
+                </View>
+                <Text style={{ fontSize: 10, color: '#64748B' }}>
+                  ({scheduledInfo.delay_minutes}m lagi otomatis)
+                </Text>
+              </View>
+              <View style={{ flexDirection: 'row', gap: 6 }}>
+                {onCancelSchedule && (
+                  <TouchableOpacity
+                    style={[styles.acceptOrderButton, { backgroundColor: '#EF4444', flex: 0, paddingHorizontal: 10, paddingVertical: 6 }]}
+                    onPress={() => onCancelSchedule(order)}
+                  >
+                    <Text style={[styles.acceptOrderButtonText, { fontSize: 11 }]}>Batal</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  style={[styles.acceptOrderButton, { backgroundColor: '#0284C7', flex: 0, paddingHorizontal: 10, paddingVertical: 6 }]}
+                  onPress={() => onAcceptOrder(order)}
+                  disabled={isAccepting}
+                >
+                  <Text style={[styles.acceptOrderButtonText, { fontSize: 11 }]}>
+                    {isAccepting ? '...' : 'Terima Skrg'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={[
+                styles.acceptOrderButton,
+                isAccepting && styles.acceptOrderButtonDisabled,
+              ]}
+              onPress={() => onAcceptOrder(order)}
+              disabled={isAccepting}
+              activeOpacity={0.8}
+            >
+              {isAccepting ? (
+                <ActivityIndicator size="small" color="#FFF" style={styles.actionIcon} />
+              ) : (
+                <Ionicons name="checkmark-circle-outline" size={18} color="#FFF" style={styles.actionIcon} />
+              )}
+              <Text style={styles.acceptOrderButtonText}>
+                {isAccepting ? 'Memproses...' : 'Terima Pesanan'}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
 
