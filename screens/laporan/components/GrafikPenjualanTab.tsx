@@ -13,8 +13,8 @@ import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import moment, { Moment } from 'moment';
 import { WebView } from 'react-native-webview';
-import Share from 'react-native-share';
 import * as FileSystem from 'expo-file-system'; // Expo standard, usually available in expo bare/managed
+import * as Sharing from 'expo-sharing';
 
 import ApiService from '../../../services/api';
 import SearchBarangModal, { BarangItem } from '../../../components/SearchBarangModal';
@@ -219,11 +219,15 @@ export default function GrafikPenjualanTab() {
       const fileUri = `${FileSystem.documentDirectory}LaporanBarang_${moment().format('YYYYMMDD')}.csv`;
       await FileSystem.writeAsStringAsync(fileUri, csvContent, { encoding: FileSystem.EncodingType.UTF8 });
       
-      await Share.open({
-        url: fileUri,
-        title: 'Export Laporan Barang',
-        type: 'text/csv'
-      });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(fileUri, {
+          mimeType: 'text/csv',
+          dialogTitle: 'Export Laporan Barang',
+          UTI: 'public.comma-separated-values-text',
+        });
+      } else {
+        Alert.alert('Info', 'Fitur share tidak didukung di perangkat ini');
+      }
     } catch (error) {
       console.error('Error export:', error);
       Alert.alert('Gagal', 'Terjadi kesalahan saat export CSV');

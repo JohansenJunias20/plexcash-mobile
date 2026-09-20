@@ -1796,6 +1796,32 @@ class ApiService {
       return { status: false, reason: 'Failed to delete pelunasan' };
     }
   }
+
+  /**
+   * Update FCM push notification token for this device
+   */
+  static async updateFcmToken(fcmToken: string): Promise<{ success: boolean; message?: string }> {
+    try {
+      const deviceId = await this.getOrCreateDeviceId();
+      console.log('📱 [API] Updating FCM token for device:', deviceId);
+
+      const response = await this.authenticatedRequest('/api/device/fcm-token', {
+        method: 'POST',
+        body: JSON.stringify({
+          deviceId,
+          fcmToken,
+        }),
+      });
+
+      return {
+        success: response?.status === true || response?.success === true,
+        message: response?.message || response?.reason,
+      };
+    } catch (error: any) {
+      console.error('❌ [API] Failed to update FCM token:', error);
+      return { success: false, message: error?.message };
+    }
+  }
 }
 
 export default ApiService;

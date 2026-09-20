@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+
+# Local build artifacts & caches
+android/app/build/
+android/.gradle/
+android/build/
+ios/build/
+ios/Pods/
+.gradle/
+dist/
+web-build/
+.kotlin/
+
+# Keystores & credentials
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+service-account-key.json
+
+# Caches & temporary files
+.expo/
+*.log
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+.DS_Store
+*.tsbuildinfo
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots
+fastlane/test_output

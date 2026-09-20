@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { IBluetoothPrinterService } from './IBluetoothPrinterService';
 import BluetoothPrinterService_BLE_PLX from './BluetoothPrinterService_BLE_PLX';
 import BluetoothPrinterService_Classic from './BluetoothPrinterService_Classic';
@@ -12,7 +13,8 @@ export type BleLibraryType = PrinterLibraryType; // Backward compatibility
  */
 class BluetoothPrinterServiceFactory {
   private static instance: IBluetoothPrinterService | null = null;
-  private static currentLibrary: PrinterLibraryType = 'bt-classic'; // Default to Bluetooth Classic (recommended for thermal printers)
+  // Default to BLE-PLX on iOS (Classic BT not supported on iOS) and bt-classic on Android
+  private static currentLibrary: PrinterLibraryType = Platform.OS === 'ios' ? 'ble-plx' : 'bt-classic';
 
   /**
    * Get the current service instance
@@ -65,6 +67,10 @@ class BluetoothPrinterServiceFactory {
         return new BluetoothPrinterService_BLE_PLX();
 
       case 'bt-classic':
+        if (Platform.OS === 'ios') {
+          console.warn('⚠️ [PRINTER-FACTORY] Bluetooth Classic is not supported on iOS, using BLE-PLX');
+          return new BluetoothPrinterService_BLE_PLX();
+        }
         console.log('📦 [PRINTER-FACTORY] Creating Bluetooth Classic instance (Recommended)');
         return new BluetoothPrinterService_Classic();
 
@@ -73,6 +79,10 @@ class BluetoothPrinterServiceFactory {
         return new LANPrinterService();
 
       default:
+        if (Platform.OS === 'ios') {
+          console.warn(`⚠️ [PRINTER-FACTORY] Unknown library: ${library}, defaulting to ble-plx on iOS`);
+          return new BluetoothPrinterService_BLE_PLX();
+        }
         console.warn(`⚠️ [PRINTER-FACTORY] Unknown library: ${library}, defaulting to bt-classic`);
         return new BluetoothPrinterService_Classic();
     }

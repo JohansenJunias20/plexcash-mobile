@@ -3,8 +3,12 @@
 # dependencies
 node_modules/
 
-# Android local config
+# Android local config & build outputs
 android/local.properties
+android/app/build/
+android/.gradle/
+android/build/
+.gradle/
 
 # Expo
 .expo/

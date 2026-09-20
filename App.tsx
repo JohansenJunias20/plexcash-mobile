@@ -1,6 +1,7 @@
+import React, { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, View } from 'react-native';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { AccessProvider } from './context/AccessContext';
 import { OrderAlarmProvider } from './context/OrderAlarmContext';
 import OrderAlarmModal from './components/OrderAlarmModal';
@@ -8,13 +9,13 @@ import { DeveloperModeProvider, useDeveloperMode } from './context/DeveloperMode
 import { NavigationContainer } from '@react-navigation/native';
 import RootNavigator from './navigation/RootNavigator';
 import ApiService from './services/api';
+import { registerForPushNotificationsAsync, addNotificationListeners, syncFcmTokenWithBackend } from './services/notificationService';
 import LogViewer from './components/LogViewer';
 import UpdateModal from './components/UpdateModal';
 import UpdateSuccessModal from './components/UpdateSuccessModal';
 import SubscriptionAlertModal from './components/SubscriptionAlertModal';
 import { useAppUpdate } from './hooks/useAppUpdate';
 import * as AuthSession from "expo-auth-session";
-import { useEffect } from 'react';
 import { Alert } from 'react-native';
 import FlashMessage from 'react-native-flash-message';
 
@@ -61,20 +62,15 @@ setupGlobalErrorHandler();
 
 // Safely log redirect URI only after modules are ready
 try {
-  console.log(AuthSession.makeRedirectUri({ useProxy: true }));
+  console.log(AuthSession.makeRedirectUri({ useProxy: true } as any));
 } catch (error) {
   console.warn('AuthSession not ready yet:', error);
 }
 
-// const Drawer = createDrawerNavigator({
-//   screens: {
-//     MainHome: MainScreen,
-//   }
-// });
-
 // Inner component that uses DeveloperModeContext
-const AppContent = (): JSX.Element => {
+const AppContent = (): React.JSX.Element => {
   const { isDeveloperMode } = useDeveloperMode();
+  const { isAuthenticated } = useAuth();
   const {
     showUpdateModal,
     showUpdateSuccessModal,
@@ -85,6 +81,35 @@ const AppContent = (): JSX.Element => {
     handleLater,
     handleCloseUpdateSuccess,
   } = useAppUpdate();
+
+  // Initialize push notification service & listeners
+  useEffect(() => {
+    registerForPushNotificationsAsync().then((token) => {
+      if (token) {
+        console.log('🔔 [App] Push notification initialized');
+      }
+    });
+
+    const cleanupListeners = addNotificationListeners(
+      (notification) => {
+        console.log('🔔 [App] Foreground notification received:', notification.request.content.title);
+      },
+      (response) => {
+        console.log('👆 [App] Notification clicked:', response.notification.request.content.data);
+      }
+    );
+
+    return () => {
+      cleanupListeners();
+    };
+  }, []);
+
+  // Sync FCM token to backend whenever authentication state is active
+  useEffect(() => {
+    if (isAuthenticated) {
+      syncFcmTokenWithBackend();
+    }
+  }, [isAuthenticated]);
 
   return (
     <View style={styles.container}>
@@ -125,7 +150,7 @@ const AppContent = (): JSX.Element => {
   );
 };
 
-export default function App(): JSX.Element {
+export default function App(): React.JSX.Element {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <DeveloperModeProvider>
