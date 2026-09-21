@@ -1,9 +1,38 @@
 default_platform(:android)
 
+# Kalau .env lokal (dipakai untuk dev, tidak masuk git) menimpa
+# EXPO_PUBLIC_API_BASE_URL ke sesuatu selain domain production, Expo/Metro akan
+# meng-inline nilai itu ke JS bundle APAPUN jenis build-nya (dev maupun release).
+# Ini pernah bikin AAB production ke-bundle dengan IP LAN developer
+# (http://192.168.1.101:3000) dan dipublish ke Play Store, bikin semua request
+# backend gagal untuk semua tester. Cek ini WAJIB jalan sebelum build/upload release.
+PRODUCTION_API_HOST = "app.plexseller.com"
+
+def verify_release_env!
+  env_path = File.expand_path("../.env", __dir__)
+  return unless File.exist?(env_path)
+
+  content = File.read(env_path)
+  match = content.match(/^\s*EXPO_PUBLIC_API_BASE_URL\s*=\s*(\S+)/)
+  return unless match
+
+  value = match[1].strip
+  unless value.include?(PRODUCTION_API_HOST)
+    UI.user_error!(
+      "🚨 .env sets EXPO_PUBLIC_API_BASE_URL=#{value} (bukan #{PRODUCTION_API_HOST}).\n" \
+      "Expo/Metro akan meng-inline nilai ini ke JS bundle build APAPUN, termasuk release.\n" \
+      "Pindahkan dulu file .env ini (mis. `mv .env .env.local.bak`) sebelum build/upload release, " \
+      "baru kembalikan lagi setelah selesai."
+    )
+  end
+end
+
 platform :android do
   desc "Upload a locally-built AAB to Google Play"
   desc "track: production (default) | beta (open testing) | alpha (closed testing) | internal"
   lane :deploy do |options|
+    verify_release_env!
+
     track = options[:track] || "production"
 
     # Langsung rilis (completed) tanpa draft sesuai permintaan user
