@@ -9,7 +9,10 @@ import { DeveloperModeProvider, useDeveloperMode } from './context/DeveloperMode
 import { NavigationContainer } from '@react-navigation/native';
 import RootNavigator from './navigation/RootNavigator';
 import ApiService from './services/api';
+import * as Notifications from 'expo-notifications';
 import { registerForPushNotificationsAsync, addNotificationListeners, syncFcmTokenWithBackend } from './services/notificationService';
+import { openChatFromNotification } from './services/ecommerce/chatNotificationNav';
+import { navigationRef } from './navigation/navigationRef';
 import LogViewer from './components/LogViewer';
 import UpdateModal from './components/UpdateModal';
 import UpdateSuccessModal from './components/UpdateSuccessModal';
@@ -95,9 +98,23 @@ const AppContent = (): React.JSX.Element => {
         console.log('🔔 [App] Foreground notification received:', notification.request.content.title);
       },
       (response) => {
-        console.log('👆 [App] Notification clicked:', response.notification.request.content.data);
+        const data = response.notification.request.content.data as any;
+        console.log('👆 [App] Notification clicked:', data);
+        if (data?.type === 'new_chat' && data.id_ecommerce && data.buyer_id) {
+          openChatFromNotification(String(data.id_ecommerce), String(data.buyer_id));
+        }
       }
     );
+
+    // Handle the case where the app was fully killed and got launched by
+    // tapping a notification — the listener above only catches taps that
+    // happen while it's already mounted.
+    Notifications.getLastNotificationResponseAsync().then((response) => {
+      const data = response?.notification.request.content.data as any;
+      if (data?.type === 'new_chat' && data.id_ecommerce && data.buyer_id) {
+        openChatFromNotification(String(data.id_ecommerce), String(data.buyer_id));
+      }
+    });
 
     return () => {
       cleanupListeners();
@@ -114,7 +131,7 @@ const AppContent = (): React.JSX.Element => {
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
-      <NavigationContainer>
+      <NavigationContainer ref={navigationRef}>
         {/* <RootNavigator /> */}
         <DrawerNavigator />
       </NavigationContainer>

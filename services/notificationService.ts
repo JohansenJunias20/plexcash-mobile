@@ -41,6 +41,18 @@ export async function setupNotificationChannels(): Promise<void> {
       showBadge: true,
     });
 
+    // Channel for new chat messages from buyers
+    await Notifications.setNotificationChannelAsync('chat', {
+      name: 'Pesan Chat Baru',
+      description: 'Notifikasi saat ada pesan chat baru dari pembeli',
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#f59e0b',
+      sound: 'default',
+      enableVibrate: true,
+      showBadge: true,
+    });
+
     // Default channel for general system updates
     await Notifications.setNotificationChannelAsync('default', {
       name: 'Pemberitahuan Umum',

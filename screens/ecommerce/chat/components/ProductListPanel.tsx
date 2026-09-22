@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -7,39 +7,116 @@ import {
   FlatList,
   Image,
   ActivityIndicator,
+  TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { IProduct, formatPrice, formatStock } from '../../../../services/ecommerce/productService';
+import {
+  IProduct,
+  formatPrice,
+  formatStock,
+  fetchProductsPaged,
+} from '../../../../services/ecommerce/productService';
 
 /**
  * ProductListPanel Component
- * Displays a collapsible panel with product list for sending to buyer
+ * Displays a collapsible panel with a searchable, paginated product list
+ * for sending to buyer. Fetches products page-by-page from the backend
+ * (instead of loading the whole catalog at once) so stores with very large
+ * catalogs (10k+ products) stay fast and light on memory.
  */
+
+const PAGE_SIZE = 30;
+const SEARCH_DEBOUNCE_MS = 300;
 
 interface IProductListPanelProps {
   visible: boolean;
-  products: IProduct[];
-  loading: boolean;
+  idEcommerce: number;
   onClose: () => void;
   onProductPress: (product: IProduct) => void;
-  onCancelLoading?: () => void;
-  loadingProgress?: {
-    percentage: number;
-    estimatedTime: string;
-    remainingTime: string;
-    status: string;
-  } | null;
 }
 
 const ProductListPanel: React.FC<IProductListPanelProps> = ({
   visible,
-  products,
-  loading,
+  idEcommerce,
   onClose,
   onProductPress,
-  onCancelLoading,
-  loadingProgress,
 }) => {
+  const [searchInput, setSearchInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [products, setProducts] = useState<IProduct[]>([]);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Guards against stale responses when search/close happens mid-request
+  const requestIdRef = useRef(0);
+
+  // Debounce search input before triggering a server-side search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchQuery(searchInput.trim());
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  // Reset local state when the panel closes, so reopening starts fresh
+  useEffect(() => {
+    if (!visible) {
+      setSearchInput('');
+      setSearchQuery('');
+      setProducts([]);
+      setPage(1);
+      setTotal(0);
+      setErrorMessage(null);
+    }
+  }, [visible]);
+
+  // Fetch page 1 whenever the panel opens or the search query changes
+  useEffect(() => {
+    if (!visible) return;
+
+    const requestId = ++requestIdRef.current;
+    setLoading(true);
+    setErrorMessage(null);
+
+    fetchProductsPaged(idEcommerce, 1, PAGE_SIZE, searchQuery).then((result) => {
+      if (requestId !== requestIdRef.current) return; // superseded by a newer request
+
+      if (result.status) {
+        setProducts(result.data);
+        setTotal(result.total);
+        setPage(1);
+      } else {
+        setProducts([]);
+        setTotal(0);
+        setErrorMessage(result.message || 'Gagal memuat produk');
+      }
+      setLoading(false);
+    });
+  }, [visible, idEcommerce, searchQuery]);
+
+  const handleLoadMore = useCallback(() => {
+    if (loading || loadingMore) return;
+    if (products.length >= total) return;
+
+    const nextPage = page + 1;
+    const requestId = requestIdRef.current;
+    setLoadingMore(true);
+
+    fetchProductsPaged(idEcommerce, nextPage, PAGE_SIZE, searchQuery).then((result) => {
+      if (requestId !== requestIdRef.current) return; // search/close changed meanwhile
+
+      if (result.status) {
+        setProducts((prev) => [...prev, ...result.data]);
+        setPage(nextPage);
+        setTotal(result.total);
+      }
+      setLoadingMore(false);
+    });
+  }, [idEcommerce, page, products.length, total, searchQuery, loading, loadingMore]);
+
   if (!visible) return null;
 
   // Render product card
@@ -108,57 +185,62 @@ const ProductListPanel: React.FC<IProductListPanelProps> = ({
         <View style={styles.headerLeft}>
           <Ionicons name="cube" size={24} color="#f59e0b" />
           <Text style={styles.headerTitle}>Select Product</Text>
+          {total > 0 && (
+            <Text style={styles.headerCount}>
+              ({products.length}/{total})
+            </Text>
+          )}
         </View>
         <TouchableOpacity onPress={onClose} style={styles.closeButton}>
           <Ionicons name="close" size={24} color="#6B7280" />
         </TouchableOpacity>
       </View>
 
-      {/* Loading State */}
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <Ionicons name="search" size={18} color="#9CA3AF" style={{ marginRight: 8 }} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Cari nama produk atau SKU..."
+          placeholderTextColor="#9CA3AF"
+          value={searchInput}
+          onChangeText={setSearchInput}
+          autoCorrect={false}
+        />
+        {searchInput ? (
+          <TouchableOpacity onPress={() => setSearchInput('')}>
+            <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+          </TouchableOpacity>
+        ) : null}
+      </View>
+
+      {/* Loading State (initial load / new search) */}
       {loading && (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#f59e0b" />
-          <Text style={styles.loadingText}>
-            {loadingProgress?.status || 'Loading products...'}
-          </Text>
+          <Text style={styles.loadingText}>Loading products...</Text>
+        </View>
+      )}
 
-          {/* Progress Bar */}
-          {loadingProgress && (
-            <>
-              <View style={styles.progressBarContainer}>
-                <View
-                  style={[
-                    styles.progressBarFill,
-                    { width: `${loadingProgress.percentage}%` },
-                  ]}
-                />
-              </View>
-              <Text style={styles.progressText}>
-                {loadingProgress.remainingTime} ({loadingProgress.percentage}%)
-              </Text>
-            </>
-          )}
-
-          {/* Cancel Button */}
-          {onCancelLoading && (
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={onCancelLoading}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.cancelButtonText}>Cancel</Text>
-            </TouchableOpacity>
-          )}
+      {/* Error State */}
+      {!loading && errorMessage && products.length === 0 && (
+        <View style={styles.emptyContainer}>
+          <Ionicons name="alert-circle-outline" size={64} color="#D1D5DB" />
+          <Text style={styles.emptyText}>{errorMessage}</Text>
         </View>
       )}
 
       {/* Empty State */}
-      {!loading && products.length === 0 && (
+      {!loading && !errorMessage && products.length === 0 && (
         <View style={styles.emptyContainer}>
           <Ionicons name="cube-outline" size={64} color="#D1D5DB" />
-          <Text style={styles.emptyText}>No products available</Text>
+          <Text style={styles.emptyText}>
+            {searchQuery ? 'Produk tidak ditemukan' : 'No products available'}
+          </Text>
           <Text style={styles.emptySubtext}>
-            Add products to your store to send them to buyers
+            {searchQuery
+              ? 'Coba kata kunci lain'
+              : 'Add products to your store to send them to buyers'}
           </Text>
         </View>
       )}
@@ -171,6 +253,17 @@ const ProductListPanel: React.FC<IProductListPanelProps> = ({
           keyExtractor={(item) => item.id.toString()}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={true}
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={
+            loadingMore ? (
+              <ActivityIndicator
+                size="small"
+                color="#f59e0b"
+                style={styles.footerLoader}
+              />
+            ) : null
+          }
           // Performance optimizations
           removeClippedSubviews={true}
           maxToRenderPerBatch={10}
@@ -223,8 +316,32 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#111827',
   },
+  headerCount: {
+    fontSize: 13,
+    color: '#9CA3AF',
+    fontWeight: '500',
+  },
   closeButton: {
     padding: 4,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    height: 42,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 13,
+    color: '#1F2937',
+    paddingVertical: 0,
   },
   loadingContainer: {
     flex: 1,
@@ -238,35 +355,8 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     fontWeight: '500',
   },
-  progressBarContainer: {
-    width: '80%',
-    height: 8,
-    backgroundColor: '#E5E7EB',
-    borderRadius: 4,
-    marginTop: 16,
-    overflow: 'hidden',
-  },
-  progressBarFill: {
-    height: '100%',
-    backgroundColor: '#f59e0b',
-    borderRadius: 4,
-  },
-  progressText: {
-    marginTop: 8,
-    fontSize: 14,
-    color: '#6B7280',
-  },
-  cancelButton: {
-    marginTop: 16,
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-    backgroundColor: '#EF4444',
-    borderRadius: 8,
-  },
-  cancelButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
+  footerLoader: {
+    paddingVertical: 16,
   },
   emptyContainer: {
     flex: 1,
@@ -279,6 +369,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: '#6B7280',
+    textAlign: 'center',
   },
   emptySubtext: {
     marginTop: 8,
@@ -357,4 +448,3 @@ const styles = StyleSheet.create({
 });
 
 export default ProductListPanel;
-

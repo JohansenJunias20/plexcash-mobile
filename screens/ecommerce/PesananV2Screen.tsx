@@ -396,7 +396,11 @@ export default function PesananV2Screen() {
 
   // Live Sync (matches Web's behavior for syncing Instant/Kilat orders from Marketplace)
   const syncLiveOrders = useCallback(async () => {
-    if (orderTypeFilter === 'standard' || ecommerceList.length === 0 || (currentTab === 'SEMUA' && orderTypeFilter === 'semua')) {
+    // Saat user sedang mencari nomor pesanan (searchTags terisi), booking/kilat order tetap
+    // harus ikut di-sync meski tab SEMUA + orderType semua, supaya pencarian nomor booking
+    // order tidak menghasilkan "tidak ditemukan" padahal ordernya ada.
+    const isSearching = searchTags.length > 0;
+    if (orderTypeFilter === 'standard' || ecommerceList.length === 0 || (currentTab === 'SEMUA' && orderTypeFilter === 'semua' && !isSearching)) {
       return;
     }
 
@@ -438,7 +442,7 @@ export default function PesananV2Screen() {
         setIsSyncing(false);
       }
     }
-  }, [currentTab, dateStart, dateEnd, selectedEcommerces, ecommerceList, orderTypeFilter, fetchOrders]);
+  }, [currentTab, dateStart, dateEnd, selectedEcommerces, ecommerceList, orderTypeFilter, searchTags, fetchOrders]);
 
   useEffect(() => {
     syncLiveOrders();

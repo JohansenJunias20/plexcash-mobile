@@ -31,7 +31,7 @@ import {
   IWebSocketReplyEvent,
 } from './chat/types/chat.types';
 import { fetchOrders, IOrder } from '../../services/ecommerce/orderService';
-import { fetchProducts, IProduct } from '../../services/ecommerce/productService';
+import { IProduct } from '../../services/ecommerce/productService';
 import { expandShortcuts } from '../../services/ecommerce/chatTemplateService';
 import {
   loadingTimeEstimator,
@@ -97,17 +97,8 @@ export default function EcommerceChatDetailScreen() {
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [cancelOrderFetch, setCancelOrderFetch] = useState(false);
 
-  // Product list state
+  // Product list state (data fetching/pagination is handled inside ProductListPanel)
   const [showProductList, setShowProductList] = useState(false);
-  const [productListData, setProductListData] = useState<IProduct[]>([]);
-  const [loadingProducts, setLoadingProducts] = useState(false);
-  const [cancelProductFetch, setCancelProductFetch] = useState(false);
-  const [productLoadingProgress, setProductLoadingProgress] = useState<{
-    percentage: number;
-    estimatedTime: string;
-    remainingTime: string;
-    status: string;
-  } | null>(null);
 
   // Loading time estimation state
   const [loadingEstimate, setLoadingEstimate] = useState<LoadingEstimate | null>(null);
@@ -465,118 +456,15 @@ export default function EcommerceChatDetailScreen() {
   // PRODUCT LIST FUNCTIONS
   // ============================================
 
-  // Fetch products with time tracking
-  const handleFetchProducts = async () => {
-    if (loadingProducts || cancelProductFetch) {
-      console.log('⚠️ [ChatDetail] Already loading products or cancelled');
-      return;
-    }
-
-    try {
-      setLoadingProducts(true);
-      setCancelProductFetch(false);
-
-      console.log('📦 [ChatDetail] Fetching products for idEcommerce:', idEcommerce);
-
-      // Start time tracking
-      loadingStartTimeRef.current = Date.now();
-
-      // Get estimate based on historical data
-      const estimate = await loadingTimeEstimator.getEstimate(0); // Products don't have count
-      setLoadingEstimate(estimate);
-
-      console.log('⏱️ [ChatDetail] Estimated loading time:', {
-        estimatedSeconds: estimate.estimatedSeconds,
-        confidence: estimate.confidence,
-      });
-
-      // Start progress tracking
-      progressIntervalRef.current = setInterval(() => {
-        if (cancelProductFetch) {
-          return;
-        }
-
-        const progress = loadingTimeEstimator.calculateProgress(
-          loadingStartTimeRef.current,
-          estimate
-        );
-
-        // Convert LoadingProgress to ProductListPanel format
-        setProductLoadingProgress({
-          percentage: progress.progressPercentage,
-          estimatedTime: `${progress.estimatedTotalSeconds}s`,
-          remainingTime: `${progress.estimatedRemainingSeconds}s`,
-          status: progress.status,
-        });
-      }, 500);
-
-      // Fetch products
-      const result = await fetchProducts(idEcommerce);
-
-      // Stop progress tracking
-      if (progressIntervalRef.current) {
-        clearInterval(progressIntervalRef.current);
-        progressIntervalRef.current = null;
-      }
-
-      // Calculate actual loading time in milliseconds
-      const actualLoadingTimeMs = Date.now() - loadingStartTimeRef.current;
-
-      console.log('✅ [ChatDetail] Products fetched:', {
-        count: result.data.length,
-        actualLoadingTime: `${(actualLoadingTimeMs / 1000).toFixed(2)}s`,
-      });
-
-      if (result.status) {
-        setProductListData(result.data);
-
-        // Save loading time for future estimates (duration in ms, count)
-        await loadingTimeEstimator.recordLoadingTime(result.data.length, actualLoadingTimeMs);
-      } else {
-        console.error('❌ [ChatDetail] Failed to fetch products:', result.message);
-      }
-    } catch (error: any) {
-      console.error('❌ [ChatDetail] Error fetching products:', error);
-
-      // Stop progress tracking on error
-      if (progressIntervalRef.current) {
-        clearInterval(progressIntervalRef.current);
-        progressIntervalRef.current = null;
-      }
-    } finally {
-      setLoadingProducts(false);
-      setLoadingEstimate(null);
-      setProductLoadingProgress(null);
-    }
-  };
-
-  // Cancel product loading
-  const handleCancelProductLoading = () => {
-    console.log('❌ [ChatDetail] Cancelling product fetch...');
-    setCancelProductFetch(true);
-    setLoadingProducts(false);
-    setShowProductList(false);
-    setLoadingEstimate(null);
-    setProductLoadingProgress(null);
-
-    if (progressIntervalRef.current) {
-      clearInterval(progressIntervalRef.current);
-      progressIntervalRef.current = null;
-    }
-  };
-
-  // Toggle product list panel
+  // Toggle product list panel (data fetching/pagination handled inside ProductListPanel)
   const handleToggleProductList = () => {
     console.log('📦 [ChatDetail] Toggle product list, current state:', showProductList);
 
     if (!showProductList) {
       setShowOrderList(false);
       setShowTemplatePanel(false);
-      // Show panel first, then fetch
       setShowProductList(true);
-      handleFetchProducts();
     } else {
-      // Close panel
       setShowProductList(false);
     }
   };
@@ -663,12 +551,9 @@ export default function EcommerceChatDetailScreen() {
         {/* Product List Panel */}
         <ProductListPanel
           visible={showProductList}
-          products={productListData}
-          loading={loadingProducts}
-          loadingProgress={productLoadingProgress}
+          idEcommerce={idEcommerce}
           onClose={() => setShowProductList(false)}
           onProductPress={handleProductPress}
-          onCancelLoading={handleCancelProductLoading}
         />
 
         {/* Chat Template Panel */}

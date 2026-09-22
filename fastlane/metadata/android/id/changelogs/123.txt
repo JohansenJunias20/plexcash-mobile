@@ -1,0 +1,1 @@
+Notifikasi pesan chat baru dari pembeli kini langsung membuka percakapan terkait. Perbaikan: pencarian nomor pesanan di Pesanan V2 ikut mencari booking order (pengiriman kilat), dan penyempurnaan panel daftar produk di chat.
