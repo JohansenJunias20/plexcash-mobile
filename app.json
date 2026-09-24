@@ -28,7 +28,7 @@
       "runtimeVersion": "1.0.8"
     },
     "android": {
-      "versionCode": 124,
+      "versionCode": 125,
       "adaptiveIcon": {
         "foregroundImage": "./assets/logo.png",
         "backgroundColor": "#f59e0b"
