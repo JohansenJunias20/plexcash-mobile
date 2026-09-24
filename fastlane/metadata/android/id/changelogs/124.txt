@@ -1,0 +1,1 @@
+﻿Pembaruan fitur Pre-Order (tampilan SKU & Merk barang), perbaikan koneksi alarm pesanan realtime, integrasi autentikasi Apple, dan peningkatan performa aplikasi.

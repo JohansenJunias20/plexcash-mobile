@@ -105,7 +105,7 @@ fi
 print_success "keystore.properties found"
 
 # Check if keystore file exists
-KEYSTORE_FILE=$(grep "PLEXCASH_UPLOAD_STORE_FILE" "$KEYSTORE_PROPS" | cut -d'=' -f2)
+KEYSTORE_FILE=$(grep "PLEXCASH_UPLOAD_STORE_FILE" "$KEYSTORE_PROPS" | tr -d '\r' | cut -d'=' -f2)
 KEYSTORE_PATH="$ANDROID_DIR/app/$KEYSTORE_FILE"
 if [ ! -f "$KEYSTORE_PATH" ]; then
     print_error "Keystore file not found at: $KEYSTORE_PATH"
@@ -133,7 +133,7 @@ print_header "Auto-Increment Version Code"
 BUILD_GRADLE="$ANDROID_DIR/app/build.gradle"
 
 # Extract current versionCode
-CURRENT_VERSION_CODE=$(grep "versionCode" "$BUILD_GRADLE" | head -1 | awk '{print $2}')
+CURRENT_VERSION_CODE=$(grep "versionCode" "$BUILD_GRADLE" | head -1 | tr -d '\r' | awk '{print $2}')
 print_info "Current versionCode: $CURRENT_VERSION_CODE"
 
 # Increment versionCode

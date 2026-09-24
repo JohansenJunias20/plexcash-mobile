@@ -4,7 +4,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import ApiService from '../services/api';
 import { useAuth } from './AuthContext';
 
-const WEBSOCKET_URL = 'wss://ws-1706.plexseller.com:99';
+// NOTE: bukan wss://ws-1706.plexseller.com:99 — domain itu diproxy ke service webhook/printer
+// (ps_webhook-koi-1), bukan ke server utama yang punya room `orders:${database_name}`.
+const WEBSOCKET_URL = 'wss://app.plexseller.com';
 const STORAGE_KEY = 'orderAlarmEnabled';
 
 export interface INewOrderEvent {

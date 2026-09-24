@@ -31,6 +31,7 @@ interface PreOrderItem {
   harga: number;
   merk: string;
   satuan: string;
+  sku?: string;
 }
 
 interface PreOrderData {
@@ -187,6 +188,7 @@ export default function PreOrderScreen() {
         harga: item.hargabeli || item.hargajual || 0,
         merk: item.merk || '',
         satuan: item.satuan || 'pcs',
+        sku: item.sku || '',
       };
       
       setCurrentPreOrder(prev => ({
@@ -215,6 +217,7 @@ export default function PreOrderScreen() {
         harga: 0, // Will be filled by user
         merk: item.merk || '',
         satuan: 'pcs',
+        sku: item.sku || '',
       }));
 
       // Set current pre-order with transferred data
@@ -364,6 +367,7 @@ export default function PreOrderScreen() {
       harga: (item as any).hargabeli || 0,
       merk: item.merk || '',
       satuan: item.satuan || 'pcs',
+      sku: item.sku || '',
     }));
 
     setCurrentPreOrder({
@@ -957,6 +961,9 @@ export default function PreOrderScreen() {
                         <Ionicons name="trash-outline" size={20} color="#ef4444" />
                       </TouchableOpacity>
                     </View>
+                    <Text style={styles.itemSkuMerk}>
+                      {item.sku || '-'} • {item.merk || 'No Brand'}
+                    </Text>
                     <View style={styles.itemCardBody}>
                       <View style={styles.itemInputGroup}>
                         <Text style={styles.itemInputLabel}>Qty</Text>
@@ -1581,6 +1588,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#111827',
+  },
+  itemSkuMerk: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginBottom: 8,
   },
   itemDeleteButton: {
     paddingLeft: 4,

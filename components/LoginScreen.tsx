@@ -1,23 +1,34 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import ApiService from '../services/api';
 import Settings from './Settings';
 import SimpleQRScanner from './SimpleQRScanner';
 import QRCodeInput from './QRCodeInput';
 import PINLogin from './PINLogin';
 import GoogleAuthService from '../services/googleAuth';
+import AppleAuthService from '../services/appleAuth';
 import { useDeveloperMode } from '../context/DeveloperModeContext';
 
-const LoginScreen = (): JSX.Element => {
+const LoginScreen = (): React.JSX.Element => {
   const [isLoading, setIsLoading] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showQRScanner, setShowQRScanner] = useState(false);
   const [showQRInput, setShowQRInput] = useState(false);
   const [showPINLogin, setShowPINLogin] = useState(false);
+  const [isAppleAuthAvailable, setIsAppleAuthAvailable] = useState(Platform.OS === 'ios');
   const { isDeveloperMode, toggleDeveloperMode } = useDeveloperMode();
+
+  useEffect(() => {
+    if (Platform.OS === 'ios') {
+      AppleAuthService.isAvailable()
+        .then((available) => setIsAppleAuthAvailable(available))
+        .catch(() => setIsAppleAuthAvailable(false));
+    }
+  }, []);
 
   const handleQRCodeLogin = () => {
     Alert.alert(
@@ -32,6 +43,36 @@ const LoginScreen = (): JSX.Element => {
     );
   };
   const handlePINLogin = () => setShowPINLogin(true);
+
+  const handleAppleLogin = async () => {
+    setIsLoading(true);
+    try {
+      console.log('Starting Apple Sign-In...');
+
+      const result = await AppleAuthService.signInWithApple();
+
+      if (result.success) {
+        console.log('Apple Sign-In successful!');
+        // ✅ DO NOT show Alert here - it blocks navigation!
+        // AuthContext's onAuthStateChanged listener will automatically:
+        // 1. Get Firebase ID token
+        // 2. Exchange token with backend (/auth/login/token)
+        // 3. Store device tokens in AsyncStorage & SecureStore
+        // 4. Set isAuthenticated = true -> RootNavigator automatically switches to MainScreen
+        // Showing an Alert here creates a race condition that prevents navigation.
+        console.log('✅ Apple Login successful! Waiting for AuthContext to navigate to MainScreen...');
+      } else if (result.cancelled) {
+        console.log('Apple Sign-In cancelled by user');
+      } else {
+        Alert.alert('Authentication Failed', result.error || 'Apple Sign-In failed', [{ text: 'OK' }]);
+      }
+    } catch (error: any) {
+      console.error('Apple Sign-In error:', error);
+      Alert.alert('Error', error.message || 'An unexpected error occurred during Apple Sign-In', [{ text: 'OK' }]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleGoogleLogin = async () => {
     setIsLoading(true);
@@ -217,7 +258,7 @@ const LoginScreen = (): JSX.Element => {
 
                   {/* Google Login Button */}
                   <TouchableOpacity
-                    style={styles.googleButton}
+                    style={[styles.googleButton, isAppleAuthAvailable && styles.buttonWithSubsequent]}
                     onPress={handleGoogleLogin}
                     activeOpacity={0.8}
                   >
@@ -229,6 +270,17 @@ const LoginScreen = (): JSX.Element => {
                       </View>
                     </View>
                   </TouchableOpacity>
+
+                  {/* Apple Sign-In Button (iOS only) */}
+                  {isAppleAuthAvailable && (
+                    <AppleAuthentication.AppleAuthenticationButton
+                      buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                      buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                      cornerRadius={16}
+                      style={styles.appleButton}
+                      onPress={handleAppleLogin}
+                    />
+                  )}
                 </>
               )}
 
@@ -428,6 +480,14 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3
   } as any,
+  appleButton: {
+    width: '100%',
+    height: 60,
+    marginBottom: 32,
+  } as any,
+  buttonWithSubsequent: {
+    marginBottom: 16,
+  },
   buttonContent: {
     flexDirection: 'row',
     alignItems: 'center',

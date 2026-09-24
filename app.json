@@ -28,7 +28,7 @@
       "runtimeVersion": "1.0.8"
     },
     "android": {
-      "versionCode": 123,
+      "versionCode": 124,
       "adaptiveIcon": {
         "foregroundImage": "./assets/logo.png",
         "backgroundColor": "#f59e0b"
@@ -90,6 +90,7 @@
       ],
       "expo-secure-store",
       "expo-web-browser",
+      "expo-apple-authentication",
       "./plugins/withoutApsEnvironment.js"
     ],
     "web": {
