@@ -1,0 +1,1 @@
+﻿Perbaikan alarm pesanan instan: alarm/getar sekarang hanya berbunyi untuk pesanan kurir Instant/Sameday (Gojek, Grab, SPX Instant, dll), tidak lagi untuk semua pesanan baru.

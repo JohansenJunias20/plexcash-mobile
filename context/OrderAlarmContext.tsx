@@ -16,6 +16,7 @@ export interface INewOrderEvent {
   buyer: string;
   total: string;
   items: string[];
+  nama_kurir?: string | null;
 }
 
 interface OrderAlarmContextProps {
@@ -86,8 +87,12 @@ export const OrderAlarmProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       subscribeToOrders(socket);
     });
 
-    socket.on('new_order', (event: INewOrderEvent) => {
-      console.log('🔔 [OrderAlarmContext] New order received:', event);
+    // Server hanya broadcast 'new_order_instant' SETELAH kurir dikonfirmasi instan/sameday
+    // di background (retry + fallback fetch API marketplace — data kurir sering belum tersedia
+    // persis saat order baru masuk). Jangan filter ulang di sini pakai nama_kurir dari payload,
+    // karena field itu boleh jadi belum terisi di saat broadcast pertama 'new_order' (non-alarm).
+    socket.on('new_order_instant', (event: INewOrderEvent) => {
+      console.log('🔔 [OrderAlarmContext] New instant order confirmed:', event);
       setActiveOrder(event);
     });
 
