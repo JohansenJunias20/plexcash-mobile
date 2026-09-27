@@ -585,21 +585,15 @@ export default function PesananV2Screen() {
     );
   };
 
+  // Kurir Instan/Sameday (SPX Instant, Gosend, Grab, dll) hanya didukung Shopee lewat metode
+  // Pickup (kurir jemput) — Dropoff selalu ditolak marketplace dengan error
+  // "logistics.ship_order_unsupport_dropoff". Jangan tawarkan pilihan Dropoff untuk order instan.
   const handleInstantModalNow = () => {
     const target = instantAcceptTarget;
     setInstantAcceptModalVisible(false);
     if (!target || target.length === 0) return;
 
-    const isSingle = target.length === 1;
-    const promptText = isSingle
-      ? `Pilih metode pengiriman untuk pesanan ${target[0]?.id_online || target[0]?.id}:`
-      : `Pilih metode pengiriman untuk ${target.length} pesanan instan yang dipilih:`;
-
-    Alert.alert('Terima Pesanan Instan', promptText, [
-      { text: 'Batal', style: 'cancel' },
-      { text: 'Dropoff (Antar ke Gerai)', onPress: () => executeAcceptOrders(target, 'dropoff') },
-      { text: 'Pickup (Kurir Jemput)', onPress: () => executeAcceptOrders(target, 'pickup') },
-    ]);
+    executeAcceptOrders(target, 'pickup');
   };
 
   const handleInstantModalDelay = (delayMinutes: number) => {
@@ -607,16 +601,7 @@ export default function PesananV2Screen() {
     setInstantAcceptModalVisible(false);
     if (!target || target.length === 0) return;
 
-    const isSingle = target.length === 1;
-    const promptText = isSingle
-      ? `Pilih metode pengiriman untuk pesanan instan (${delayMinutes} menit lagi):`
-      : `Pilih metode pengiriman untuk ${target.length} pesanan instan (${delayMinutes} menit lagi):`;
-
-    Alert.alert('Jadwalkan Terima Pesanan', promptText, [
-      { text: 'Batal', style: 'cancel' },
-      { text: 'Dropoff (Antar ke Gerai)', onPress: () => executeScheduleAccept(target, delayMinutes, 'dropoff') },
-      { text: 'Pickup (Kurir Jemput)', onPress: () => executeScheduleAccept(target, delayMinutes, 'pickup') },
-    ]);
+    executeScheduleAccept(target, delayMinutes, 'pickup');
   };
 
   const executeScheduleAccept = async (

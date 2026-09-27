@@ -52,6 +52,9 @@ export type OrderDetail = {
   date_cancelled?: string;
   /** Waktu pengajuan permintaan pembatalan oleh buyer (status PEMBATALAN, sebelum diterima/ditolak seller) */
   date_cancel_requested?: string;
+  /** Waktu pembayaran pesanan dikonfirmasi oleh marketplace. Saat ini hanya tersedia untuk Shopee
+   * (online payment bisa dibayar beberapa jam setelah order dibuat, sehingga beda dengan `date`). */
+  waktu_bayar?: string | null;
 };
 
 // Menerjemahkan siapa yang membatalkan pesanan (dari data marketplace) ke label Bahasa Indonesia
@@ -338,6 +341,7 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
           cancel_reason: d.cancel_reason || undefined,
           date_cancelled: d.date_cancelled || undefined,
           date_cancel_requested: d.date_cancel_requested || undefined,
+          waktu_bayar: d.waktu_bayar || undefined,
         });
       } else if (booking_sn) {
         // Kilat order: the marketplace API might not support lookup by booking_sn.
@@ -1142,6 +1146,18 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
               <View style={styles.infoContent}>
                 <Text style={styles.infoLabel}>Order Date</Text>
                 <Text style={styles.infoValue}>{detail.date}</Text>
+              </View>
+            </View>
+          )}
+
+          {detail.waktu_bayar && (
+            <View style={styles.infoRow}>
+              <View style={styles.infoIconContainer}>
+                <Ionicons name="cash-outline" size={20} color="#6B7280" />
+              </View>
+              <View style={styles.infoContent}>
+                <Text style={styles.infoLabel}>Tanggal Pembayaran</Text>
+                <Text style={styles.infoValue}>{formatDate(detail.waktu_bayar)}</Text>
               </View>
             </View>
           )}
