@@ -105,6 +105,7 @@ export interface ITAOdataTransaction {
   lunas?: boolean;
   id_database: number;
   id_database_withdraw: number;
+  hpp_total?: number; // hanya terisi bila user punya izin show_hpp
   retur?: {
     total: number;
     id_returonline: number;

@@ -23,6 +23,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import moment from 'moment';
 
 import ApiService, { API_BASE_URL } from '../../services/api';
+import { useAccess } from '../../context/AccessContext';
 import BaganAkunSearchModal from './components/BaganAkunSearchModal';
 import PenarikanDetailModal, {
   getKodeBA,
@@ -66,6 +67,8 @@ interface BiayaLainnya {
 export default function PenarikanScreen() {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
+  const { access } = useAccess();
+  const canShowHpp = !!access?.master?.show_hpp;
 
   // Core States
   const [ecommerceList, setEcommerceList] = useState<ECommerceAccount[]>([]);
@@ -141,6 +144,7 @@ export default function PenarikanScreen() {
   // Summary Totals
   const [totalOmset, setTotalOmset] = useState<number>(0);
   const [totalBayar, setTotalBayar] = useState<number>(0);
+  const [totalHpp, setTotalHpp] = useState<number>(0);
 
   // Auto update tanggalJurnal every second if not manually edited
   useEffect(() => {
@@ -258,6 +262,9 @@ export default function PenarikanScreen() {
     const sumBayarBiaya = selectedBiayaData.reduce((acc, b) => acc + (b.amount || 0), 0);
 
     setTotalBayar(sumBayarTx + sumBayarBiaya);
+
+    // 3. Total HPP transaksi yang dicentang (untuk total keuntungan = Akan Masuk Kas - HPP)
+    setTotalHpp(selectedTxData.reduce((acc, tx) => acc + (tx.hpp_total || 0), 0));
   }, [selectedTransactions, selectedBiaya, transactions, biayaLainnya]);
 
   // Handle Date Pickers Range limits
@@ -1188,6 +1195,20 @@ export default function PenarikanScreen() {
                           <Text style={styles.detailValBold}>{formatRupiah(item.bayar)}</Text>
                         </View>
 
+                        {canShowHpp && item.id_database > 0 && item.hpp_total !== undefined && (
+                          <View style={styles.detailTextRow}>
+                            <Text style={styles.detailLabel}>Untung:</Text>
+                            <Text
+                              style={[
+                                styles.detailValBold,
+                                { color: item.bayar - item.hpp_total < 0 ? '#ef4444' : '#16a34a' },
+                              ]}
+                            >
+                              {formatRupiah(item.bayar - item.hpp_total)}
+                            </Text>
+                          </View>
+                        )}
+
                         <View style={styles.detailTextRow}>
                           <Text style={styles.detailLabel}>% Biaya:</Text>
                           <Text style={[styles.detailValBold, { color: isHighFee ? '#ef4444' : '#1f2937' }]}>
@@ -1341,6 +1362,19 @@ export default function PenarikanScreen() {
                 <Text style={styles.totalSummaryLabel}>Akan Masuk Kas:</Text>
                 <Text style={styles.totalSummaryValueBold}>{formatRupiah(totalBayar)}</Text>
               </View>
+              {canShowHpp && (
+                <View style={styles.totalSummaryRow}>
+                  <Text style={styles.totalSummaryLabel}>Total Keuntungan:</Text>
+                  <Text
+                    style={[
+                      styles.totalSummaryValueBold,
+                      { color: totalBayar - totalHpp < 0 ? '#ef4444' : '#16a34a' },
+                    ]}
+                  >
+                    {formatRupiah(totalBayar - totalHpp)}
+                  </Text>
+                </View>
+              )}
             </View>
 
             {/* Date Picker Jurnal input for Belum Dibuat */}
