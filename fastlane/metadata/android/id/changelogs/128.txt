@@ -1,0 +1,1 @@
+﻿Penarikan: tambah Total Keuntungan dan Untung per transaksi (dihitung dari HPP) untuk user dengan izin lihat HPP.
