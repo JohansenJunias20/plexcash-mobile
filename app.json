@@ -13,7 +13,7 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": false,
+      "supportsTablet": true,
       "bundleIdentifier": "com.plexcash.mobile.ios",
       "infoPlist": {
         "NSCameraUsageDescription": "This app uses the camera to scan product barcodes for quick checkout.",
