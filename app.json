@@ -13,8 +13,8 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.plexcash.mobile",
+      "supportsTablet": false,
+      "bundleIdentifier": "com.plexcash.mobile.ios",
       "infoPlist": {
         "NSCameraUsageDescription": "This app uses the camera to scan product barcodes for quick checkout.",
         "NSBluetoothAlwaysUsageDescription": "This app uses Bluetooth to connect to thermal printers for printing receipts.",

@@ -547,16 +547,26 @@ class ApiService {
       }
 
       console.log('Calling /auth/login/token endpoint...');
-      const response = await fetch(`${API_BASE_URL}/auth/login/token?source=login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          token: firebaseToken,
-          fromMobile: true  // Request long-lived persistent JWT from backend
-        })
-      });
+      // Tanpa timeout, server yang lambat/menggantung membuat layar loading login tidak pernah selesai
+      // dan user tidak dapat respons apa pun. Abort -> masuk catch -> AuthContext menampilkan error.
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+      let response: Response;
+      try {
+        response = await fetch(`${API_BASE_URL}/auth/login/token?source=login`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            token: firebaseToken,
+            fromMobile: true  // Request long-lived persistent JWT from backend
+          }),
+          signal: controller.signal
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       console.log('Backend response status:', response.status);
       const result = await response.json();

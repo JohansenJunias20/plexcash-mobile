@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
-import { onAuthStateChanged, User } from 'firebase/auth';
+import { onAuthStateChanged, signOut as firebaseSignOut, User } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import ApiService from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -27,6 +27,8 @@ interface AuthContextValue {
   isLoading: boolean;
   isAuthenticated: boolean;
   isTokenReady: boolean; // true when token is confirmed fresh and safe for API calls
+  authError: string | null; // set when the backend rejects a Firebase login; shown on LoginScreen
+  clearAuthError: () => void;
   signOut: () => Promise<void>;
   authenticateWithQRCode: (user: { email: string }, token: string) => Promise<{ success: boolean; error?: string }>;
   authorizeDeviceWithQRCode: (qrCodeData: string) => Promise<{ success: boolean; message?: string }>;
@@ -34,6 +36,21 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+
+// Backend /auth/login/token membalas { status: false, reason } (bukan message/error), jadi baca ketiganya.
+const getBackendLoginErrorMessage = (resp: any): string => {
+  const raw = resp?.message || resp?.error || resp?.reason;
+  if (raw === 'Email not verified') {
+    return 'Email Anda belum diverifikasi. Cek inbox email Anda, klik link verifikasi, lalu coba login lagi.';
+  }
+  if (raw === 'Internal Error') {
+    return 'Terjadi kesalahan di server. Silakan coba lagi beberapa saat lagi.';
+  }
+  return (
+    raw ||
+    'Akun Anda belum terdaftar atau belum disiapkan di server. Selesaikan pendaftaran di https://app.plexseller.com/login lalu coba lagi.'
+  );
+};
 
 export const useAuth = (): AuthContextValue => {
   const context = useContext(AuthContext);
@@ -48,6 +65,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isTokenReady, setIsTokenReady] = useState<boolean>(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const clearAuthError = () => setAuthError(null);
 
   useEffect(() => {
     logAuth('🔄 AuthProvider mounted, initializing authentication check...');
@@ -157,6 +176,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 console.log('⚠️ [AUTH-STATE-CHANGED] Backend response status is false but stored auth exists - maintaining session');
               } else {
                 logStateChange('Clearing authentication state');
+                setAuthError(getBackendLoginErrorMessage(backendResponse));
+                // Sign out of Firebase too, otherwise a retry with the same account won't re-trigger this listener
+                firebaseSignOut(auth).catch(() => {});
                 setUser(null);
                 setIsAuthenticated(false);
                 await AsyncStorage.removeItem('isAuthenticated');
@@ -175,6 +197,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               console.log('⚠️ [AUTH-STATE-CHANGED] Network error but stored auth exists - maintaining session');
             } else {
               logStateChange('Clearing authentication state due to error');
+              setAuthError('Gagal terhubung ke server. Periksa koneksi internet Anda lalu coba lagi.');
+              firebaseSignOut(auth).catch(() => {});
               setUser(null);
               setIsAuthenticated(false);
               await AsyncStorage.removeItem('isAuthenticated');
@@ -528,6 +552,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     isLoading,
     isAuthenticated,
     isTokenReady,
+    authError,
+    clearAuthError,
     signOut,
     authenticateWithQRCode,
     authorizeDeviceWithQRCode,

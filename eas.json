@@ -43,9 +43,22 @@
         "buildType": "app-bundle"
       },
       "channel": "production"
+    },
+    "production-ios": {
+      "ios": {
+        "autoIncrement": true
+      },
+      "channel": "production"
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "ascAppId": "6818746255",
+        "ascApiKeyPath": "C:\\Users\\johansen\\.appstoreconnect\\AuthKey_4GMGA5VJTR.p8",
+        "ascApiKeyId": "4GMGA5VJTR",
+        "ascApiKeyIssuerId": "9771bd66-922e-45bf-9d97-1ad6770d6bb1"
+      }
+    }
   }
 }

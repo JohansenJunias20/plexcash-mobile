@@ -8,6 +8,7 @@
     "android:prod": "expo run:android --variant productionDebug",
     "ios": "expo run:ios",
     "web": "expo start --web",
+    "release:ios": "eas build --platform ios --profile production-ios --auto-submit-with-profile=production --non-interactive",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

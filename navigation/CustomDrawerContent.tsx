@@ -19,6 +19,11 @@ import { useAccess } from '../context/AccessContext';
 import ApiService from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// Menu yang masih berupa PlaceholderScreen ("Coming Soon") disembunyikan dulu supaya
+// lolos App Store review (Guideline 2.2 / 4.2: tidak boleh ada fitur yang belum jadi).
+// Ubah ke true setelah semua fiturnya selesai.
+const SHOW_UNFINISHED_MENUS = false;
+
 
 interface DrawerItemProps {
   label: string;
@@ -299,13 +304,13 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ navigation, s
       {checkAccess(a?.master?.barang) && <DrawerItem label="Barang" icon="cube" onPress={() => navigation.navigate('BarangList')} active={currentRoute === 'BarangList'} />}
       {checkAccess(a?.master?.supplier) && <DrawerItem label="Supplier" icon="briefcase" onPress={() => navigation.navigate('SupplierList')} active={currentRoute === 'SupplierList'} />}
       {checkAccess(a?.master?.customer) && <DrawerItem label="Customer" icon="people" onPress={() => navigation.navigate('CustomerList')} active={currentRoute === 'CustomerList'} />}
-      {checkAccess(a?.master?.satuan) && <DrawerItem label="Satuan" icon="scale" onPress={() => navigation.navigate('SatuanList')} active={currentRoute === 'SatuanList'} />}
+      {SHOW_UNFINISHED_MENUS && checkAccess(a?.master?.satuan) &&<DrawerItem label="Satuan" icon="scale" onPress={() => navigation.navigate('SatuanList')} active={currentRoute === 'SatuanList'} />}
       {checkAccess(a?.master?.baganakun) && <DrawerItem label="Bagan Akun" icon="calculator" onPress={() => navigation.navigate('BaganAkunList')} active={currentRoute === 'BaganAkunList'} />}
       {checkAccess(a?.master?.user) && <DrawerItem label="User" icon="person" onPress={() => navigation.navigate('UserList')} active={currentRoute === 'UserList'} />}
-      {checkAccess(a?.master?.upload) && <DrawerItem label="Upload" icon="cloud-upload" onPress={() => navigation.navigate('UploadScreen')} active={currentRoute === 'UploadScreen'} />}
+      {SHOW_UNFINISHED_MENUS && checkAccess(a?.master?.upload) &&<DrawerItem label="Upload" icon="cloud-upload" onPress={() => navigation.navigate('UploadScreen')} active={currentRoute === 'UploadScreen'} />}
       {checkAccess(a?.master?.bundling) && <DrawerItem label="Bundling" icon="albums" onPress={() => navigation.navigate('BundlingList')} active={currentRoute === 'BundlingList'} />}
       {checkAccess(a?.master?.import_barang) && <DrawerItem label="Import" icon="download" onPress={() => navigation.navigate('ImportBarang')} active={currentRoute === 'ImportBarang'} />}
-      {checkAccess(a?.master?.warehouse) && <DrawerItem label="Warehouse" icon="business" onPress={() => navigation.navigate('WarehouseList')} active={currentRoute === 'WarehouseList'} badge="NEW" />}
+      {SHOW_UNFINISHED_MENUS && checkAccess(a?.master?.warehouse) &&<DrawerItem label="Warehouse" icon="business" onPress={() => navigation.navigate('WarehouseList')} active={currentRoute === 'WarehouseList'} badge="NEW" />}
       {checkAccess(a?.master?.karyawan ?? a?.karyawan) && <DrawerItem label="Karyawan" icon="people-outline" onPress={() => navigation.navigate('KaryawanList')} active={currentRoute === 'KaryawanList'} />}
 
       {/* TRANSAKSI Section */}
@@ -324,7 +329,7 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ navigation, s
           {checkAccess(a?.transaksi?.pembelian?.tambah) && <DrawerItem label="Tambah" icon="add-circle" onPress={() => navigation.navigate('PembelianTambah')} active={currentRoute === 'PembelianTambah'} nested />}
           {checkAccess(a?.transaksi?.pembelian?.search) && <DrawerItem label="Search" icon="search" onPress={() => navigation.navigate('PembelianSearch')} active={currentRoute === 'PembelianSearch'} nested />}
           {checkAccess(a?.transaksi?.pembelian?.pelunasan) && <DrawerItem label="Pelunasan" icon="cash" onPress={() => navigation.navigate('PembelianPelunasan')} active={currentRoute === 'PembelianPelunasan'} nested />}
-          {checkAccess(a?.transaksi?.pembelian?.retur) && <DrawerItem label="Retur" icon="return-down-back" onPress={() => navigation.navigate('PembelianRetur')} active={currentRoute === 'PembelianRetur'} nested />}
+          {SHOW_UNFINISHED_MENUS && checkAccess(a?.transaksi?.pembelian?.retur) && <DrawerItem label="Retur" icon="return-down-back" onPress={() => navigation.navigate('PembelianRetur')} active={currentRoute === 'PembelianRetur'} nested />}
           {checkAccess(a?.transaksi?.pembelian?.dp_beli) && <DrawerItem label="DP Beli" icon="card" onPress={() => navigation.navigate('PembelianDPBeli')} active={currentRoute === 'PembelianDPBeli'} nested />}
           {checkAccess(a?.transaksi?.pembelian?.preorder) && <DrawerItem label="Pre Order" icon="calendar" onPress={() => navigation.navigate('PreOrder')} active={currentRoute === 'PreOrder'} nested />}
           {checkAccess(a?.transaksi?.pembelian?.hutang) && <DrawerItem label="Hutang" icon="wallet" onPress={() => navigation.navigate('PembelianHutang')} active={currentRoute === 'PembelianHutang'} nested />}
@@ -336,18 +341,18 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ navigation, s
         <CollapsibleSection title="Penjualan" icon="cash-outline">
           {checkAccess(a?.transaksi?.penjualan?.tambah) && <DrawerItem label="Tambah" icon="add-circle" onPress={() => navigation.navigate('PenjualanTambah')} active={currentRoute === 'PenjualanTambah'} nested />}
           {checkAccess(a?.transaksi?.penjualan?.search) && <DrawerItem label="Search" icon="search" onPress={() => navigation.navigate('PenjualanSearch')} active={currentRoute === 'PenjualanSearch'} nested />}
-          {checkAccess(a?.transaksi?.penjualan?.pelunasan) && <DrawerItem label="Pelunasan" icon="cash" onPress={() => navigation.navigate('PenjualanPelunasan')} active={currentRoute === 'PenjualanPelunasan'} nested />}
+          {SHOW_UNFINISHED_MENUS && checkAccess(a?.transaksi?.penjualan?.pelunasan) && <DrawerItem label="Pelunasan" icon="cash" onPress={() => navigation.navigate('PenjualanPelunasan')} active={currentRoute === 'PenjualanPelunasan'} nested />}
           {checkAccess(a?.transaksi?.penjualan?.retur) && <DrawerItem label="Retur" icon="return-down-back" onPress={() => navigation.navigate('PenjualanRetur')} active={currentRoute === 'PenjualanRetur'} nested />}
           {checkAccess(a?.transaksi?.penjualan?.pos_kasir) && <DrawerItem label="POS Kasir" icon="print" onPress={() => navigation.navigate('POSKasir')} active={currentRoute === 'POSKasir'} nested />}
-          {checkAccess(a?.transaksi?.penjualan?.dpjual) && <DrawerItem label="DP Jual" icon="card" onPress={() => Alert.alert('Segera Hadir', 'Fitur DP Penjualan sedang dalam pengembangan.')} active={false} nested badge="Soon" />}
-          {checkAccess(a?.transaksi?.penjualan?.piutang) && <DrawerItem label="Piutang" icon="wallet" onPress={() => Alert.alert('Segera Hadir', 'Fitur Piutang Penjualan sedang dalam pengembangan.')} active={false} nested badge="Soon" />}
+          {SHOW_UNFINISHED_MENUS && checkAccess(a?.transaksi?.penjualan?.dpjual) && <DrawerItem label="DP Jual" icon="card" onPress={() => Alert.alert('Segera Hadir', 'Fitur DP Penjualan sedang dalam pengembangan.')} active={false} nested badge="Soon" />}
+          {SHOW_UNFINISHED_MENUS && checkAccess(a?.transaksi?.penjualan?.piutang) && <DrawerItem label="Piutang" icon="wallet" onPress={() => Alert.alert('Segera Hadir', 'Fitur Piutang Penjualan sedang dalam pengembangan.')} active={false} nested badge="Soon" />}
         </CollapsibleSection>
       )}
 
       {/* Jurnal - Collapsible */}
       {(checkAccess(a?.transaksi?.jurnal?.tambah) || checkAccess(a?.transaksi?.jurnal?.search) || checkAccess(a?.transaksi?.jurnal?.biaya)) && (
         <CollapsibleSection title="Jurnal" icon="book">
-          {checkAccess(a?.transaksi?.jurnal?.tambah) && <DrawerItem label="Tambah" icon="add-circle" onPress={() => navigation.navigate('JurnalTambah')} active={currentRoute === 'JurnalTambah'} nested />}
+          {SHOW_UNFINISHED_MENUS && checkAccess(a?.transaksi?.jurnal?.tambah) && <DrawerItem label="Tambah" icon="add-circle" onPress={() => navigation.navigate('JurnalTambah')} active={currentRoute === 'JurnalTambah'} nested />}
           {checkAccess(a?.transaksi?.jurnal?.search) && <DrawerItem label="Search" icon="search" onPress={() => navigation.navigate('JurnalSearch')} active={currentRoute === 'JurnalSearch'} nested />}
           {checkAccess(a?.transaksi?.jurnal?.biaya) && <DrawerItem label="Biaya" icon="cash" onPress={() => navigation.navigate('JurnalBiaya')} active={currentRoute === 'JurnalBiaya'} nested />}
         </CollapsibleSection>
@@ -366,16 +371,16 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ navigation, s
 
       {checkAccess(a?.ecommerce?.pesanan) && <DrawerItem label="Pesanan V2" icon="list-circle" onPress={() => navigation.navigate('PesananV2')} active={currentRoute === 'PesananV2'} badge="NEW" />}
       {checkAccess(a?.ecommerce?.ecommerce_chat) && <DrawerItem label="Chat" icon="chatbubbles" onPress={() => navigation.navigate('EcommerceChat')} active={currentRoute === 'EcommerceChat'} />}
-      {checkAccess(a?.ecommerce?.notifikasi) && <DrawerItem label="Notifikasi" icon="notifications" onPress={() => navigation.navigate('Notifikasi')} active={currentRoute === 'Notifikasi'} />}
+      {SHOW_UNFINISHED_MENUS && checkAccess(a?.ecommerce?.notifikasi) &&<DrawerItem label="Notifikasi" icon="notifications" onPress={() => navigation.navigate('Notifikasi')} active={currentRoute === 'Notifikasi'} />}
       {checkAccess(a?.ecommerce?.penarikan) && <DrawerItem label="Penarikan" icon="wallet" onPress={() => navigation.navigate('Penarikan')} active={currentRoute === 'Penarikan'} />}
       {checkAccess(a?.ecommerce?.returonline) && <DrawerItem label="Retur Online" icon="return-up-back" onPress={() => navigation.navigate('ReturOnline')} active={currentRoute === 'ReturOnline'} />}
-      {checkAccess(a?.ecommerce?.booking_orders) && <DrawerItem label="Booking Orders" icon="airplane" onPress={() => navigation.navigate('BookingOrders')} active={currentRoute === 'BookingOrders'} badge="NEW" />}
+      {SHOW_UNFINISHED_MENUS && checkAccess(a?.ecommerce?.booking_orders) &&<DrawerItem label="Booking Orders" icon="airplane" onPress={() => navigation.navigate('BookingOrders')} active={currentRoute === 'BookingOrders'} badge="NEW" />}
       {checkAccess(a?.ecommerce?.integration) && <DrawerItem label="Integration" icon="git-network" onPress={() => navigation.navigate('Integration')} active={currentRoute === 'Integration'} />}
       {checkAccess(a?.ecommerce?.pack) && <DrawerItem label="Pack" icon="cube-outline" onPress={() => navigation.navigate('Pack')} active={currentRoute === 'Pack'} />}
       {checkAccess(a?.ecommerce?.kesehatan_toko) && <DrawerItem label="Kesehatan Toko" icon="heart-half-outline" onPress={() => navigation.navigate('KesehatanToko')} active={currentRoute === 'KesehatanToko'} />}
 
       {/* Ecommerce Tools - Collapsible */}
-      {checkAccess(a?.ecommerce?.ecommerce_tools?.product) && (
+      {SHOW_UNFINISHED_MENUS && checkAccess(a?.ecommerce?.ecommerce_tools?.product) && (
         <CollapsibleSection title="Tools" icon="construct">
           {checkAccess(a?.ecommerce?.ecommerce_tools?.product) && <DrawerItem label="Produk" icon="pricetag" onPress={() => navigation.navigate('EcommerceToolsProduct')} active={currentRoute === 'EcommerceToolsProduct'} nested />}
         </CollapsibleSection>
@@ -389,10 +394,10 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ navigation, s
 
       {/* LAPORAN Section */}
       {hasAnyTrue(a?.laporan) && <SectionHeader title="LAPORAN" />}
-      {checkAccess(a?.laporan?.neraca) && <DrawerItem label="Neraca" icon="stats-chart" onPress={() => navigation.navigate('Neraca')} active={currentRoute === 'Neraca'} />}
+      {SHOW_UNFINISHED_MENUS && checkAccess(a?.laporan?.neraca) &&<DrawerItem label="Neraca" icon="stats-chart" onPress={() => navigation.navigate('Neraca')} active={currentRoute === 'Neraca'} />}
       {checkAccess(a?.laporan?.labarugi) && <DrawerItem label="Laba Rugi" icon="trending-up" onPress={() => navigation.navigate('LabaRugi')} active={currentRoute === 'LabaRugi'} />}
       {checkAccess(a?.laporan?.laporanbarang) && <DrawerItem label="Laporan Barang" icon="bar-chart" onPress={() => navigation.navigate('LaporanBarang')} active={currentRoute === 'LaporanBarang'} />}
-      {checkAccess(a?.laporan?.iklan) && <DrawerItem label="Iklan" icon="megaphone" onPress={() => navigation.navigate('Iklan')} active={currentRoute === 'Iklan'} />}
+      {SHOW_UNFINISHED_MENUS && checkAccess(a?.laporan?.iklan) &&<DrawerItem label="Iklan" icon="megaphone" onPress={() => navigation.navigate('Iklan')} active={currentRoute === 'Iklan'} />}
       {checkAccess(a?.laporan?.perangkat) && <DrawerItem label="Perangkat WinForms" icon="desktop-outline" onPress={() => navigation.navigate('PerangkatList')} active={currentRoute === 'PerangkatList'} />}
 
       {/* SETTING Section - always visible */}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator, Platform, TextInput, Linking } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,17 +10,59 @@ import SimpleQRScanner from './SimpleQRScanner';
 import QRCodeInput from './QRCodeInput';
 import PINLogin from './PINLogin';
 import GoogleAuthService from '../services/googleAuth';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 import AppleAuthService from '../services/appleAuth';
+import { auth } from '../config/firebase';
 import { useDeveloperMode } from '../context/DeveloperModeContext';
+import { useAuth } from '../context/AuthContext';
+
+const SIGNUP_URL = 'https://app.plexseller.com/login';
+
+const getEmailLoginErrorMessage = (code?: string): string => {
+  switch (code) {
+    case 'auth/invalid-email':
+      return 'Format email tidak valid.';
+    case 'auth/user-disabled':
+      return 'Akun ini telah dinonaktifkan.';
+    case 'auth/user-not-found':
+    case 'auth/wrong-password':
+    case 'auth/invalid-credential':
+      return 'Email atau password salah.';
+    case 'auth/too-many-requests':
+      return 'Terlalu banyak percobaan. Coba lagi beberapa saat.';
+    case 'auth/network-request-failed':
+      return 'Gagal terhubung ke jaringan. Periksa koneksi internet Anda.';
+    case 'auth/operation-not-allowed':
+      return 'Login dengan email dan password belum diaktifkan.';
+    default:
+      return 'Login gagal. Silakan coba lagi.';
+  }
+};
 
 const LoginScreen = (): React.JSX.Element => {
   const [isLoading, setIsLoading] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [inlineError, setInlineError] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showQRScanner, setShowQRScanner] = useState(false);
   const [showQRInput, setShowQRInput] = useState(false);
   const [showPINLogin, setShowPINLogin] = useState(false);
   const [isAppleAuthAvailable, setIsAppleAuthAvailable] = useState(Platform.OS === 'ios');
   const { isDeveloperMode, toggleDeveloperMode } = useDeveloperMode();
+  const { authError, clearAuthError } = useAuth();
+
+  useEffect(() => {
+    if (!authError) return;
+    // Selalu tampilkan juga sebagai teks di layar: setelah token exchange, layar login baru ter-mount
+    // ulang (dari layar loading) dan iOS bisa membuang Alert yang dipanggil tepat saat transisi itu.
+    setInlineError(authError);
+    const timer = setTimeout(() => {
+      Alert.alert('Login Gagal', authError, [{ text: 'OK', onPress: clearAuthError }]);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [authError]);
 
   useEffect(() => {
     if (Platform.OS === 'ios') {
@@ -72,6 +114,38 @@ const LoginScreen = (): React.JSX.Element => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleEmailLogin = async () => {
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail || !password) {
+      Alert.alert('Login', 'Email dan password wajib diisi.', [{ text: 'OK' }]);
+      return;
+    }
+
+    setIsLoading(true);
+    setInlineError(null);
+    try {
+      // Layar login hanya tampil saat user belum terautentikasi, jadi sisa token/authMethod dari sesi
+      // sebelumnya sudah basi. Kalau dibiarkan, AuthContext menganggap "sesi masih ada" saat backend
+      // menolak/gagal dan kembali ke layar login tanpa pesan apa pun.
+      await ApiService.clearDeviceAuth();
+      // AuthContext's onAuthStateChanged listener handles the backend token exchange and navigation.
+      await signInWithEmailAndPassword(auth, trimmedEmail, password);
+    } catch (error: any) {
+      console.error('Email Sign-In error:', error?.code);
+      const message = getEmailLoginErrorMessage(error?.code);
+      setInlineError(message);
+      Alert.alert('Login Gagal', message, [{ text: 'OK' }]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSignUp = () => {
+    Linking.openURL(SIGNUP_URL).catch(() => {
+      Alert.alert('Error', `Tidak dapat membuka ${SIGNUP_URL}`, [{ text: 'OK' }]);
+    });
   };
 
   const handleGoogleLogin = async () => {
@@ -172,7 +246,13 @@ const LoginScreen = (): React.JSX.Element => {
     <View style={styles.container}>
       <LinearGradient colors={['#fbbf24', '#f59e0b', '#d97706']} style={styles.gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
         <StatusBar style="light" />
-        <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContainer}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          automaticallyAdjustKeyboardInsets
+        >
           <View style={styles.formContainer}>
             {/* Branding Section */}
             <View style={styles.brandingContainer}>
@@ -281,6 +361,62 @@ const LoginScreen = (): React.JSX.Element => {
                       onPress={handleAppleLogin}
                     />
                   )}
+
+                  {/* Email & Password Login */}
+                  <View style={styles.dividerContainer}>
+                    <View style={styles.dividerLine} />
+                    <Text style={styles.dividerText}>atau masuk dengan email</Text>
+                    <View style={styles.dividerLine} />
+                  </View>
+
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Email"
+                    placeholderTextColor="#9CA3AF"
+                    value={email}
+                    onChangeText={setEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    autoComplete="email"
+                    textContentType="username"
+                    returnKeyType="next"
+                  />
+                  <View style={styles.passwordContainer}>
+                    <TextInput
+                      style={[styles.input, styles.passwordInput]}
+                      placeholder="Password"
+                      placeholderTextColor="#9CA3AF"
+                      value={password}
+                      onChangeText={setPassword}
+                      secureTextEntry={!showPassword}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      autoComplete="password"
+                      textContentType="password"
+                      returnKeyType="go"
+                      onSubmitEditing={handleEmailLogin}
+                    />
+                    <TouchableOpacity
+                      style={styles.passwordToggle}
+                      onPress={() => setShowPassword((v) => !v)}
+                      accessibilityLabel={showPassword ? 'Sembunyikan password' : 'Tampilkan password'}
+                    >
+                      <Ionicons name={showPassword ? 'eye-off' : 'eye'} size={22} color="#6B7280" />
+                    </TouchableOpacity>
+                  </View>
+
+                  {inlineError && <Text style={styles.inlineErrorText}>{inlineError}</Text>}
+
+                  <TouchableOpacity style={styles.emailLoginButton} onPress={handleEmailLogin} activeOpacity={0.8}>
+                    <Text style={styles.emailLoginButtonText}>Masuk</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity onPress={handleSignUp} style={styles.signUpLink}>
+                    <Text style={styles.signUpText}>
+                      Belum punya akun? <Text style={styles.signUpTextBold}>Daftar di web</Text>
+                    </Text>
+                  </TouchableOpacity>
                 </>
               )}
 
@@ -340,7 +476,8 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 40
+    paddingTop: 40,
+    paddingBottom: 120
   },
   formContainer: {
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
@@ -487,6 +624,80 @@ const styles = StyleSheet.create({
   } as any,
   buttonWithSubsequent: {
     marginBottom: 16,
+  },
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    marginBottom: 16,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E5E7EB',
+  },
+  dividerText: {
+    marginHorizontal: 12,
+    fontSize: 13,
+    color: '#6B7280',
+  },
+  input: {
+    width: '100%',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+    color: '#1F2937',
+    marginBottom: 12,
+  },
+  passwordContainer: {
+    width: '100%',
+    justifyContent: 'center',
+  },
+  passwordInput: {
+    paddingRight: 48,
+  },
+  passwordToggle: {
+    position: 'absolute',
+    right: 16,
+    top: 0,
+    bottom: 12,
+    justifyContent: 'center',
+  },
+  inlineErrorText: {
+    width: '100%',
+    color: '#DC2626',
+    fontSize: 14,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  emailLoginButton: {
+    width: '100%',
+    backgroundColor: '#d97706',
+    borderRadius: 16,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  emailLoginButtonText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  signUpLink: {
+    paddingVertical: 8,
+    marginBottom: 16,
+  },
+  signUpText: {
+    fontSize: 14,
+    color: '#4B5563',
+  },
+  signUpTextBold: {
+    color: '#d97706',
+    fontWeight: '700',
   },
   buttonContent: {
     flexDirection: 'row',
