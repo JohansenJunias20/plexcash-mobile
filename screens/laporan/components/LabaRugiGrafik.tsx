@@ -16,7 +16,6 @@ import DateTimePicker from '../../../components/AppDateTimePicker';
 import ApiService from '../../../services/api';
 
 type Group = 'day' | 'month';
-type Metric = 'laba' | 'pendapatan' | 'biaya_pokok' | 'biaya_marketplace';
 
 interface IPoint {
   pendapatan: number;
@@ -47,13 +46,6 @@ const COLORS = [
   '#0891b2', '#ca8a04', '#db2777', '#4b5563', '#65a30d',
 ];
 const TOTAL_COLOR = '#111827';
-
-const METRICS: { id: Metric; label: string }[] = [
-  { id: 'laba', label: 'Laba' },
-  { id: 'pendapatan', label: 'Pendapatan' },
-  { id: 'biaya_pokok', label: 'Biaya Pokok' },
-  { id: 'biaya_marketplace', label: 'Biaya Marketplace' },
-];
 
 const PRESETS: Record<Group, { id: string; label: string; getRange: () => { start: Date; end: Date } }[]> = {
   day: [
@@ -173,7 +165,8 @@ export default function LabaRugiGrafik({ includeKilat, fifo, onChangeKilat, onCh
   const [dateEnd, setDateEnd] = useState(PRESETS.day[2].getRange().end);
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
-  const [metric, setMetric] = useState<Metric>('laba');
+  const [showOmset, setShowOmset] = useState(true);
+  const [showLaba, setShowLaba] = useState(true);
   const [showTotal, setShowTotal] = useState(true);
 
   const [stores, setStores] = useState<IStore[]>([{ id: 0, nama: 'Offline / Toko' }]);
@@ -295,19 +288,18 @@ export default function LabaRugiGrafik({ includeKilat, fifo, onChangeKilat, onCh
     const datasets: { label: string; data: number[]; color: string; dashed: boolean }[] = [];
     series
       .filter((s) => s.points.some((p) => p.pendapatan || p.biaya_pokok || p.biaya_marketplace || p.laba))
-      .forEach((s) =>
-        datasets.push({
-          label: nameOf(s),
-          data: s.points.map((p) => p[metric]),
-          color: colorOf(s.id_ecommerce),
-          dashed: false,
-        }),
-      );
+      .forEach((s) => {
+        const color = colorOf(s.id_ecommerce);
+        // Dua garis per toko, warna sama: omset (utuh) dan laba bersih (putus-putus)
+        if (showOmset) datasets.push({ label: `${nameOf(s)} · Omset`, data: s.points.map((p) => p.pendapatan), color, dashed: false });
+        if (showLaba) datasets.push({ label: `${nameOf(s)} · Laba`, data: s.points.map((p) => p.laba), color, dashed: true });
+      });
     if (showTotal && series.length > 1) {
-      datasets.push({ label: 'Total', data: totals.map((t) => t[metric]), color: TOTAL_COLOR, dashed: true });
+      if (showOmset) datasets.push({ label: 'Total · Omset', data: totals.map((t) => t.pendapatan), color: TOTAL_COLOR, dashed: false });
+      if (showLaba) datasets.push({ label: 'Total · Laba', data: totals.map((t) => t.laba), color: TOTAL_COLOR, dashed: true });
     }
     return buildChartHtml(periods.map((p) => formatPeriodLabel(p, group)), datasets, compact);
-  }, [series, periods, metric, showTotal, totals, group, nameOf, colorOf, compact]);
+  }, [series, periods, showOmset, showLaba, showTotal, totals, group, nameOf, colorOf, compact]);
 
   const grandTotal = totals.reduce(
     (acc, t) => ({
@@ -480,20 +472,23 @@ export default function LabaRugiGrafik({ includeKilat, fifo, onChangeKilat, onCh
       {/* Grafik */}
       <View style={[styles.card, compact && styles.cardCompact]}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {METRICS.map((m) => (
-            <TouchableOpacity
-              key={m.id}
-              style={[styles.chip, metric === m.id && styles.chipActive]}
-              onPress={() => setMetric(m.id)}
-            >
-              <Text style={[styles.chipText, metric === m.id && styles.chipTextActive]}>{m.label}</Text>
-            </TouchableOpacity>
-          ))}
+          <TouchableOpacity
+            style={[styles.chip, showOmset && styles.chipActive]}
+            onPress={() => (showLaba || !showOmset) && setShowOmset((v) => !v)}
+          >
+            <Text style={[styles.chipText, showOmset && styles.chipTextActive]}>— Omset (garis utuh)</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.chip, showLaba && styles.chipActive]}
+            onPress={() => (showOmset || !showLaba) && setShowLaba((v) => !v)}
+          >
+            <Text style={[styles.chipText, showLaba && styles.chipTextActive]}>- - Laba Bersih (putus-putus)</Text>
+          </TouchableOpacity>
         </ScrollView>
         {series.length > 1 && (
           <TouchableOpacity style={styles.totalToggle} onPress={() => setShowTotal((v) => !v)}>
             <Ionicons name={showTotal ? 'checkbox' : 'square-outline'} size={18} color="#059669" />
-            <Text style={styles.totalToggleText}>Tampilkan garis Total (putus-putus)</Text>
+            <Text style={styles.totalToggleText}>Tampilkan garis Total (hitam)</Text>
           </TouchableOpacity>
         )}
 
@@ -519,7 +514,7 @@ export default function LabaRugiGrafik({ includeKilat, fifo, onChangeKilat, onCh
           )}
         </View>
         <Text style={styles.hint}>
-          Laba = Pendapatan − Biaya Pokok − Biaya Marketplace (admin, ongkir, voucher), sudah dikurangi retur.
+          Omset = total penjualan toko. Laba Bersih = Omset − Biaya Pokok − Biaya Marketplace (admin, ongkir, voucher), sudah dikurangi retur.
           Beban operasional umum (gaji, sewa, dll.) tidak dipetakan ke toko, jadi tidak ikut di grafik ini.
         </Text>
       </View>
