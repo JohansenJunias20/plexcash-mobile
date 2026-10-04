@@ -17,7 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import moment from 'moment';
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import DateTimePicker, { DateTimePickerEvent } from '../../components/AppDateTimePicker';
 import { API_BASE_URL } from '../../services/api';
 import { getTokenAuth } from '../../services/token';
 import SearchSupplierModal, { SupplierItem } from '../../components/pembelian/SearchSupplierModal';

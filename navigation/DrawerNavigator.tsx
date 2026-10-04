@@ -8,23 +8,23 @@ import CustomDrawerContent from './CustomDrawerContent';
 import LoginScreen from '../components/LoginScreen';
 import MainScreen from '../components/MainScreen';
 import BarangListScreen from '../screens/barang/BarangListScreen';
-import BarangEditScreen from '../screens/barang/BarangEditScreen';
-import KartustokScreen from '../screens/barang/KartustokScreen';
-import StockDetailsScreen from '../screens/barang/StockDetailsScreen';
-import BulkBarcodeScreen from '../screens/barang/BulkBarcodeScreen';
+import BarangEditScreenBase from '../screens/barang/BarangEditScreen';
+import KartustokScreenBase from '../screens/barang/KartustokScreen';
+import StockDetailsScreenBase from '../screens/barang/StockDetailsScreen';
+import BulkBarcodeScreenBase from '../screens/barang/BulkBarcodeScreen';
 import NewOnlineScreen from '../screens/barang/NewOnlineScreen';
 import POSKasirScreen from '../screens/pos/POSKasirScreen';
 import OrdersListScreen from '../screens/orders/OrdersListScreen';
 import PesananV2Screen from '../screens/ecommerce/PesananV2Screen';
 import OrderDetailScreen from '../screens/orders/OrderDetailScreen';
-import LabelPreviewScreen from '../screens/orders/LabelPreviewScreen';
+import LabelPreviewScreenBase from '../screens/orders/LabelPreviewScreen';
 import ScanOutScreen from '../screens/scanout/ScanOutScreen';
 import ScanInScreen from '../screens/scanin/ScanInScreen';
 import ScanSearchScreen from '../screens/scanout/ScanSearchScreen';
 import UserListScreen from '../screens/user/UserListScreen';
-import UserEditScreen from '../screens/user/UserEditScreen';
+import UserEditScreenBase from '../screens/user/UserEditScreen';
 import BundlingListScreen from '../screens/bundling/BundlingListScreen';
-import BundlingEditScreen from '../screens/bundling/BundlingEditScreen';
+import BundlingEditScreenBase from '../screens/bundling/BundlingEditScreen';
 import StokOpnameScreen from '../screens/stokopname/StokOpnameScreen';
 import Settingscreen from '../screens/Settingscreen';
 import ManageSubscriptionScreen from '../screens/subscription/ManageSubscriptionScreen';
@@ -32,9 +32,9 @@ import MySubscriptionScreen from '../screens/subscription/MySubscriptionScreen';
 
 // MASTER Section Imports
 import SupplierListScreen from '../screens/supplier/SupplierListScreen';
-import SupplierEditScreen from '../screens/supplier/SupplierEditScreen';
+import SupplierEditScreenBase from '../screens/supplier/SupplierEditScreen';
 import CustomerListScreen from '../screens/customer/CustomerListScreen';
-import CustomerEditScreen from '../screens/customer/CustomerEditScreen';
+import CustomerEditScreenBase from '../screens/customer/CustomerEditScreen';
 import SatuanListScreen from '../screens/master/SatuanListScreen';
 import BaganAkunListScreen from '../screens/master/BaganAkunListScreen';
 import UploadScreen from '../screens/master/UploadScreen';
@@ -77,7 +77,7 @@ import PesanBarangScreen from '../screens/transaksi/PesanBarangScreen';
 // ECOMMERCE Section
 import DiskonScreen from '../screens/ecommerce/Diskon/DiskonScreen';
 import EcommerceChatScreen from '../screens/ecommerce/EcommerceChatScreen';
-import EcommerceChatDetailScreen from '../screens/ecommerce/EcommerceChatDetailScreen';
+import EcommerceChatDetailScreenBase from '../screens/ecommerce/EcommerceChatDetailScreen';
 import NotifikasiScreen from '../screens/ecommerce/NotifikasiScreen';
 import PenarikanScreen from '../screens/ecommerce/PenarikanScreen';
 import ReturOnlineScreen from '../screens/ecommerce/ReturOnlineScreen';
@@ -101,6 +101,20 @@ import IklanScreen from '../screens/laporan/IklanScreen';
 import PerangkatListScreen from '../screens/perangkat/PerangkatListScreen';
 import PerangkatConfigScreen from '../screens/perangkat/PerangkatConfigScreen';
 import AIAssistScreen from '../screens/ai/AIAssistScreen';
+
+import withTopSafeArea from '../components/withTopSafeArea';
+
+// Layar tanpa header/SafeAreaView sendiri: beri jarak atas safe area agar tidak tertimpa status bar iPhone
+const BarangEditScreen = withTopSafeArea(BarangEditScreenBase);
+const KartustokScreen = withTopSafeArea(KartustokScreenBase);
+const StockDetailsScreen = withTopSafeArea(StockDetailsScreenBase);
+const BulkBarcodeScreen = withTopSafeArea(BulkBarcodeScreenBase);
+const LabelPreviewScreen = withTopSafeArea(LabelPreviewScreenBase);
+const UserEditScreen = withTopSafeArea(UserEditScreenBase);
+const BundlingEditScreen = withTopSafeArea(BundlingEditScreenBase);
+const SupplierEditScreen = withTopSafeArea(SupplierEditScreenBase);
+const CustomerEditScreen = withTopSafeArea(CustomerEditScreenBase);
+const EcommerceChatDetailScreen = withTopSafeArea(EcommerceChatDetailScreenBase);
 
 const Drawer = createDrawerNavigator();
 const AuthStack = createNativeStackNavigator();

@@ -8,7 +8,7 @@ import * as Haptics from 'expo-haptics';
 import { useNavigation, DrawerActions, useIsFocused } from '@react-navigation/native';
 import ApiService from '../../services/api';
 import { Audio } from 'expo-av';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker from '../../components/AppDateTimePicker';
 
 interface ScannedOrder {
   orderNumber: string;
@@ -51,9 +51,7 @@ export default function ScanOutScreen(): JSX.Element {
 
   const onDateChange = (event: any, selectedDate?: Date) => {
     const isFrom = showDatePicker.type === 'from';
-    if (Platform.OS === 'android') {
-      setShowDatePicker({ ...showDatePicker, visible: false });
-    }
+    setShowDatePicker({ ...showDatePicker, visible: false });
     if (selectedDate) {
       if (isFrom) setDateFrom(selectedDate);
       else setDateTo(selectedDate);

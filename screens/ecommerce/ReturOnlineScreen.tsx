@@ -21,8 +21,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import ApiService from '../../services/api';
 import moment from 'moment';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import { Picker } from '@react-native-picker/picker';
+import DateTimePicker from '../../components/AppDateTimePicker';
+import AppPicker from '../../components/AppPicker';
 import BaganAkunSearchModal from './components/BaganAkunSearchModal';
 import RNPrint from 'react-native-print';
 import * as ImagePicker from 'expo-image-picker';
@@ -1072,15 +1072,15 @@ export default function ReturOnlineScreen() {
               {/* Show solution selector if pending */}
               {isPending && Tipe === 'komplain' && item.solution_tiktok && item.solution_tiktok.length > 0 && (
                 <View style={styles.pickerWrapper}>
-                  <Picker
+                  <AppPicker
                     selectedValue={item.solution}
                     style={styles.pickerCompact}
                     onValueChange={(val) => handleSolutionChange(item, val)}
                   >
                     {item.solution_tiktok.map((sol: string) => (
-                      <Picker.Item key={sol} label={sol} value={sol} />
+                      <AppPicker.Item key={sol} label={sol} value={sol} />
                     ))}
-                  </Picker>
+                  </AppPicker>
                 </View>
               )}
 

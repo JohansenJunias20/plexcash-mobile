@@ -16,7 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, DrawerActions, RouteProp } from '@react-navigation/native';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker from '../../../components/AppDateTimePicker';
 import moment from 'moment';
 import ApiService from '../../../services/api';
 
@@ -575,7 +575,7 @@ export default function PembelianHutangScreen() {
             mode="date"
             display="default"
             onChange={(event, date) => {
-              setShowStartDatePicker(Platform.OS === 'ios');
+              setShowStartDatePicker(false);
               if (date) {
                 setDateStart(moment(date).format('YYYY-MM-DD'));
                 setDatePreset('custom');
@@ -590,7 +590,7 @@ export default function PembelianHutangScreen() {
             mode="date"
             display="default"
             onChange={(event, date) => {
-              setShowEndDatePicker(Platform.OS === 'ios');
+              setShowEndDatePicker(false);
               if (date) {
                 setDateEnd(moment(date).format('YYYY-MM-DD'));
                 setDatePreset('custom');
@@ -996,7 +996,7 @@ export default function PembelianHutangScreen() {
                       mode="date"
                       display="default"
                       onChange={(event, date) => {
-                        setShowDueDateModalPicker(Platform.OS === 'ios');
+                        setShowDueDateModalPicker(false);
                         if (date) {
                           setEditingDueDate(moment(date).format('YYYY-MM-DD'));
                         }

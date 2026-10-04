@@ -17,8 +17,8 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, DrawerActions } from '@react-navigation/native';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import { Picker } from '@react-native-picker/picker';
+import DateTimePicker from '../../components/AppDateTimePicker';
+import AppPicker from '../../components/AppPicker';
 import * as DocumentPicker from 'expo-document-picker';
 import moment from 'moment';
 
@@ -886,7 +886,7 @@ export default function PenarikanScreen() {
               <Text style={styles.label}>Platform E-Commerce</Text>
               <View style={styles.pickerContainer}>
                 {ecommerceList.length > 0 ? (
-                  <Picker
+                  <AppPicker
                     selectedValue={idEcommerce}
                     onValueChange={(val) => {
                       setTransactions([]);
@@ -896,9 +896,9 @@ export default function PenarikanScreen() {
                     style={styles.picker}
                   >
                     {ecommerceList.map((e) => (
-                      <Picker.Item key={e.id} label={`${e.name} (${e.platform})`} value={e.id} />
+                      <AppPicker.Item key={e.id} label={`${e.name} (${e.platform})`} value={e.id} />
                     ))}
-                  </Picker>
+                  </AppPicker>
                 ) : (
                   <Text style={styles.placeholderText}>Memuat Akun E-Commerce...</Text>
                 )}

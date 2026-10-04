@@ -14,6 +14,22 @@ let globalSignOut: (() => Promise<void>) | null = null;
 
 export const getGlobalSignOut = () => globalSignOut;
 
+// Preferensi per-perangkat yang tidak boleh ikut terhapus saat signOut (tanpa token/data pribadi).
+const PRESERVED_STORAGE_KEYS = [
+  '@quick_actions_config',
+  'lan_printers',
+  'selected_lan_printer',
+  'printer_type',
+  'pos_selected_printer',
+  'pos_paper_size',
+  'pos_receipt_language',
+  'pos_ble_library',
+  'pos_print_scenario',
+  'pos_product_view_mode',
+  'orderAlarmEnabled',
+  '@order_detail_show_images',
+];
+
 interface AuthUser {
   email: string;
   name?: string;
@@ -522,7 +538,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       // 4. Clear all device tokens and wipe AsyncStorage completely
       await ApiService.clearDeviceAuth();
-      await AsyncStorage.clear();
+      // Hapus semua data sesi/cache, tapi pertahankan preferensi perangkat (bukan kredensial)
+      // supaya Quick Actions dan pengaturan printer tidak ke-reset tiap logout / auto-logout 401.
+      const allKeys = await AsyncStorage.getAllKeys();
+      await AsyncStorage.multiRemove(allKeys.filter((key) => !PRESERVED_STORAGE_KEYS.includes(key)));
 
       const { clearTokenAuth } = require('../services/token');
       await clearTokenAuth();

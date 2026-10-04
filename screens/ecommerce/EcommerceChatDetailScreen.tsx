@@ -594,7 +594,6 @@ export default function EcommerceChatDetailScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    marginTop: 28,
     flex: 1,
     backgroundColor: '#F9FAFB',
   },

@@ -19,7 +19,7 @@ import { useNavigation, DrawerActions } from '@react-navigation/native';
 import ApiService, { API_BASE_URL } from '../../services/api';
 import { getTokenAuth } from '../../services/token';
 import { useAuth } from '../../context/AuthContext';
-import { Picker } from '@react-native-picker/picker';
+import AppPicker from '../../components/AppPicker';
 
 export interface BaganAkunItem {
   kode: string;
@@ -641,7 +641,7 @@ export default function BaganAkunListScreen(): React.ReactNode {
                     {items.find(i => i.kode === formData.kodeInduk)?.nama || 'Root (Top Level)'}
                   </Text>
                 ) : (
-                  <Picker
+                  <AppPicker
                     selectedValue={formData.kodeInduk}
                     onValueChange={(val) => {
                       const parent = items.find((i) => i.kode === val);
@@ -662,15 +662,15 @@ export default function BaganAkunListScreen(): React.ReactNode {
                     enabled={!formData.editMode}
                     style={{ height: 50 }}
                   >
-                    <Picker.Item label="--- Jadikan Grup Utama (Root) ---" value="" />
+                    <AppPicker.Item label="--- Jadikan Grup Utama (Root) ---" value="" />
                     {items.map((it) => (
-                      <Picker.Item
+                      <AppPicker.Item
                         key={it.kode}
                         label={`${it.kode} - ${it.nama}`}
                         value={it.kode}
                       />
                     ))}
-                  </Picker>
+                  </AppPicker>
                 )}
               </View>
 

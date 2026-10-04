@@ -16,7 +16,7 @@ import { showMessage } from 'react-native-flash-message';
 import ApiService from '../../services/api';
 import MarketplaceTabs from './components/MarketplaceTabs';
 import ProductList from './components/ProductList';
-import FilterBar from './components/FilterBar';
+import FilterBar, { BindedFilter } from './components/FilterBar';
 import SelectionBar from './components/SelectionBar';
 import BindMassalModal from './components/BindMassalModal';
 import MigrateModal from './components/MigrateModal';
@@ -78,6 +78,7 @@ const ImportBarangScreen: React.FC = () => {
   // Filtering
   const [skuFilter, setSkuFilter] = useState('');
   const [nameFilter, setNameFilter] = useState('');
+  const [bindedFilter, setBindedFilter] = useState<BindedFilter>('all');
 
   // Modals
   const [showBindModal, setShowBindModal] = useState(false);
@@ -126,13 +127,18 @@ const ImportBarangScreen: React.FC = () => {
       params.append('page', String(page));
       params.append('pageSize', String(pageSize));
 
-      const filterItems = [];
+      const filterItems: { field: string; value: string | boolean }[] = [];
       if (skuFilter) {
         filterItems.push({ field: 'sku', value: skuFilter });
       }
 
       if (nameFilter) {
         filterItems.push({ field: 'nama', value: nameFilter });
+      }
+
+      // Sama seperti kolom Bound di grid web: backend membaca value boolean
+      if (bindedFilter !== 'all') {
+        filterItems.push({ field: 'binded', value: bindedFilter === 'bound' });
       }
 
       if (filterItems.length > 0) {
@@ -169,7 +175,7 @@ const ImportBarangScreen: React.FC = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [currentMarketplaceIndex, listShop, page, pageSize, skuFilter, nameFilter]);
+  }, [currentMarketplaceIndex, listShop, page, pageSize, skuFilter, nameFilter, bindedFilter]);
 
   // Initial load
   useEffect(() => {
@@ -183,7 +189,7 @@ const ImportBarangScreen: React.FC = () => {
     if (currentMarketplaceIndex !== -1) {
       fetchProducts();
     }
-  }, [currentMarketplaceIndex, page, skuFilter, nameFilter]);
+  }, [currentMarketplaceIndex, page, skuFilter, nameFilter, bindedFilter]);
 
   // Poll import progress for marketplaces
   useEffect(() => {
@@ -223,6 +229,25 @@ const ImportBarangScreen: React.FC = () => {
     setSelectedIds([]);
     setSkuFilter('');
     setNameFilter('');
+    setBindedFilter('all');
+  }, []);
+
+  // Ubah filter -> kembali ke halaman 1 agar hasil tidak kosong di halaman jauh
+  const handleSkuFilterChange = useCallback((value: string) => {
+    if (value === skuFilter) return;
+    setSkuFilter(value);
+    setPage(1);
+  }, [skuFilter]);
+
+  const handleNameFilterChange = useCallback((value: string) => {
+    if (value === nameFilter) return;
+    setNameFilter(value);
+    setPage(1);
+  }, [nameFilter]);
+
+  const handleBindedFilterChange = useCallback((value: BindedFilter) => {
+    setBindedFilter(value);
+    setPage(1);
   }, []);
 
   const handleMarketplaceRefresh = useCallback(async (shop: Marketplace) => {
@@ -329,6 +354,7 @@ const ImportBarangScreen: React.FC = () => {
   const handleClearFilters = useCallback(() => {
     setSkuFilter('');
     setNameFilter('');
+    setBindedFilter('all');
     setPage(1);
   }, []);
 
@@ -365,8 +391,10 @@ const ImportBarangScreen: React.FC = () => {
       <FilterBar
         skuFilter={skuFilter}
         nameFilter={nameFilter}
-        onSkuFilterChange={setSkuFilter}
-        onNameFilterChange={setNameFilter}
+        bindedFilter={bindedFilter}
+        onSkuFilterChange={handleSkuFilterChange}
+        onNameFilterChange={handleNameFilterChange}
+        onBindedFilterChange={handleBindedFilterChange}
         onClearFilters={handleClearFilters}
       />
 

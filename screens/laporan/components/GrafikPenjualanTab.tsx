@@ -10,7 +10,7 @@ import {
   Alert
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker from '../../../components/AppDateTimePicker';
 import moment, { Moment } from 'moment';
 import { WebView } from 'react-native-webview';
 import * as FileSystem from 'expo-file-system'; // Expo standard, usually available in expo bare/managed
@@ -176,12 +176,12 @@ export default function GrafikPenjualanTab() {
   }, [currentEcommerce, dataEcer, dataBundling, dataOfflineEcer, dataOfflineBundling, startDate, endDate, currentBarang, ecommerceList]);
 
   const onStartChange = (event: any, selectedDate?: Date) => {
-    setShowStartPicker(Platform.OS === 'ios');
+    setShowStartPicker(false);
     if (selectedDate) setStartDate(selectedDate);
   };
 
   const onEndChange = (event: any, selectedDate?: Date) => {
-    setShowEndPicker(Platform.OS === 'ios');
+    setShowEndPicker(false);
     if (selectedDate) setEndDate(selectedDate);
   };
 

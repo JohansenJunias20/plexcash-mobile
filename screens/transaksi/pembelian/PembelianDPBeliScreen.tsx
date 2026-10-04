@@ -14,7 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, DrawerActions } from '@react-navigation/native';
 import moment from 'moment';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker from '../../../components/AppDateTimePicker';
 import { API_BASE_URL } from '../../../services/api';
 import { getTokenAuth } from '../../../services/token';
 import SearchSupplierModal, { SupplierItem } from '../../../components/pembelian/SearchSupplierModal';
@@ -133,23 +133,17 @@ export default function PembelianDPBeliScreen() {
   };
 
   const onDatePickerChange = (event: any, selectedDate?: Date) => {
-    if (Platform.OS === 'android') {
-      setShowDatePicker(false);
-    }
+    setShowDatePicker(false);
     if (!selectedDate) return;
 
     if (datePickerMode === 'date') {
       // After picking date, open time picker
       setPickerDate(selectedDate);
-      if (Platform.OS === 'android') {
-        // Chain to time picker on Android
-        setTimeout(() => {
-          setDatePickerMode('time');
-          setShowDatePicker(true);
-        }, 100);
-      } else {
+      // Chain to time picker
+      setTimeout(() => {
         setDatePickerMode('time');
-      }
+        setShowDatePicker(true);
+      }, 100);
     } else {
       // Time picked — save final value
       setPickerDate(selectedDate);

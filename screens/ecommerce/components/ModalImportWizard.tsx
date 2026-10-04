@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import ApiService from '../../../services/api';
-import { Picker } from '@react-native-picker/picker';
+import AppPicker from '../../../components/AppPicker';
 
 interface WizardImportedProduct {
   id: number | string;
@@ -598,16 +598,16 @@ export default function ModalImportWizard({
               <Text style={styles.label}>Nomor Akun *</Text>
               {/* Using Picker, or if @react-native-picker/picker is not installed, we would use a dummy view or standard Picker */}
               <View style={styles.pickerWrapper}>
-                <Picker
+                <AppPicker
                   selectedValue={nomorAkun}
                   onValueChange={(val) => setNomorAkun(val)}
                   style={{ height: 50, width: '100%' }}
                 >
-                  <Picker.Item label="Pilih Akun" value="" />
+                  <AppPicker.Item label="Pilih Akun" value="" />
                   {kodeBAlist.map((ba) => (
-                    <Picker.Item key={ba.kodeba} label={`${ba.nama} (${ba.kodeba})`} value={ba.kodeba} />
+                    <AppPicker.Item key={ba.kodeba} label={`${ba.nama} (${ba.kodeba})`} value={ba.kodeba} />
                   ))}
-                </Picker>
+                </AppPicker>
               </View>
             </View>
 

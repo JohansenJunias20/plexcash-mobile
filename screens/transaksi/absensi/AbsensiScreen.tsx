@@ -14,7 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, DrawerActions } from '@react-navigation/native';
-import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import DateTimePicker, { type DateTimePickerEvent } from '../../../components/AppDateTimePicker';
 import moment from 'moment';
 import ApiService from '../../../services/api';
 
@@ -157,14 +157,14 @@ export default function AbsensiScreen(): React.JSX.Element {
   };
 
   const handleStartDateChange = (_: DateTimePickerEvent, selected?: Date) => {
-    setShowStartPicker(Platform.OS === 'ios');
+    setShowStartPicker(false);
     if (selected) {
       setStartDate(selected);
     }
   };
 
   const handleEndDateChange = (_: DateTimePickerEvent, selected?: Date) => {
-    setShowEndPicker(Platform.OS === 'ios');
+    setShowEndPicker(false);
     if (selected) {
       setEndDate(selected);
     }

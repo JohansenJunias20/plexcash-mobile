@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import ApiService from '../../../services/api';
 import moment from 'moment';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker from '../../../components/AppDateTimePicker';
 
 interface DiskonAddModalProps {
   onClose: () => void;

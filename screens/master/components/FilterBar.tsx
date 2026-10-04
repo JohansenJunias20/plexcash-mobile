@@ -8,19 +8,31 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
+export type BindedFilter = 'all' | 'bound' | 'unbound';
+
+const BINDED_OPTIONS: { value: BindedFilter; label: string }[] = [
+  { value: 'all', label: 'Semua' },
+  { value: 'bound', label: 'Sudah Bind' },
+  { value: 'unbound', label: 'Belum Bind' },
+];
+
 interface FilterBarProps {
   skuFilter: string;
   nameFilter: string;
+  bindedFilter: BindedFilter;
   onSkuFilterChange: (value: string) => void;
   onNameFilterChange: (value: string) => void;
+  onBindedFilterChange: (value: BindedFilter) => void;
   onClearFilters: () => void;
 }
 
 const FilterBar: React.FC<FilterBarProps> = ({
   skuFilter,
   nameFilter,
+  bindedFilter,
   onSkuFilterChange,
   onNameFilterChange,
+  onBindedFilterChange,
   onClearFilters,
 }) => {
   const [localSkuFilter, setLocalSkuFilter] = useState(skuFilter);
@@ -53,7 +65,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
     setLocalNameFilter(nameFilter);
   }, [nameFilter]);
 
-  const hasFilters = skuFilter || nameFilter;
+  const hasFilters = skuFilter || nameFilter || bindedFilter !== 'all';
 
   return (
     <View style={styles.container}>
@@ -91,6 +103,23 @@ const FilterBar: React.FC<FilterBarProps> = ({
             </TouchableOpacity>
           ) : null}
         </View>
+      </View>
+
+      {/* Bound Filter */}
+      <View style={styles.chipRow}>
+        <Text style={styles.chipLabel}>Bound:</Text>
+        {BINDED_OPTIONS.map(opt => {
+          const active = bindedFilter === opt.value;
+          return (
+            <TouchableOpacity
+              key={opt.value}
+              style={[styles.chip, active && styles.chipActive]}
+              onPress={() => onBindedFilterChange(opt.value)}
+            >
+              <Text style={[styles.chipText, active && styles.chipTextActive]}>{opt.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
       {/* Clear All Button */}
@@ -136,6 +165,35 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#1f2937',
     padding: 0,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  chipLabel: {
+    fontSize: 13,
+    color: '#6b7280',
+  },
+  chip: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  chipActive: {
+    backgroundColor: '#fef3c7',
+    borderColor: '#fbbf24',
+  },
+  chipText: {
+    fontSize: 13,
+    color: '#4b5563',
+  },
+  chipTextActive: {
+    fontWeight: '600',
+    color: '#92400e',
   },
   clearIcon: {
     padding: 4,

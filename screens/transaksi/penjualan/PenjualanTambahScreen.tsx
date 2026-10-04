@@ -15,7 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp, DrawerActions } from '@react-navigation/native';
 import moment from 'moment';
 import { io, Socket } from 'socket.io-client';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker from '../../../components/AppDateTimePicker';
 import { API_BASE_URL } from '../../../services/api';
 import { getTokenAuth } from '../../../services/token';
 import SearchCustomerModal, { CustomerItem } from '../../../components/penjualan/SearchCustomerModal';

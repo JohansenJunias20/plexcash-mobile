@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker from '../../components/AppDateTimePicker';
 import ApiService from '../../services/api';
 
 // ==================== INTERFACES ====================
@@ -343,9 +343,7 @@ export default function ProsesOtomatisConfigScreen() {
   };
 
   const handleTimePickerChange = (event: any, selectedDate?: Date) => {
-    if (Platform.OS === 'android') {
-      setShowTimePicker(false);
-    }
+    setShowTimePicker(false);
 
     if (selectedDate && editingRange) {
       const hours = selectedDate.getHours().toString().padStart(2, '0');
@@ -438,9 +436,7 @@ export default function ProsesOtomatisConfigScreen() {
   };
 
   const handleBulkStartTimeChange = (event: any, selectedDate?: Date) => {
-    if (Platform.OS === 'android') {
-      setShowBulkStartPicker(false);
-    }
+    setShowBulkStartPicker(false);
 
     if (selectedDate) {
       const hours = selectedDate.getHours().toString().padStart(2, '0');
@@ -450,9 +446,7 @@ export default function ProsesOtomatisConfigScreen() {
   };
 
   const handleBulkEndTimeChange = (event: any, selectedDate?: Date) => {
-    if (Platform.OS === 'android') {
-      setShowBulkEndPicker(false);
-    }
+    setShowBulkEndPicker(false);
 
     if (selectedDate) {
       const hours = selectedDate.getHours().toString().padStart(2, '0');

@@ -6,15 +6,17 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Platform,
   Switch,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker from '../../components/AppDateTimePicker';
 import moment from 'moment';
 import ApiService from '../../services/api';
+import PinGuard from '../../components/PinGuard';
+import LabaRugiGrafik from './components/LabaRugiGrafik';
 
 const currency = (num: number) => {
   return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(num);
@@ -38,6 +40,15 @@ interface IAccountData {
 
 export default function LabaRugiScreen() {
   const navigation = useNavigation();
+  return (
+    <PinGuard title="Laba Rugi" onCancel={() => navigation.goBack()}>
+      <LabaRugiContent />
+    </PinGuard>
+  );
+}
+
+function LabaRugiContent() {
+  const navigation = useNavigation();
   const [fetching, setFetching] = useState(true);
   const [dateStart, setDateStart] = useState(moment().subtract(7, 'days').toDate());
   const [dateEnd, setDateEnd] = useState(moment().toDate());
@@ -53,6 +64,9 @@ export default function LabaRugiScreen() {
 
   const [metode, setMetode] = useState<'average' | 'fifo'>('average');
   const [includeKilat, setIncludeKilat] = useState(true);
+  const [tab, setTab] = useState<'laporan' | 'grafik'>('laporan');
+  const { width: screenWidth } = useWindowDimensions();
+  const compact = screenWidth < 380;
 
   const shortcuts = [
     {
@@ -110,6 +124,7 @@ export default function LabaRugiScreen() {
   };
 
   const fetchData = useCallback(async () => {
+    if (tab !== 'laporan') return;
     setFetching(true);
     setPendapatan([]);
     setBebanOperasional([]);
@@ -137,23 +152,23 @@ export default function LabaRugiScreen() {
     } finally {
       setFetching(false);
     }
-  }, [dateStart, dateEnd, metode, includeKilat]);
+  }, [dateStart, dateEnd, metode, includeKilat, tab]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
   const onStartChange = (event: any, selectedDate?: Date) => {
-    setShowStartPicker(Platform.OS === 'ios');
-    if (selectedDate) {
+    setShowStartPicker(false);
+    if (event?.type !== 'dismissed' && selectedDate) {
       setDateStart(selectedDate);
       setActiveShortcut(null);
     }
   };
 
   const onEndChange = (event: any, selectedDate?: Date) => {
-    setShowEndPicker(Platform.OS === 'ios');
-    if (selectedDate) {
+    setShowEndPicker(false);
+    if (event?.type !== 'dismissed' && selectedDate) {
       setDateEnd(selectedDate);
       setActiveShortcut(null);
     }
@@ -195,9 +210,31 @@ export default function LabaRugiScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView style={styles.content}>
+      <View style={styles.tabBar}>
+        {([['laporan', 'Laporan'], ['grafik', 'Grafik']] as const).map(([id, label]) => (
+          <TouchableOpacity
+            key={id}
+            style={[styles.tabBtn, tab === id && styles.tabBtnActive]}
+            onPress={() => setTab(id)}
+          >
+            <Text style={[styles.tabText, tab === id && styles.tabTextActive]}>{label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {tab === 'grafik' ? (
+        <ScrollView style={[styles.content, compact && styles.contentCompact]}>
+          <LabaRugiGrafik
+            includeKilat={includeKilat}
+            fifo={metode === 'fifo'}
+            onChangeKilat={setIncludeKilat}
+            onChangeFifo={(v) => setMetode(v ? 'fifo' : 'average')}
+          />
+        </ScrollView>
+      ) : (
+      <ScrollView style={[styles.content, compact && styles.contentCompact]}>
         {/* Filters */}
-        <View style={styles.filterCard}>
+        <View style={[styles.filterCard, compact && styles.cardCompact]}>
           {/* Period Shortcuts */}
           <View style={styles.shortcutWrapper}>
             <Text style={styles.shortcutTitle}>Periode:</Text>
@@ -232,14 +269,14 @@ export default function LabaRugiScreen() {
           <View style={styles.dateRow}>
             <TouchableOpacity onPress={() => setShowStartPicker(true)} style={styles.datePickerBtn}>
               <Ionicons name="calendar-outline" size={18} color="#4b5563" />
-              <Text style={styles.dateText}>{moment(dateStart).format('DD MMM YYYY')}</Text>
+              <Text style={[styles.dateText, compact && styles.dateTextCompact]}>{moment(dateStart).format(compact ? 'DD MMM YY' : 'DD MMM YYYY')}</Text>
             </TouchableOpacity>
 
             <Text style={styles.dateDivider}>-</Text>
 
             <TouchableOpacity onPress={() => setShowEndPicker(true)} style={styles.datePickerBtn}>
               <Ionicons name="calendar-outline" size={18} color="#4b5563" />
-              <Text style={styles.dateText}>{moment(dateEnd).format('DD MMM YYYY')}</Text>
+              <Text style={[styles.dateText, compact && styles.dateTextCompact]}>{moment(dateEnd).format(compact ? 'DD MMM YY' : 'DD MMM YYYY')}</Text>
             </TouchableOpacity>
           </View>
 
@@ -283,7 +320,7 @@ export default function LabaRugiScreen() {
 
           <View style={styles.kilatContainer}>
             <View style={styles.kilatRow}>
-              <Text style={styles.optionLabel}>Tampilkan Pengiriman Kilat (Booking Order)</Text>
+              <Text style={[styles.optionLabel, styles.kilatLabel]}>Tampilkan Pengiriman Kilat (Booking Order)</Text>
               <Switch
                 value={includeKilat}
                 onValueChange={setIncludeKilat}
@@ -305,7 +342,7 @@ export default function LabaRugiScreen() {
         </View>
 
         {/* Results Data */}
-        <View style={styles.resultsContainer}>
+        <View style={[styles.resultsContainer, compact && styles.cardCompact]}>
           <View style={styles.tableHeader}>
             <Text style={styles.tableHeaderTitle}>Tipe Akun</Text>
             <Text style={styles.tableHeaderTitle}>Saldo</Text>
@@ -335,11 +372,31 @@ export default function LabaRugiScreen() {
           )}
         </View>
       </ScrollView>
+      )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  contentCompact: { padding: 10 },
+  cardCompact: { padding: 12, marginBottom: 12 },
+  dateTextCompact: { marginLeft: 6, fontSize: 13 },
+  tabBar: {
+    flexDirection: 'row',
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  tabBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  tabBtnActive: { borderBottomColor: '#10b981' },
+  tabText: { fontSize: 14, fontWeight: '500', color: '#6b7280' },
+  tabTextActive: { color: '#059669', fontWeight: '600' },
   container: {
     flex: 1,
     backgroundColor: '#f3f4f6',
@@ -508,6 +565,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  kilatLabel: {
+    flex: 1,
+    flexShrink: 1,
+    marginRight: 12,
   },
   kilatHint: {
     fontSize: 11,

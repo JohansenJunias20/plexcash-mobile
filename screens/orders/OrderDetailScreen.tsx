@@ -57,6 +57,22 @@ export type OrderDetail = {
   waktu_bayar?: string | null;
 };
 
+/** Rincian keuangan pesanan — sumber sama dengan Pesanan V2 web (/get/pesanan-v2/orders) */
+export type OrderFinance = {
+  lunas: boolean;
+  tgl_pelunasan?: string | null;
+  omset: number;
+  bayar: number;
+  biaya_admin: number;
+  biaya_gratong: number;
+  biaya_layanan: number;
+  biaya_afiliasi: number;
+  biaya_lainnya: number;
+  voucher_seller: number;
+};
+
+const formatRupiah = (n: number): string => `Rp ${Math.abs(Math.round(n)).toLocaleString('id-ID')}`;
+
 // Menerjemahkan siapa yang membatalkan pesanan (dari data marketplace) ke label Bahasa Indonesia
 const translateCancelBy = (cancelBy?: string | null): string => {
   switch ((cancelBy || '').toLowerCase()) {
@@ -133,6 +149,7 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
   const [tolakPesananModalVisible, setTolakPesananModalVisible] = useState(false);
   const [isTolakPesananLoading, setIsTolakPesananLoading] = useState(false);
   const [rakMap, setRakMap] = useState<RakMap>({ hasRak: false, skuRakMap: {}, onlineRakMap: {} });
+  const [finance, setFinance] = useState<OrderFinance | null>(null);
 
   // Resolve the rak (shelf) location of an item, mirroring the web Pesanan screen:
   // match by SKU first, then fall back to the marketplace binding (id_online).
@@ -274,6 +291,51 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
     }
   };
 
+  // Rincian keuangan (cair/belum + biaya marketplace) memakai endpoint Pesanan V2 agar angkanya
+  // identik dengan web. Window tanggal dipersempit di sekitar tanggal order supaya query ringan.
+  const fetchFinance = async (orderDate?: string | null) => {
+    try {
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+      const parsed = orderDate ? new Date(orderDate.includes(' ') && !orderDate.includes('T') ? orderDate.replace(' ', 'T') : orderDate) : null;
+      const base = parsed && !isNaN(parsed.getTime()) ? parsed : null;
+      const start = new Date(base ? base.getTime() - 3 * 86400000 : Date.now() - 365 * 86400000);
+      const end = new Date(base ? base.getTime() + 3 * 86400000 : Date.now());
+      start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 0);
+
+      const qs = new URLSearchParams({
+        status: 'SEMUA',
+        page: '1',
+        per_page: '10',
+        search_type: 'order_id',
+        search_values: String(id),
+        date_type: 'tanggal_order',
+        date_start: fmt(start),
+        date_end: fmt(end),
+        id_ecommerce: String(id_ecommerce),
+      });
+      const res = await ApiService.authenticatedRequest(`/get/pesanan-v2/orders?${qs.toString()}`);
+      const row = (res?.data || []).find((o: any) => o.id_online === String(id) || (o.booking_sn && o.booking_sn === String(id)));
+      if (!row) { setFinance(null); return; }
+      setFinance({
+        lunas: !!row.lunas,
+        tgl_pelunasan: row.tgl_pelunasan || null,
+        omset: Number(row.omset || row.total_harga || 0),
+        bayar: Number(row.bayar || 0),
+        biaya_admin: Number(row.biaya_admin || 0),
+        biaya_gratong: Number(row.biaya_gratong || 0),
+        biaya_layanan: Number(row.biaya_layanan || 0),
+        biaya_afiliasi: Number(row.biaya_afiliasi || 0),
+        biaya_lainnya: Number(row.biaya_lainnya || 0),
+        voucher_seller: Number(row.voucher_seller || 0),
+      });
+    } catch (e) {
+      // Info keuangan bersifat pelengkap — jangan pernah memblokir detail pesanan
+      console.log('Error fetching order finance:', e);
+    }
+  };
+
   const fetchOrderDetail = async (isRefresh = false) => {
     try {
       if (isRefresh) setRefreshing(true);
@@ -343,6 +405,7 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
           date_cancel_requested: d.date_cancel_requested || undefined,
           waktu_bayar: d.waktu_bayar || undefined,
         });
+        fetchFinance(d.date);
       } else if (booking_sn) {
         // Kilat order: the marketplace API might not support lookup by booking_sn.
         // Use pre-fetched kilat_order_data from navigation params (items, shipping, etc.)
@@ -381,6 +444,7 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
           has_penjualan: has_penjualan,
           has_retur: has_retur,
         });
+        fetchFinance(kd?.tanggal_order);
       }
     } catch (e) {
       console.error('order detail error', e);
@@ -924,7 +988,7 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
   const statusColors = getStatusColor(detail?.status);
 
   if (loading) return (
-    <SafeAreaView style={styles.safeContainer} edges={['bottom']}>
+    <SafeAreaView style={styles.safeContainer} edges={['top', 'bottom']}>
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#f59e0b" />
         <Text style={styles.loadingText}>Loading order details...</Text>
@@ -933,7 +997,7 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
   );
 
   if (!detail) return (
-    <SafeAreaView style={styles.safeContainer} edges={['bottom']}>
+    <SafeAreaView style={styles.safeContainer} edges={['top', 'bottom']}>
       <View style={styles.loadingContainer}>
         <Ionicons name="alert-circle-outline" size={64} color="#9CA3AF" />
         <Text style={styles.errorText}>Order not found</Text>
@@ -948,7 +1012,7 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
   const hasAnyImage = (detail.items || []).some(it => !!it.image_url);
 
   return (
-    <SafeAreaView style={styles.safeContainer} edges={['bottom']}>
+    <SafeAreaView style={styles.safeContainer} edges={['top', 'bottom']}>
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -1208,6 +1272,69 @@ export default function OrderDetailScreen({ route, navigation }: Props) {
             </View>
           </View>
         </View>
+
+        {/* Finance Card — status cair + biaya marketplace (omset − dana cair), sama dengan Pesanan V2 web */}
+        {finance && !isAlreadyCancelled && (
+          <View style={styles.infoCard}>
+            <View style={styles.cardHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                <Ionicons name="wallet-outline" size={20} color="#059669" />
+                <Text style={styles.cardTitle}>Rincian Keuangan</Text>
+              </View>
+              <View style={[styles.statusBadge, { backgroundColor: finance.lunas ? '#D1FAE5' : '#FEF3C7' }]}>
+                <Text style={[styles.statusText, { color: finance.lunas ? '#065F46' : '#92400E', fontSize: 11 }]}>
+                  {finance.lunas ? 'SUDAH CAIR' : 'BELUM CAIR'}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.financeRow}>
+              <Text style={styles.financeLabel}>Total Omset</Text>
+              <Text style={styles.financeValue}>{formatRupiah(finance.omset)}</Text>
+            </View>
+
+            {finance.lunas ? (
+              <>
+                {([
+                  ['Biaya Admin', finance.biaya_admin],
+                  ['Biaya Gratis Ongkir', finance.biaya_gratong],
+                  ['Biaya Proses (Layanan)', finance.biaya_layanan],
+                  ['Biaya Afiliasi', finance.biaya_afiliasi],
+                  ['Voucher dari Penjual', finance.voucher_seller],
+                  ['Biaya Lainnya (Selisih Escrow)', finance.biaya_lainnya],
+                ] as [string, number][])
+                  .filter(([, v]) => Math.abs(v) > 0.01)
+                  .map(([label, v]) => (
+                    <View key={label} style={styles.financeRow}>
+                      <Text style={styles.financeSubLabel}>{label}</Text>
+                      <Text style={[styles.financeSubValue, { color: v > 0 ? '#DC2626' : '#16A34A' }]}>
+                        {v > 0 ? '- ' : '+ '}{formatRupiah(v)}
+                      </Text>
+                    </View>
+                  ))}
+
+                <View style={[styles.financeRow, styles.financeTotalRow]}>
+                  <Text style={styles.financeLabel}>Total Biaya Marketplace</Text>
+                  <Text style={[styles.financeValue, { color: finance.omset - finance.bayar < 0 ? '#16A34A' : '#DC2626' }]}>
+                    {finance.omset - finance.bayar < 0 ? '+ ' : '- '}{formatRupiah(finance.omset - finance.bayar)}
+                  </Text>
+                </View>
+
+                <View style={[styles.financeRow, { borderBottomWidth: 0 }]}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.financeLabel, { color: '#065F46' }]}>Dana Cair</Text>
+                    {finance.tgl_pelunasan ? (
+                      <Text style={styles.financeDate}>{formatDate(finance.tgl_pelunasan)}</Text>
+                    ) : null}
+                  </View>
+                  <Text style={[styles.financeValue, { color: '#059669', fontSize: 17 }]}>{formatRupiah(finance.bayar)}</Text>
+                </View>
+              </>
+            ) : (
+              <Text style={styles.financeHint}>Dana belum dicairkan / belum dilunaskan di menu Penarikan.</Text>
+            )}
+          </View>
+        )}
 
         {/* Items Card */}
         <View style={styles.itemsCard}>
@@ -1817,6 +1944,26 @@ const styles = StyleSheet.create({
     color: '#059669',
     fontWeight: '700',
   },
+
+  // Finance Card
+  financeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E5E7EB',
+  },
+  financeTotalRow: {
+    borderTopWidth: 1,
+    borderTopColor: '#D1D5DB',
+  },
+  financeLabel: { fontSize: 14, color: '#111827', fontWeight: '600' },
+  financeValue: { fontSize: 15, color: '#111827', fontWeight: '700' },
+  financeSubLabel: { fontSize: 13, color: '#6B7280', flex: 1, marginRight: 8 },
+  financeSubValue: { fontSize: 13, fontWeight: '600' },
+  financeDate: { fontSize: 12, color: '#6B7280', marginTop: 2 },
+  financeHint: { fontSize: 13, color: '#6B7280', marginTop: 10 },
 
   // Items Card
   itemsCard: {

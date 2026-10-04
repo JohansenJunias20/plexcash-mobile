@@ -556,13 +556,10 @@ export const SELLER_CANCEL_REASONS: Record<string, { value: string; label: strin
     { value: 'UNDELIVERABLE_AREA', label: 'Area tidak terjangkau pengiriman' },
     { value: 'COD_NOT_SUPPORTED', label: 'COD tidak didukung' },
   ],
+  // TikTok hanya menerima alasan dari Get Aftersale Eligibility pesanan tsb; server memetakan OUT_OF_STOCK ke nama TikTok-nya
   TIKTOK: [
     { value: 'OUT_OF_STOCK', label: 'Stok habis' },
-    { value: 'CUSTOMER_REQUEST', label: 'Permintaan pembeli' },
-    { value: 'UNDELIVERABLE_AREA', label: 'Area tidak terjangkau pengiriman' },
-    { value: 'COD_NOT_SUPPORTED', label: 'COD tidak didukung' },
-    { value: 'TRADE_TIMEOUT_SELLER', label: 'Waktu penanganan habis (seller timeout)' },
-    { value: 'OTHER', label: 'Lainnya' },
+    { value: 'seller_cancel_reason_wrong_price', label: 'Harga salah' },
   ],
 };
 

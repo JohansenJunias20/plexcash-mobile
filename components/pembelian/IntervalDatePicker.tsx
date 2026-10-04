@@ -8,7 +8,7 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker from '../AppDateTimePicker';
 
 interface IntervalDatePickerProps {
   visible: boolean;
@@ -69,14 +69,14 @@ const IntervalDatePicker: React.FC<IntervalDatePickerProps> = ({
   };
 
   const onStartChange = (event: any, selectedDate?: Date) => {
-    setShowStartPicker(Platform.OS === 'ios');
+    setShowStartPicker(false);
     if (selectedDate) {
       setStartDate(selectedDate);
     }
   };
 
   const onEndChange = (event: any, selectedDate?: Date) => {
-    setShowEndPicker(Platform.OS === 'ios');
+    setShowEndPicker(false);
     if (selectedDate) {
       setEndDate(selectedDate);
     }

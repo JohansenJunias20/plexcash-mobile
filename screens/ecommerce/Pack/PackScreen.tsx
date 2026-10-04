@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert, ActivityIndicator, Linking, TextInput, Switch, useWindowDimensions, RefreshControl, Modal, ScrollView } from 'react-native';
 import { TabView, SceneMap, TabBar } from 'react-native-tab-view';
 import { WebView } from 'react-native-webview';
-import { Picker } from '@react-native-picker/picker';
+import AppPicker from '../../../components/AppPicker';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Camera, useCameraDevice, useCodeScanner } from 'react-native-vision-camera';
 import { Ionicons } from '@expo/vector-icons';
@@ -606,7 +606,7 @@ export default function PackScreen(): React.JSX.Element {
               {enableVideoRecord && (
                 <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
                   <View style={{ flex: 1, borderWidth: 1, borderColor: '#d1d5db', borderRadius: 6, backgroundColor: 'white', justifyContent: 'center', marginRight: 8 }}>
-                    <Picker
+                    <AppPicker
                       selectedValue={workflowMode}
                       onValueChange={(itemValue) => {
                         setWorkflowMode(itemValue);
@@ -619,9 +619,9 @@ export default function PackScreen(): React.JSX.Element {
                       }}
                       enabled={recordingStatus === 'IDLE'}
                     >
-                      <Picker.Item label="Mode 1: Mulai->Scan" value="BUTTON_TO_SCAN" style={{fontSize: 13}} />
-                      <Picker.Item label="Mode 2: Scan->Selesai" value="SCAN_TO_BUTTON" style={{fontSize: 13}} />
-                    </Picker>
+                      <AppPicker.Item label="Mode 1: Mulai->Scan" value="BUTTON_TO_SCAN" style={{fontSize: 13}} />
+                      <AppPicker.Item label="Mode 2: Scan->Selesai" value="SCAN_TO_BUTTON" style={{fontSize: 13}} />
+                    </AppPicker>
                   </View>
 
                   <View>
